@@ -1,0 +1,17 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-pr-title:
+    uses: bayer-int/dats-workflow-templates/.github/workflows/pr-check.yaml@main
+    if: github.repository == 'bayer-int/smart-azure-subscription-template' && github.event.pull_request.draft == false
+    with:
+      pr_title: ${{ github.event.pull_request.title }}
+      pr_body: ${{ github.event.pull_request.body }}

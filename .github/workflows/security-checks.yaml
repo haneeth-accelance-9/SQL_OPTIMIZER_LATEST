@@ -1,0 +1,45 @@
+name: Security Checks
+
+on:
+  workflow_call:
+    inputs:
+      event_name:
+        required: false
+        type: string
+        default: "push"
+      continue-on-error:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  security-checks:
+    name: Security Checks
+    runs-on: [external-k8s-v2]
+    continue-on-error: ${{ inputs.continue-on-error }}
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in IaC mode
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          scan-type: "config"
+          hide-progress: false
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+          skip-dirs: .devcontainer
+
+      - name: Post failure comment to PR
+        if: failure() && inputs.event_name == 'pull_request'
+        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc # v2.8.2
+        with:
+          message: "#### ⚠️ **Warning:** Trivy vulnerability check failed, please [review](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})!"
+          message-id: security-check-failure

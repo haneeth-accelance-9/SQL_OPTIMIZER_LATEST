@@ -1,0 +1,50 @@
+  name: Build Container Image                                                                                                                                    
+   
+  on:                                                                                                                                                            
+    workflow_dispatch:                                      
+      inputs:
+        build_directory:
+          required: false
+          description: "Path to Dockerfile which should be used for Docker Build pipeline, e.g. 'app'."                                                          
+          default: app                                                                                                                                           
+          type: string                                                                                                                                           
+                                                                                                                                                                 
+  permissions:                                              
+    contents: read
+    id-token: write                                                                                                                                              
+   
+  jobs:                                                                                                                                                          
+    build_push_input_directory:                             
+      runs-on: ubuntu-latest                                                                                                                                     
+      environment: ${{ vars.BUILD_ENVIRONMENT || 'sandbox' }}
+      steps:                                                                                                                                                     
+        - name: Checkout                                    
+          uses: actions/checkout@v4
+
+        - name: Check if Dockerfile is in given directory                                                                                                        
+          working-directory: ${{ inputs.build_directory }}
+          run: |                                                                                                                                                 
+            if [ -f Dockerfile ] ; then                     
+              echo "Dockerfile detected!"
+            else
+              echo "No Dockerfile present!"
+              exit 1                                                                                                                                             
+            fi
+                                                                                                                                                                 
+        - name: Azure Login (OIDC)                          
+          uses: azure/login@v2
+          with:
+            client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}                                                                                    
+            subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+                                                                                                                                                                 
+        - name: Build and push via ACR Tasks                
+          run: |                                                                                                                                                 
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            REGISTRY="${{ vars.ACR_NAME }}"                                                                                                                      
+            IMAGE="${{ vars.PROJECT_NAME }}/${{ inputs.build_directory }}"
+            SOURCE="${{ inputs.build_directory }}"                                                                                                               
+            echo "Registry: $REGISTRY"                      
+            echo "Image: $IMAGE"
+            echo "Source: $SOURCE"                                                                                                                               
+            az acr build -r "$REGISTRY" -t "${IMAGE}:sha-${SHORT_SHA}" -t "${IMAGE}:latest" "$SOURCE"

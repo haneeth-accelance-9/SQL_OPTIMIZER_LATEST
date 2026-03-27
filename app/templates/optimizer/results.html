@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .results-chart-wrap { position: relative; height: 300px; width: 100%; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="space-y-10">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-slate-900">Analysis Results</h1>
+        <div class="flex gap-3">
+            <a href="{% url 'optimizer:dashboard' %}" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Dashboard</a>
+            <a href="{% url 'optimizer:report' %}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Report</a>
+        </div>
+    </div>
+
+    {% with rr=rule_results lm=license_metrics %}
+    <!-- Section 1: Azure BYOL → PAYG -->
+    <section class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <h2 class="text-lg font-semibold text-slate-900">Azure BYOL → PAYG Optimization</h2>
+            <p class="text-sm text-slate-600 mt-1">Devices eligible to switch from Bring-Your-Own-License to Pay-As-You-Go in Azure.</p>
+        </div>
+        <div class="p-6">
+            <div class="flex flex-wrap gap-6 mb-6">
+                <div class="px-4 py-2 bg-blue-50 rounded-lg">
+                    <span class="text-2xl font-bold text-blue-700">{{ rr.azure_payg_count }}</span>
+                    <span class="text-slate-600 ml-2">eligible devices</span>
+                </div>
+            </div>
+            {% if rr.azure_error %}
+            <p class="text-amber-700 bg-amber-50 p-3 rounded-lg">{{ rr.azure_error }}</p>
+            {% elif rr.azure_payg %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            {% for key in rr.azure_payg.0 %}
+                            <th class="px-4 py-3 text-left font-medium text-slate-700">{{ key }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        {% for row in rr.azure_payg %}
+                        <tr class="hover:bg-slate-50">
+                            {% for key, val in row.items %}
+                            <td class="px-4 py-3 text-slate-700">{{ val|default:"—" }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="border border-slate-200 rounded-lg p-4">
+                    <h3 class="font-medium text-slate-800 mb-3">CPU cores by device (sample)</h3>
+                    <div class="results-chart-wrap">
+                        <canvas id="chart-azure-cores"></canvas>
+                    </div>
+                </div>
+                <div class="border border-slate-200 rounded-lg p-4">
+                    <h3 class="font-medium text-slate-800 mb-3">Hosting zone distribution</h3>
+                    <div class="results-chart-wrap">
+                        <canvas id="chart-azure-zones"></canvas>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-slate-500">No Azure PAYG candidates found.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- Section 2: Retired devices -->
+    <section class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <h2 class="text-lg font-semibold text-slate-900">Software Installations on Retired Devices</h2>
+            <p class="text-sm text-slate-600 mt-1">Devices marked retired in CMDB but still reporting installations (data quality / decommissioning risk).</p>
+        </div>
+        <div class="p-6">
+            <div class="flex flex-wrap gap-6 mb-6">
+                <div class="px-4 py-2 bg-amber-50 rounded-lg">
+                    <span class="text-2xl font-bold text-amber-700">{{ rr.retired_count }}</span>
+                    <span class="text-slate-600 ml-2">problematic devices</span>
+                </div>
+            </div>
+            {% if rr.retired_error %}
+            <p class="text-amber-700 bg-amber-50 p-3 rounded-lg">{{ rr.retired_error }}</p>
+            {% elif rr.retired_devices %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            {% for key in rr.retired_devices.0 %}
+                            <th class="px-4 py-3 text-left font-medium text-slate-700">{{ key }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        {% for row in rr.retired_devices %}
+                        <tr class="hover:bg-slate-50">
+                            {% for key, val in row.items %}
+                            <td class="px-4 py-3 text-slate-700">{{ val|default:"—" }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 p-4 bg-slate-50 rounded-lg text-sm text-slate-600">
+                <strong>Insight:</strong> These devices suggest incorrect CMDB status, incomplete decommissioning, or stale discovery data. Review and reconcile.
+            </div>
+            {% else %}
+            <p class="text-slate-500">No retired devices with installations found.</p>
+            {% endif %}
+        </div>
+    </section>
+    {% endwith %}
+</div>
+
+{% if rule_results.azure_payg %}
+{{ rule_results.azure_payg|json_script:"azure-payg-data" }}
+<script>
+(function() {
+    var data = JSON.parse(document.getElementById('azure-payg-data').textContent);
+    if (typeof data === 'string') data = [];
+    var coresKey = Object.keys(data[0] || {}).find(function(k) { return /cpu|core/i.test(k); });
+    var zoneKey = Object.keys(data[0] || {}).find(function(k) { return /hosting|zone/i.test(k); });
+
+    // Shared font defaults
+    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = '#475569';
+
+    if (coresKey) {
+        var labels = data.slice(0, 15).map(function(r) {
+            var name = r['device_name'] || r['Device name'] || r['DeviceName'] || 'Device';
+            return name.length > 14 ? name.slice(0, 14) + '…' : name;
+        });
+        var values = data.slice(0, 15).map(function(r) { return Number(r[coresKey]) || 0; });
+        new Chart(document.getElementById('chart-azure-cores'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'CPU Cores',
+                    data: values,
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 10, right: 10, bottom: 0, left: 0 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { title: function(items) { return data[items[0].dataIndex]['device_name'] || data[items[0].dataIndex]['Device name'] || labels[items[0].dataIndex]; } } }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { size: 11 },
+                            color: '#64748b',
+                            maxRotation: 40,
+                            minRotation: 30,
+                            autoSkip: false
+                        },
+                        grid: { display: false },
+                        border: { color: '#e2e8f0' },
+                        title: { display: true, text: 'Device', font: { size: 12, weight: '600' }, color: '#334155', padding: { top: 8 } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { font: { size: 11 }, color: '#64748b', precision: 0 },
+                        grid: { color: '#f1f5f9' },
+                        border: { color: '#e2e8f0' },
+                        title: { display: true, text: 'CPU Cores', font: { size: 12, weight: '600' }, color: '#334155', padding: { bottom: 8 } }
+                    }
+                }
+            }
+        });
+    }
+    if (zoneKey) {
+        var zones = {};
+        data.forEach(function(r) { var z = r[zoneKey] || 'Other'; zones[z] = (zones[z] || 0) + 1; });
+        var COLORS = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#64748b'];
+        new Chart(document.getElementById('chart-azure-zones'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(zones),
+                datasets: [{
+                    data: Object.values(zones),
+                    backgroundColor: COLORS.slice(0, Object.keys(zones).length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: 10 },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { font: { size: 12 }, color: '#334155', padding: 14, boxWidth: 14, usePointStyle: true }
+                    },
+                    tooltip: { callbacks: { label: function(ctx) { return ctx.label + ': ' + ctx.parsed + ' device(s)'; } } }
+                }
+            }
+        });
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}

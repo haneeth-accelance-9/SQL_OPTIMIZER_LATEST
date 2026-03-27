@@ -1,0 +1,56 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.86.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_tflint
+      - id: terraform_docs
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exist=true
+          - --args=--hide providers
+      - id: terraform_validate
+        args:
+          - --tf-init-args=-reconfigure
+          - --hook-config=--retry-once-with-cleanup=true
+      - id: terraform_checkov
+        args:
+          - --args=--quiet
+          - --args=--framework=terraform
+          - --args=--download-external-modules true
+          - --args=--skip-check CKV_TF_1 # Disabled to specify the version number as the source of the module, not the commit
+          - --args=--skip-check CKV2_AZURE_31 # Disabled because the current module version doesn't support Network Security Group assignement
+          # Enable after first version of the platform is working
+          - --args=--skip-check CKV_AZURE_215
+          - --args=--skip-check CKV_AZURE_174
+          - --args=--skip-check CKV_AZURE_134
+          - --args=--skip-check CKV_AZURE_112
+          - --args=--skip-check CKV2_AZURE_22
+
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+
+  - repo: https://codeberg.org/frnmst/md-toc
+    rev: 8.2.3
+    hooks:
+      - id: md-toc
+        args: ['-p', 'github']

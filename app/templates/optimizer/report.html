@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    .report-body h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 1.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #0ea5e9;
+        letter-spacing: -0.025em;
+    }
+
+    .report-body h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 1.75rem 0 0.75rem;
+        letter-spacing: -0.015em;
+    }
+
+    .report-body h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #334155;
+        margin: 1.25rem 0 0.5rem;
+    }
+
+    .report-body p {
+        margin: 0.75rem 0;
+        line-height: 1.7;
+        color: #475569;
+    }
+
+    .report-body strong {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .report-body em {
+        font-style: italic;
+        color: #64748b;
+    }
+
+    .report-body ul {
+        margin: 0.75rem 0;
+        padding-left: 1.5rem;
+        list-style-type: none;
+    }
+
+    .report-body li {
+        margin: 0.5rem 0;
+        line-height: 1.6;
+        position: relative;
+        color: #475569;
+    }
+
+    .report-body li::before {
+        content: "•";
+        color: #0ea5e9;
+        font-weight: bold;
+        position: absolute;
+        left: -1.25rem;
+    }
+
+    .report-body hr {
+        border: none;
+        border-top: 1px solid #e2e8f0;
+        margin: 2rem 0;
+    }
+
+    .report-body blockquote {
+        border-left: 4px solid #0ea5e9;
+        padding: 1rem 1.25rem;
+        margin: 1rem 0;
+        color: #475569;
+        background-color: #f8fafc;
+        border-radius: 0 0.5rem 0.5rem 0;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto h-full flex flex-col overflow-hidden py-8 px-4">
+    <div
+        class="flex flex-col md:flex-row justify-between items-start md:items-center flex-shrink-0 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Executive Summary Report</h1>
+            <p class="text-sm text-slate-500 mt-1">AI-generated analysis of optimization potential and compliance risks.
+            </p>
+        </div>
+        <div class="flex flex-nowrap gap-3 items-center">
+            <a href="{% url 'optimizer:dashboard' %}"
+                class="flex-shrink-0 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+                Back to Dashboard
+            </a>
+            <a href="{% url 'optimizer:report_download' 'pdf' %}"
+                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+                Export PDF
+            </a>
+            <a href="{% url 'optimizer:report_download' 'docx' %}"
+                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all hover:bg-blue-700">
+                <svg class="w-4 h-4 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+                Export Word
+            </a>
+            <a href="{% url 'optimizer:report_download' 'xlsx' %}"
+                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all hover:bg-emerald-700">
+                <svg class="w-4 h-4 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+                Export Excel
+            </a>
+        </div>
+    </div>
+    {% if report_used_fallback %}
+    <!-- <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4" role="status">
+        Report generated without AI (template summary). Configure Azure OpenAI for AI-generated reports.
+    </p> -->
+    {% endif %}
+    <div class="flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8"
+        style="border-color: #e2e8f0;">
+        <div id="report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
+    </div>
+</div>
+{{ report_text|default:""|json_script:"report-text" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var el = document.getElementById('report-text');
+        var raw = '';
+        if (el) try { raw = JSON.parse(el.textContent || '""'); } catch (e) { raw = el.textContent || ''; }
+        var content = document.getElementById('report-content');
+        if (typeof marked !== 'undefined' && raw) {
+            content.innerHTML = (marked.parse || marked)(raw, { gfm: true });
+        } else {
+            content.textContent = raw || 'No report generated or available in current context.';
+            content.classList.remove('report-body');
+            content.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+name: SonarQube Scan
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - sandbox
+      - dev
+      - qa
+      - prod
+
+permissions:
+  id-token: write # needed to make use of the GitHub Actions identity
+  contents: read
+
+jobs:
+  sonar:
+    name: SonarQube Scan
+    runs-on: [external-k8s-v2]
+    container:
+      image: official-dockerhub-images.artifactory.bayer.com/ubuntu:24.04
+    environment:
+      name: ${{ github.base_ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+            fetch-depth: 0 # gets full git history for SonarQube analysis
+      - uses: bayer-int/devops-autoken@v0.3.0
+        with:
+          project: ${{ vars.SONAR_PROJECT_KEY }}
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y unzip curl git
+      - uses: sonarsource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
