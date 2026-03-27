@@ -1,0 +1,96 @@
+# Main worflow that applies Terraform configuration from 'configuration' directory.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION || '1.6.6' }}
+
+jobs:
+  deploy:
+    name: Deploy configuration
+    environment: ${{ inputs.environment }}
+    runs-on: [external-k8s-v2]
+    container:
+      image: official-dockerhub-images.artifactory.bayer.com/ubuntu:24.04
+    env:
+      ARM_USE_OIDC: true
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_CLI: false
+      TF_PLAN_FILE: ${{ github.sha }}.tfplan
+      ENVIRONMENT: ${{ inputs.environment }}
+      TF_RG_NAME: ${{ vars.AZURE_TF_RG_NAME }}
+      TF_BACKEND_NAME: ${{ vars.AZURE_TF_BACKEND_NAME }}
+      GITHUB_TOKEN: ${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        shell: bash
+        working-directory: ./.github/workflows/scripts/
+        run: |
+          . install-terraform.sh && \
+          . install-git.sh
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare
+        env:
+          GH_TOKEN: ${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}
+        run: |
+          git config --global credential.helper 'store --file ~/.git-credentials'
+          git config --global url."https://token:${GH_TOKEN}@github.com/bayer-int".insteadOf https://github.com/bayer-int
+
+      - name: Terraform Init
+        working-directory: configuration
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${TF_RG_NAME}" \
+            -backend-config="storage_account_name=${TF_BACKEND_NAME}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=${ENVIRONMENT}.tfstate"
+
+      - name: Terraform Plan
+        working-directory: configuration
+        run: |
+          terraform plan -out=${TF_PLAN_FILE} -input=false \
+            -var="apim_subscription_key=${{ secrets.APIM_SUBSCRIPTION_KEY }}"
+
+          # Note: please either append additional variable values here, or manually create and use a .tfvars file.
+          # Further information: https://developer.hashicorp.com/terraform/language/values/variables#variables-on-the-command-line
+          # Do the same for the apply step.
+
+      - name: Terraform Apply
+        working-directory: configuration
+        run: |
+          terraform apply ${TF_PLAN_FILE}
+
+      - name: Commit and Push Changes
+        working-directory: configuration
+        shell: bash
+        env:
+          GIT_USER_EMAIL: "github-actions[bot]@users.noreply.github.com"
+          GIT_USER_NAME: "GitHub Actions"
+        run: |
+          if [[ -f api-gateway/config.json ]] && [[ ! -z $(git status --porcelain | grep config.json) ]]; then
+            git config --global user.email "${GIT_USER_EMAIL}"
+            git config --global user.name "${GIT_USER_NAME}"
+            git add api-gateway/config.json
+            git commit -m "Add config.json (automated)"
+            git push
+          else
+            echo "Config file config.json for AnyPoint Exchange not changed or not found"
+          fi

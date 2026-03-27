@@ -1,0 +1,407 @@
+name: Deploy Infrastructure
+
+run-name: '${{ vars.PROJECT_NAME }} Infra: ${{ github.event.inputs.terraform_action || ''push'' }} → ${{ github.event.inputs.environment || github.ref_name }} (#${{ github.run_number }})'
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - sandbox
+          - dev
+          - test
+          - staging
+          - prod
+        default: dev
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: string
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: true
+        type: string
+    secrets:
+      GH_PAT_MODULES:
+        required: true
+      GH_PAT_RUNNER:
+        required: false
+      AZURE_APIM_SUB_KEY:
+        required: true
+
+env:
+  # Azure credentials for OIDC authentication
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+  # Terraform backend configuration
+  AZURE_TF_RG_NAME: ${{ vars.AZURE_TF_RG_NAME || secrets.AZURE_TF_RG_NAME }}
+  AZURE_TF_BACKEND_NAME: ${{ vars.AZURE_TF_BACKEND_NAME || secrets.AZURE_TF_BACKEND_NAME }}
+  AZURE_TF_BACKEND_CONTAINER_NAME: ${{ vars.AZURE_TF_BACKEND_CONTAINER_NAME || secrets.AZURE_TF_BACKEND_CONTAINER_NAME }}
+  # For manual runs, use input; for push events, derive from branch name
+  ENV_NAME: ${{ inputs.environment || github.event.inputs.environment || github.ref_name }}
+  TERRAFORM_DIR: configuration
+  RESOURCE_GROUP_NAME: ${{ vars.AZURE_TF_RG_NAME }}
+# REQUIRED PERMISSIONS:
+# Service Principal needs the following Azure RBAC roles:
+# 1. Contributor at Subscription level (for purging Key Vault and Cognitive Services)
+# 2. User Access Administrator at Resource Group level (for role assignments)
+# 
+# Key Vault access is granted via Terraform access policies (see infrastructure_shared/root/keyvault.tf)
+jobs:
+  # ============================================================================
+  # Terraform Plan
+  # ============================================================================
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    # runs-on: [external-k8s-v2]
+    environment: ${{ inputs.environment || github.event.inputs.environment || github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write # Needed for federated identity login to Azure
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
+          terraform_wrapper: false
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Export ARM credentials for Terraform
+        shell: bash
+        env:
+          ARM_CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          {
+            echo "ARM_CLIENT_ID=$ARM_CLIENT_ID"
+            echo "ARM_TENANT_ID=$ARM_TENANT_ID"
+            echo "ARM_SUBSCRIPTION_ID=$ARM_SUBSCRIPTION_ID"
+            echo "ARM_USE_OIDC=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription "${{ env.AZURE_SUBSCRIPTION_ID }}"
+          az account show
+
+      - name: Configure Git for Private Modules
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GH_PAT_MODULES }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init -backend-config="resource_group_name=${{ env.AZURE_TF_RG_NAME }}" -backend-config="storage_account_name=${{ env.AZURE_TF_BACKEND_NAME }}" -backend-config="container_name=${{ env.AZURE_TF_BACKEND_CONTAINER_NAME }}" -backend-config="key=${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME}}.terraform.tfstate" -backend-config="use_azuread_auth=true" -upgrade -reconfigure
+
+      
+      - name: Terraform Validate
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_github_pat: ${{ secrets.GH_PAT_RUNNER }}
+          TF_VAR_subscription_id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_resource_group_name: ${{ env.AZURE_TF_RG_NAME }}
+          TF_VAR_azure_apim_base_url: ${{ vars.AZURE_APIM_BASE_URL || 'http://placeholder.azure-api.net' }}
+          TF_VAR_azure_apim_sub_key: ${{ secrets.AZURE_APIM_SUB_KEY || 'placeholder-key' }}
+          TF_VAR_azure_apim_openai_deployment_name: ${{ vars.AZURE_APIM_OPENAI_DEPLOYMENT_NAME || 'gpt-4o' }}
+          TF_VAR_azure_apim_openai_api_version: ${{ vars.AZURE_APIM_OPENAI_API_VERSION }}
+        run: |
+          set +e
+          terraform plan -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -detailed-exitcode -no-color -out=tfplan
+          exitcode=$?
+          set -e
+          
+          echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
+          
+          # exitcode 0 = no changes, 1 = error, 2 = changes present
+          if [ "$exitcode" -eq 1 ]; then
+            echo "Terraform plan failed"
+            exit 1
+          fi
+          
+          exit 0
+
+      - name: Display Terraform Plan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "### Detailed Plan Output ###"
+          terraform show -no-color tfplan
+          echo ""
+          echo "### Plan Summary ###"
+          terraform show -json tfplan | jq -r '
+            "Plan: \(.resource_changes | map(select(.change.actions | contains(["create"]))) | length) to add, \(.resource_changes | map(select(.change.actions == ["update"])) | length) to change, \(.resource_changes | map(select(.change.actions | contains(["delete"]))) | length) to destroy."
+          '
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.TERRAFORM_DIR }}/tfplan
+          retention-days: 5
+
+      - name: Plan Summary
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "### Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ env.ENV_NAME }} (${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME }}-gwc)" >> $GITHUB_STEP_SUMMARY
+          echo "- Subscription: ${{ env.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform Directory: ${{ env.TERRAFORM_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Plan Exit Code: ${{ steps.plan.outputs.exitcode }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.plan.outputs.exitcode }}" -eq 0 ]; then
+            echo "✅ No infrastructure changes detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Plan: 0 to add, 0 to change, 0 to destroy.**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.plan.outputs.exitcode }}" -eq 2 ]; then
+            echo "⚠️ Infrastructure changes detected - review required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            # Extract plan summary from tfplan
+            PLAN_SUMMARY=$(terraform show -json tfplan | jq -r '
+              "**Plan: \(.resource_changes | map(select(.change.actions | contains(["create"]))) | length) to add, \(.resource_changes | map(select(.change.actions == ["update"])) | length) to change, \(.resource_changes | map(select(.change.actions | contains(["delete"]))) | length) to destroy.**"
+            ')
+            echo "$PLAN_SUMMARY" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Review the plan output above" >> $GITHUB_STEP_SUMMARY
+            echo "2. If approved, trigger this workflow again with 'apply' action" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  manual-approval:
+    name: Await Manual Approval
+    runs-on: ubuntu-latest
+    # runs-on: [external-k8s-v2]
+    needs: terraform-plan
+    if: ((inputs.terraform_action || github.event.inputs.terraform_action) == 'apply' || (inputs.terraform_action || github.event.inputs.terraform_action) == 'destroy') && needs.terraform-plan.result == 'success'
+    environment:
+      name: hitl-approvals
+      url: https://portal.azure.com/#view/Microsoft_Azure_Resources/ResourceGroupOverview
+    steps:
+      - name: Await approval in GitHub UI
+        run: echo "Pending manual approval for ${{ github.event.inputs.terraform_action }}. Use the environment protection prompt to continue."
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    # runs-on: [external-k8s-v2]
+    needs: [terraform-plan, manual-approval]
+    if: |
+      always() &&
+      (inputs.terraform_action || github.event.inputs.terraform_action) == 'apply' && 
+      needs.terraform-plan.result == 'success' &&
+      (needs.manual-approval.result == 'success' || needs.manual-approval.result == 'skipped')
+    permissions:
+      contents: read
+      id-token: write # Needed for federated identity login to Azure
+    environment: 
+      name: ${{ inputs.environment || github.event.inputs.environment || github.ref_name }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
+          terraform_wrapper: false
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Export ARM credentials for Terraform
+        shell: bash
+        env:
+          ARM_CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          {
+            echo "ARM_CLIENT_ID=$ARM_CLIENT_ID"
+            echo "ARM_TENANT_ID=$ARM_TENANT_ID"
+            echo "ARM_SUBSCRIPTION_ID=$ARM_SUBSCRIPTION_ID"
+            echo "ARM_USE_OIDC=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription "${{ env.AZURE_SUBSCRIPTION_ID }}"
+          az account show
+
+      - name: Configure Git for Private Modules
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GH_PAT_MODULES }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init -backend-config="resource_group_name=${{ env.AZURE_TF_RG_NAME }}" -backend-config="storage_account_name=${{ env.AZURE_TF_BACKEND_NAME }}" -backend-config="container_name=${{ env.AZURE_TF_BACKEND_CONTAINER_NAME }}" -backend-config="key=${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME}}.terraform.tfstate" -backend-config="use_azuread_auth=true" -upgrade -reconfigure
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.TERRAFORM_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_github_pat: ${{ secrets.GH_PAT_RUNNER }}
+          TF_VAR_subscription_id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_resource_group_name: ${{ env.AZURE_TF_RG_NAME }}
+          TF_VAR_azure_apim_base_url: ${{ vars.AZURE_APIM_BASE_URL || 'http://placeholder.azure-api.net' }}
+          TF_VAR_azure_apim_sub_key: ${{ secrets.AZURE_APIM_SUB_KEY || 'placeholder-key' }}
+          TF_VAR_azure_apim_openai_deployment_name: ${{ vars.AZURE_APIM_OPENAI_DEPLOYMENT_NAME || 'gpt-4o' }}
+          TF_VAR_azure_apim_openai_api_version: ${{ vars.AZURE_APIM_OPENAI_API_VERSION }}
+        run: |
+          terraform apply -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -auto-approve tfplan
+
+      - name: Apply Summary
+        run: |
+          echo "### Terraform Apply Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Infrastructure successfully deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ env.ENV_NAME }} (${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME }}-gwc)" >> $GITHUB_STEP_SUMMARY
+          echo "- Subscription: ${{ env.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform Directory: ${{ env.TERRAFORM_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Applied at: $(date -u)" >> $GITHUB_STEP_SUMMARY
+
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    # runs-on: [external-k8s-v2]
+    needs: [terraform-plan, manual-approval]
+    if: |
+      always() &&
+      (inputs.terraform_action || github.event.inputs.terraform_action) == 'destroy' &&
+      needs.terraform-plan.result == 'success' &&
+      (needs.manual-approval.result == 'success' || needs.manual-approval.result == 'skipped')
+    permissions:
+      contents: read
+      id-token: write # Needed for federated identity login to Azure
+    environment:
+      name: ${{ inputs.environment || github.event.inputs.environment || github.ref_name }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
+          terraform_wrapper: false
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Export ARM credentials for Terraform
+        shell: bash
+        env:
+          ARM_CLIENT_ID: ${{ env.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ env.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          {
+            echo "ARM_CLIENT_ID=$ARM_CLIENT_ID"
+            echo "ARM_TENANT_ID=$ARM_TENANT_ID"
+            echo "ARM_SUBSCRIPTION_ID=$ARM_SUBSCRIPTION_ID"
+            echo "ARM_USE_OIDC=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Set Azure Subscription
+        run: |
+          az account set --subscription "${{ env.AZURE_SUBSCRIPTION_ID }}"
+          az account show
+
+      - name: Configure Git for Private Modules
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GH_PAT_MODULES }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform init -backend-config="resource_group_name=${{ env.AZURE_TF_RG_NAME }}" -backend-config="storage_account_name=${{ env.AZURE_TF_BACKEND_NAME }}" -backend-config="container_name=${{ env.AZURE_TF_BACKEND_CONTAINER_NAME }}" -backend-config="key=${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME}}.terraform.tfstate" -upgrade -reconfigure
+
+      - name: Remove protected resources from state
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          set +e  # Don't exit on errors during state removal
+          echo "Removing role assignments from state to preserve them..."
+          
+          # Note: Resource group is now a data source and not managed by Terraform
+          # No need to remove it from state
+          
+          # List and remove all role assignments (idempotent)
+          role_assignments=$(terraform state list | grep 'azurerm_role_assignment' || true)
+          if [ -n "$role_assignments" ]; then
+            echo "$role_assignments" | while read -r resource; do
+              echo "Removing from state: $resource"
+              terraform state rm "$resource" || true
+            done
+          else
+            echo "No role assignments found in state"
+          fi
+          
+          set -e  # Re-enable exit on error
+          echo "Protected resources removed from state. They will not be destroyed."
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          TF_VAR_subscription_id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_resource_group_name: ${{ env.AZURE_TF_RG_NAME }}
+        run: |
+          terraform destroy -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -auto-approve
+
+      - name: Destroy Summary
+        run: |
+          echo "### Terraform Destroy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Infrastructure successfully destroyed" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ env.ENV_NAME }} (${{ vars.PROJECT_NAME }}-${{ env.ENV_NAME }}-gwc)" >> $GITHUB_STEP_SUMMARY
+          echo "- Subscription: ${{ env.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform Directory: ${{ env.TERRAFORM_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Destroyed at: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Protected Resources (preserved):**" >> $GITHUB_STEP_SUMMARY
+          echo "- Resource Group: ${{ env.RESOURCE_GROUP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Role Assignments on Resource Group" >> $GITHUB_STEP_SUMMARY

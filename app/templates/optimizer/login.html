@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Sign in — SQL License Optimizer{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto py-16 px-4">
+    <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+        <h1 class="text-xl font-bold text-slate-900 mb-2">Sign in</h1>
+        <p class="text-sm text-slate-500 mb-6">Enter your credentials to access the SQL License Optimizer.</p>
+        {% if form.non_field_errors %}
+        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {{ form.non_field_errors }}
+        </div>
+        {% endif %}
+        <form method="post" action="{% url 'optimizer:login' %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                <input type="text" name="username" id="id_username" required autofocus
+                    class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="Username">
+                {% if form.username.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.username.errors.0 }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label for="id_password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                <input type="password" name="password" id="id_password" required
+                    class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="Password">
+                {% if form.password.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.password.errors.0 }}</p>
+                {% endif %}
+            </div>
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit"
+                class="w-full py-3 px-4 bg-slate-900 text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors">
+                Sign in
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

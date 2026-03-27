@@ -1,0 +1,148 @@
+
+{% extends "base.html" %}
+{% block title %}Sign in — SQL License Optimizer | Enterprise{% endblock %}
+{% block extra_head %}
+<style>
+    .auth-tab { transition: color 0.2s, border-color 0.2s; }
+    .auth-tab[aria-selected="true"] { border-bottom-color: var(--teal); color: var(--navy); font-weight: 600; }
+    .auth-panel { display: none; }
+    .auth-panel.is-active { display: block; }
+    .auth-bg-aurora {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div class="auth-bg-aurora">
+        <div class="absolute inset-0 home-aurora pointer-events-none"></div>
+        <div class="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-cyan-300/20 blur-3xl pointer-events-none"></div>
+        <div class="absolute top-20 right-0 w-80 h-80 rounded-full bg-lime-300/20 blur-3xl pointer-events-none"></div>
+    </div>
+    <div class="relative z-10 w-full max-w-md">
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+            <div class="px-8 pt-10 pb-4 border-b border-slate-100 text-center">
+                <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/60 bg-white/70 shadow-sm backdrop-blur text-slate-700 text-sm font-semibold mx-auto">
+                    <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                    Secure SQL License Optimizer
+                </div>
+                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight mt-5">Welcome back</h1>
+                <p class="text-sm text-slate-500 mt-2">Sign in to your account or create a new one</p>
+                <nav class="flex gap-6 mt-7 -mb-px justify-center" role="tablist" aria-label="Authentication">
+                    <a href="{% url 'optimizer:login' %}" role="tab" aria-selected="{% if active_tab == 'login' %}true{% else %}false{% endif %}" aria-controls="panel-login" id="tab-login"
+                        class="auth-tab pb-3 text-sm font-medium border-b-2 {% if active_tab == 'login' %}border-teal-500 text-slate-900{% else %}border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300{% endif %}">
+                        <svg class="inline-block w-4 h-4 mr-1 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        Sign in
+                    </a>
+                    <!-- <a href="{% url 'optimizer:login' %}?tab=signup" role="tab" aria-selected="{% if active_tab == 'signup' %}true{% else %}false{% endif %}" aria-controls="panel-signup" id="tab-signup"
+                        class="auth-tab pb-3 text-sm font-medium border-b-2 {% if active_tab == 'signup' %}border-teal-500 text-slate-900{% else %}border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300{% endif %}">
+                        <svg class="inline-block w-4 h-4 mr-1 text-lime-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                        Create account
+                    </a> -->
+                </nav>
+            </div>
+            <div class="px-8 pt-8 pb-10">
+                <div id="panel-login" class="auth-panel {% if active_tab == 'login' %}is-active{% endif %}" role="tabpanel" aria-labelledby="tab-login">
+                    <form method="post" action="{% url 'optimizer:login' %}" class="space-y-5" autocomplete="on">
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}
+                        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-2" role="alert">
+                            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span>{{ form.non_field_errors }}</span>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <label for="id_username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                            <input type="text" name="username" id="id_username" required autofocus
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="Username" autocomplete="username">
+                            {% if form.username.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ form.username.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label for="id_password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                            <input type="password" name="password" id="id_password" required
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="Password" autocomplete="current-password">
+                            {% if form.password.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ form.password.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <button type="submit"
+                            class="w-full py-3 px-4 bg-slate-900 text-white font-semibold rounded-2xl hover:bg-slate-800 focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-colors flex items-center justify-center gap-2 mt-2">
+                            <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                            Sign in
+                        </button>
+                    </form>
+                    <!-- <p class="mt-4 text-center text-sm text-slate-500">
+                        Don’t have an account? <a href="{% url 'optimizer:login' %}?tab=signup" class="font-medium text-teal-600 hover:text-teal-700">Create account</a>
+                    </p> -->
+                </div>
+                <div id="panel-signup" class="auth-panel {% if active_tab == 'signup' %}is-active{% endif %}" role="tabpanel" aria-labelledby="tab-signup">
+                    <form method="post" action="{% url 'optimizer:signup' %}" class="space-y-5" autocomplete="on">
+                        {% csrf_token %}
+                        {% if signup_form.non_field_errors %}
+                        <div class="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-2" role="alert">
+                            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span>{{ signup_form.non_field_errors }}</span>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <label for="id_signup_username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                            <input type="text" name="username" id="id_signup_username" required
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="Choose a username" autocomplete="username"
+                                value="{{ signup_form.username.value|default:'' }}">
+                            {% if signup_form.username.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ signup_form.username.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label for="id_signup_email" class="block text-sm font-medium text-slate-700 mb-1">Email <span class="text-slate-400 font-normal">(optional)</span></label>
+                            <input type="email" name="email" id="id_signup_email"
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="you@company.com" autocomplete="email"
+                                value="{{ signup_form.email.value|default:'' }}">
+                            {% if signup_form.email.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ signup_form.email.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label for="id_signup_password1" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                            <input type="password" name="password1" id="id_signup_password1" required
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="Min. 8 characters" autocomplete="new-password">
+                            {% if signup_form.password1.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ signup_form.password1.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label for="id_signup_password2" class="block text-sm font-medium text-slate-700 mb-1">Confirm password</label>
+                            <input type="password" name="password2" id="id_signup_password2" required
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50"
+                                placeholder="Confirm password" autocomplete="new-password">
+                            {% if signup_form.password2.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ signup_form.password2.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        <button type="submit"
+                            class="w-full py-3 px-4 bg-teal-600 text-white font-semibold rounded-2xl hover:bg-teal-700 focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors flex items-center justify-center gap-2 mt-2">
+                            <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                            Create account
+                        </button>
+                    </form>
+                    <p class="mt-5 mb-1 text-center text-sm text-slate-500">
+                        Already have an account? <a href="{% url 'optimizer:login' %}" class="font-medium text-teal-600 hover:text-teal-700">Sign in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <p class="mt-6 text-center text-xs text-slate-400 flex items-center justify-center gap-1"><svg class="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Secure authentication</p>
+    </div>
+</div>
+{% endblock %}

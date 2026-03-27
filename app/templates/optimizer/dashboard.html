@@ -1,0 +1,1348 @@
+{% extends "base.html" %}
+{% block title %}{{ title|default:"Enterprise Analytics dashboard" }}{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="h-full flex flex-col mx-4 lg:mx-8 my-6 rounded-[28px] overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.12)] bg-[#f6f8fb] border border-slate-200">
+    <!-- Header -->
+    <div class="flex-shrink-0 bg-white px-8 py-8 lg:px-12 lg:py-10">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+                <h1 class="text-5xl font-extrabold tracking-tight text-slate-900">Results</h1>
+                <p class="mt-3 max-w-3xl text-[15px] text-slate-500">
+                    {% if analysis_source_file_name %}
+                    Insights generated from the analyzed file <span class="font-semibold text-slate-700">{{ analysis_source_file_name }}</span>{% if analysis_created_at %} on {{ analysis_created_at|date:"M d, Y H:i" }}{% endif %}.
+                    {% else %}
+                    Comprehensive insights into your SQL server licensing landscape.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 lg:pt-1">
+                <a href="{% url 'optimizer:home' %}"
+                    class="inline-flex items-center gap-2 rounded-md bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Run New Batch
+                </a>
+                <a href="{% url 'optimizer:report' %}"
+                    class="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-600 transition hover:bg-sky-100">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Download Report
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {% with lm=license_metrics rr=rule_results %}
+    <!-- Tabs Header & KPIs -->
+    <div class="flex-shrink-0 border-t border-slate-100">
+        <div class="results-kpi-strip px-8 py-5 lg:px-12">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[760px]">
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Devices Analyzed</span>
+                    <span class="results-kpi-value">{{ total_devices_analyzed|default:0 }}</span>
+                </div>
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Total Demand</span>
+                    <span class="results-kpi-value">{{ total_demand_quantity }}</span>
+                </div>
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Current Cost</span>
+                    <span class="results-kpi-value">€{{ total_license_cost }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="border-b border-slate-200 bg-white px-8 py-2 lg:px-12">
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="setOptimizerTab('dashboard');" id="tablink-dashboard"
+                    class="optimizer-tab-link tab-active rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                    Dashboard
+                </button>
+                <button onclick="setOptimizerTab('rule1');" id="tablink-rule1"
+                    class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                    PAYG Recommendation
+                </button>
+                <button onclick="setOptimizerTab('rule2');" id="tablink-rule2"
+                    class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                    Retired Devices
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content Area -->
+    <div class="flex-1 min-h-0 overflow-y-auto bg-transparent optimizer-page-scroll">
+
+        <!-- RULE 1: Azure PAYG -->
+        <div id="panel-rule1" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
+            data-tab="rule1">
+            <div class="payg-rule-shell flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
+                    <div class="pt-2">
+                        <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">PAYG Recommendations</h2>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify Azure SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
+                    </div>
+                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
+                        <div>
+                            <p class="payg-hero-eyebrow">BYOL to PAYG candidates</p>
+                            <p class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ azure_payg_count }}</p>
+                            <p class="mt-2 text-[11px] font-semibold text-sky-600">Candidate List</p>
+                        </div>
+                        <div class="payg-hero-lines" aria-hidden="true"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
+                    <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
+                            <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">PAYG</span>
+                        </div>
+                        <div class="mt-3">
+                            <p class="text-4xl font-extrabold tracking-tight text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                        </div>
+                        <div class="mt-6 space-y-4">
+                            <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ total_demand_quantity }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Candidates</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">PAYG Candidates</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
+                                    {% if rr.azure_payg %}
+                                    <a href="{% url 'optimizer:download_rule_data' 'rule1' %}" class="mt-1 inline-flex text-sm font-bold text-sky-600 hover:text-sky-700">Download</a>
+                                    {% else %}
+                                    <p class="mt-1 text-sm font-semibold text-slate-400">N/A</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">PAYG Breakdown by Hosting Zone</h3>
+                            <div class="chart-legend-hint">
+                                <span class="chart-dot" style="background:#00BCFF"></span><span>Current</span>
+                                <span class="chart-dot" style="background:#89D329"></span><span>Estimated</span>
+                            </div>
+                        </div>
+                        <div class="chart-container chart-height-reference">
+                            {% if chart_specs.chart_azure_by_zone_bar %}
+                                <div id="chart-chart_azure_by_zone_bar" class="plotly-chart w-full"></div>
+                            {% elif chart_images.chart_azure_by_zone_bar %}
+                                <img src="data:image/png;base64,{{ chart_images.chart_azure_by_zone_bar }}" alt="PAYG by zone" class="w-full h-auto max-h-full object-contain">
+                            {% else %}
+                                <div class="chart-empty-state">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="chart-card">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">Cost: BYOL vs PAYG</h3>
+                        </div>
+                        <div class="chart-container chart-height-md">
+                            {% if chart_specs.chart_byol_vs_payg %}
+                                <div id="chart-chart_byol_vs_payg" class="plotly-chart w-full"></div>
+                            {% elif chart_images.chart_byol_vs_payg %}
+                                <img src="data:image/png;base64,{{ chart_images.chart_byol_vs_payg }}" alt="BYOL vs PAYG" class="w-full h-auto max-h-full object-contain">
+                            {% else %}
+                                <div class="chart-empty-state">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">Hosting Zone Breakdown</h3>
+                        </div>
+                        <div class="chart-container chart-height-md">
+                            {% if chart_specs.chart_azure_zones %}
+                                <div id="chart-chart_azure_zones" class="plotly-chart w-full"></div>
+                            {% elif chart_images.chart_azure_zones %}
+                                <img src="data:image/{{ chart_formats.chart_azure_zones|default:'gif' }};base64,{{ chart_images.chart_azure_zones }}" alt="Zones" class="w-full h-auto max-h-full object-contain">
+                            {% else %}
+                                <div class="chart-empty-state">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">CPU Core Histogram</h3>
+                        </div>
+                        <div class="chart-container chart-height-md">
+                            {% if chart_specs.chart_cpu_histogram %}
+                                <div id="chart-chart_cpu_histogram" class="plotly-chart w-full"></div>
+                            {% elif chart_images.chart_cpu_histogram %}
+                                <img src="data:image/png;base64,{{ chart_images.chart_cpu_histogram }}" alt="CPU histogram" class="w-full h-auto max-h-full object-contain">
+                            {% else %}
+                                <div class="chart-empty-state">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">CPU Core Distribution</h3>
+                        </div>
+                        <div class="chart-container chart-height-md">
+                            {% if chart_specs.chart_azure_cores %}
+                                <div id="chart-chart_azure_cores" class="plotly-chart w-full"></div>
+                            {% elif chart_images.chart_azure_cores %}
+                                <img src="data:image/{{ chart_formats.chart_azure_cores|default:'gif' }};base64,{{ chart_images.chart_azure_cores }}" alt="CPU cores" class="w-full h-auto max-h-full object-contain">
+                            {% else %}
+                                <div class="chart-empty-state">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Table -->
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col mt-4 overflow-hidden flex-shrink-0 w-full">
+                <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
+                    <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ azure_payg_count }}</span>
+                        {% if total_rule1_pages > 1 and rr.azure_payg %}
+                        <nav class="flex items-center gap-1" aria-label="Rule 1 pagination" data-rule="1" data-current-page="{{ rule1_page }}" data-total-pages="{{ total_rule1_pages }}" data-other-page="{{ rule2_page }}">
+                            <a id="rule1-prev" href="?rule1_page={{ rule1_prev }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
+                            <span id="rule1-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rule1_page }} of {{ total_rule1_pages }}</span>
+                            <a id="rule1-next" href="?rule1_page={{ rule1_next }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page >= total_rule1_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
+                        </nav>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="overflow-x-auto p-0 relative bg-white">
+                    {% if rr.azure_error %}
+                    <div
+                        class="absolute inset-0 p-8 text-center text-amber-700 bg-amber-50 flex flex-col justify-center items-center">
+                        <svg class="w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                        <p class="font-medium text-base">{{ rule_results.azure_error }}</p>
+                    </div>
+                    {% elif rule1_keys %}
+                    <table class="min-w-full divide-y divide-slate-200 text-left">
+                        <thead class="bg-white sticky top-0 z-10">
+                            <tr>
+                                {% for key in rule1_keys %}
+                                <th
+                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    {{ key }}</th>
+                                {% endfor %}
+                                <th
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rule1-tbody" class="bg-white divide-y divide-slate-100">
+                            {% for row in azure_payg_page %}
+                            <tr class="hover:bg-sky-50/60 transition-colors">
+                                {% for val in row %}
+                                <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
+                                {% endfor %}
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <button type="button" class="inline-flex items-center rounded-full bg-sky-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">
+                                        Send Trigger
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div
+                        class="absolute inset-0 p-8 flex flex-col justify-center items-center text-slate-400 bg-slate-50/50">
+                        <svg class="w-12 h-12 mb-3 text-slate-300" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                            </path>
+                        </svg>
+                        <p class="text-base font-bold text-slate-500">No candidates identified for Rule 1</p>
+                        <p class="text-sm mt-1">All Azure environments currently comply with PAYG licensing strategy.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- RULE 2: Retired Devices -->
+        <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
+            data-tab="rule2">
+            <div class="payg-rule-shell flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
+                    <div class="pt-2">
+                        <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">Retired Devices</h2>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Retired devices still reporting install. Reconcile CMDB and confirm decommissioning.</p>
+                    </div>
+                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
+                        <div>
+                            <p class="payg-hero-eyebrow">Retired but reporting</p>
+                            <p class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ retired_count }}</p>
+                            <p class="mt-2 text-[11px] font-semibold text-sky-600">Candidate List</p>
+                        </div>
+                        <div class="payg-hero-lines" aria-hidden="true"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
+                    <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
+                            <!-- <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
+                        </div>
+                        <div class="mt-3">
+                            <p class="text-4xl font-extrabold tracking-tight text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                        </div>
+                        <div class="mt-6 space-y-4 text-[11px]">
+                            <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
+                                <div>
+                                    <p class="uppercase tracking-wide text-slate-400">Current Cost</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                </div>
+                                <div>
+                                    <p class="uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p class="uppercase tracking-wide text-slate-400">Retired Devices</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-900">{{ retired_count }}</p>
+                                </div>
+                                <div>
+                                    <p class="uppercase tracking-wide text-slate-400">Export</p>
+                                    {% if rr.retired_devices %}
+                                    <a href="{% url 'optimizer:download_rule_data' 'rule2' %}" class="mt-1 inline-flex text-sm font-bold text-sky-600 hover:text-sky-700">Download</a>
+                                    {% else %}
+                                    <p class="mt-1 text-sm font-semibold text-slate-400">N/A</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">Risk by Environment</h3>
+                            <div class="chart-legend-hint">
+                                <span class="chart-dot bg-sky-500"></span><span>Development</span>
+                                <span class="chart-dot bg-lime-500"></span><span>Production</span>
+                                <span class="chart-dot bg-slate-200"></span><span>Test</span>
+                            </div>
+                        </div>
+                        <div class="chart-container chart-height-reference">
+                            {% if chart_specs.chart_retired_env %}<div id="chart-chart_retired_env" class="plotly-chart w-full"></div>{% elif chart_images.chart_retired_env %}<img src="data:image/{{ chart_formats.chart_retired_env|default:'gif' }};base64,{{ chart_images.chart_retired_env }}" alt="Risk by env" class="w-full h-auto max-h-full object-contain">{% else %}<div class="chart-empty-state">No chart data</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            <!-- Data Table -->
+            <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col mt-4 overflow-hidden flex-shrink-0 w-full">
+                <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
+                    <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ retired_count }}</span>
+                        {% if total_rule2_pages > 1 and rr.retired_devices %}
+                        <nav class="flex items-center gap-1" aria-label="Rule 2 pagination" data-rule="2" data-current-page="{{ rule2_page }}" data-total-pages="{{ total_rule2_pages }}" data-other-page="{{ rule1_page }}">
+                            <a id="rule2-prev" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_prev }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
+                            <span id="rule2-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rule2_page }} of {{ total_rule2_pages }}</span>
+                            <a id="rule2-next" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_next }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page >= total_rule2_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
+                        </nav>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="overflow-x-auto p-0 relative bg-white">
+                    {% if rr.retired_error %}
+                    <div
+                        class="absolute inset-0 p-8 text-center text-amber-700 bg-amber-50 flex flex-col justify-center items-center">
+                        <svg class="w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                        <p class="font-medium text-base">{{ rule_results.retired_error }}</p>
+                    </div>
+                    {% elif rule2_keys %}
+                    <table class="min-w-full divide-y divide-slate-200 text-left">
+                        <thead class="bg-white sticky top-0 z-10">
+                            <tr>
+                                {% for key in rule2_keys %}
+                                <th
+                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    {{ key }}</th>
+                                {% endfor %}
+                                <th
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rule2-tbody" class="bg-white divide-y divide-slate-100">
+                            {% for row in retired_devices_page %}
+                            <tr class="hover:bg-sky-50/60 transition-colors">
+                                {% for val in row %}
+                                <td class="px-6 py-3.5 text-sm text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
+                                {% endfor %}
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <button type="button" class="inline-flex items-center rounded-full bg-sky-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">
+                                        Send Trigger
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div
+                        class="absolute inset-0 p-8 flex flex-col justify-center items-center text-slate-400 bg-slate-50/50">
+                        <svg class="w-12 h-12 mb-3 text-emerald-400" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-base font-bold text-slate-500">No retired devices found with active
+                            installations.</p>
+                        <p class="text-sm mt-1 text-slate-400">Great job maintaining CMDB data quality!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- COMBINED -->
+        <div id="panel-combined" class="tab-content-panel w-full flex flex-col p-6 overflow-y-auto"
+            data-tab="combined">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+                <div class="col-span-1 lg:col-span-1 grid grid-cols-1 gap-6">
+                    <div
+                        class="bg-blue-600 text-white p-6 rounded-xl shadow-sm relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 opacity-20"><svg class="w-24 h-24" fill="currentColor"
+                                viewBox="0 0 24 24">
+                                <path
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                                </path>
+                            </svg></div>
+                        <h3 class="text-xs font-semibold text-blue-100 uppercase tracking-wider mb-2 relative z-10">Total License Demand</h3>
+                        <p class="text-4xl font-extrabold relative z-10">{{ total_demand_quantity }}</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
+                        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">PAYG Candidates</h3>
+                        <p class="text-4xl font-extrabold text-slate-800">{{ azure_payg_count }}</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
+                        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Retired Risks</h3>
+                        <p class="text-4xl font-extrabold text-slate-800">{{ retired_count }}</p>
+                    </div>
+                    <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Analyzed Cost</h3>
+                        <p class="text-3xl font-extrabold text-slate-900">&euro;{{ total_license_cost|floatformat:0 }}</p>
+                        <p class="text-xs text-slate-500 font-medium mt-2">Potential savings from this analyzed file: &euro;{{ potential_savings|floatformat:0 }}</p>
+                    </div>
+                </div>
+
+                <div class="col-span-1 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Demand by Product Line</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_demand %}<div id="chart-chart_demand" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_demand %}<img src="data:image/{{ chart_formats.chart_demand|default:'gif' }};base64,{{ chart_images.chart_demand }}" alt="Demand" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Cost Projection Matrix</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_cost %}<div id="chart-chart_cost" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_cost %}<img src="data:image/{{ chart_formats.chart_cost|default:'gif' }};base64,{{ chart_images.chart_cost }}" alt="Cost" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Optimization vs Risk</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_overview %}<div id="chart-chart_overview" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_overview %}<img src="data:image/{{ chart_formats.chart_overview|default:'gif' }};base64,{{ chart_images.chart_overview }}" alt="Overview" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Global Device Fleet State</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_devices %}<div id="chart-chart_devices" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_devices %}<img src="data:image/{{ chart_formats.chart_devices|default:'gif' }};base64,{{ chart_images.chart_devices }}" alt="Fleet" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">License Cost (Donut)</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_license_cost_donut %}<div id="chart-chart_license_cost_donut" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_license_cost_donut %}<img src="data:image/{{ chart_formats.chart_license_cost_donut|default:'png' }};base64,{{ chart_images.chart_license_cost_donut }}" alt="Cost donut" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Environment Distribution</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_env_pie %}<div id="chart-chart_env_pie" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_env_pie %}<img src="data:image/{{ chart_formats.chart_env_pie|default:'gif' }};base64,{{ chart_images.chart_env_pie }}" alt="Environment" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[520px] overflow-hidden md:col-span-2">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Top 10 by Cost</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_top10_cost %}<div id="chart-chart_top10_cost" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_top10_cost %}<img src="data:image/{{ chart_formats.chart_top10_cost|default:'png' }};base64,{{ chart_images.chart_top10_cost }}" alt="Top 10" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                    <div class="chart-card bg-white rounded-xl p-6 border border-slate-200 shadow-sm min-h-[450px] md:col-span-2 overflow-hidden">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-4 flex-shrink-0">Cost Before vs After (Waterfall)</h3>
+                        <div class="chart-container w-full">{% if chart_specs.chart_waterfall %}<div id="chart-chart_waterfall" class="plotly-chart w-full" style="height:420px;min-height:420px;max-height:420px;"></div>{% elif chart_images.chart_waterfall %}<img src="data:image/png;base64,{{ chart_images.chart_waterfall }}" alt="Waterfall" class="max-w-full h-auto" style="max-height:420px;">{% else %}<div class="text-slate-400 text-xs py-4">No chart data</div>{% endif %}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DASHBOARD: Executive Summary + Charts + AI Insights + Rule Tables -->
+        <div id="panel-dashboard" class="tab-content-panel active-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
+            data-tab="dashboard" style="padding-bottom: 1.5rem;">
+            <div class="mb-5 flex flex-col gap-1">
+                <h2 class="text-2xl font-bold text-slate-900">Dashboard</h2>
+                <p class="text-sm text-slate-500">Summary of the findings</p>
+            </div>
+
+            <section class="flex-shrink-0 mb-6">
+                <div class="mb-3 flex items-center justify-between">
+                    <h3 class="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Executive Summary</h3>
+                </div>
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                    <div class="xl:col-span-4 dashboard-feature-card dashboard-summary-savings" style="border: 1px solid #84D91D;">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="dashboard-section-label">Potential Savings</span>
+                            <!-- <span class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
+                        </div>
+                        <div class="mt-4 flex items-end gap-2">
+                            <span class="text-4xl font-extrabold text-slate-900">€{{ potential_savings|floatformat:0 }}</span>
+                            <span class="pb-1 text-sm font-medium text-emerald-600">estimated</span>
+                        </div>
+                        <p class="mt-4 text-sm leading-6 text-slate-600">Savings are driven primarily by Azure BYOL to PAYG switches, workload right-sizing, and cleanup of inactive or retired software footprints.</p>
+                        <div class="mt-6 grid grid-cols-2 gap-3">
+                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">BYOL to PAYG</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-base font-semibold text-slate-700">{{ azure_payg_count }} candidates</p>
+                            </div>
+                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Retired but reporting</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-5 dashboard-panel-card">
+                        <div>
+                            <span class="dashboard-section-label">Hosting by Zone</span>
+                            <p class="mt-1 text-sm text-slate-500">Distribution of Azure PAYG candidates across hosting environments.</p>
+                        </div>
+                        <div class="mt-4 h-[260px]">
+                            {% if chart_specs.chart_env_pie %}
+                            <div id="chart-dash-chart_env_pie" class="plotly-chart h-full w-full"></div>
+                            {% elif chart_specs.chart_azure_zones %}
+                            <div id="chart-dash-chart_azure_zones" class="plotly-chart h-full w-full"></div>
+                            {% elif chart_images.chart_env_pie %}
+                            <img src="data:image/{{ chart_formats.chart_env_pie|default:'gif' }};base64,{{ chart_images.chart_env_pie }}" alt="Hosting zone" class="h-full w-full object-contain">
+                            {% elif chart_images.chart_azure_zones %}
+                            <img src="data:image/{{ chart_formats.chart_azure_zones|default:'gif' }};base64,{{ chart_images.chart_azure_zones }}" alt="Hosting zone" class="h-full w-full object-contain">
+                            {% else %}
+                            <div class="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-3 grid gap-3">
+                        <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
+                            <span class="dashboard-section-label">Total Demand</span>
+                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
+                            <p class="mt-1 text-sm text-slate-500">New total</p>
+                        </div>
+                        <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
+                            <span class="dashboard-section-label">Devices Analyzed</span>
+                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_devices_analyzed|default:0 }}</p>
+                            <p class="mt-1 text-sm text-slate-500">Current total</p>
+                        </div>
+                        <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
+                            <span class="dashboard-section-label">Current Cost</span>
+                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_license_cost|floatformat:0 }}</p>
+                            <p class="mt-1 text-sm text-slate-500">Observed SQL licensing spend.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                    <div class="xl:col-span-7 dashboard-panel-card">
+                        <div>
+                            <span class="dashboard-section-label">Price Distribution by License Type</span>
+                            <p class="mt-1 text-sm text-slate-500">Cost and quantity by Standard, Developer, and Enterprise editions.</p>
+                        </div>
+                        {% if price_distribution %}
+                        <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {% for item in price_distribution %}
+                            <div class="dashboard-license-card dashboard-license-card-compact {% if item.type == 'Standard' %}dashboard-license-standard{% elif item.type == 'Developer' %}dashboard-license-developer{% elif item.type == 'Enterprise' %}dashboard-license-enterprise{% else %}dashboard-license-neutral{% endif %}">
+                                <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ item.type }}</p>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ item.quantity }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Total cost: {{ item.total_cost|floatformat:2 }}</p>
+                                <div class="mt-4 space-y-1 text-xs text-slate-500">
+                                    <p>Avg Cost : <span class="font-semibold text-slate-900">{{ item.avg_price|floatformat:2 }}</span></p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="mt-4 rounded-2xl bg-slate-50 px-4 py-5 text-sm text-slate-500">No price distribution data. Add a Helpful Reports sheet (sheet 5) with columns: Edition (Product), Sum of Quantity (effective), and Sum of Total license price, or ensure Prices and Demand sheets contain Standard, Developer, and Enterprise product names.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="xl:col-span-5 dashboard-panel-card">
+                        <div>
+                            <span class="dashboard-section-label">CPU Core Optimization</span>
+                            <p class="mt-1 text-sm text-slate-500">Core footprint patterns across switch candidates.</p>
+                        </div>
+                        <div class="mt-4 h-[330px]">
+                            {% if chart_specs.chart_azure_cores %}
+                            <div id="chart-dash-chart_azure_cores" class="plotly-chart h-full w-full"></div>
+                            {% elif chart_images.chart_azure_cores %}
+                            <img src="data:image/{{ chart_formats.chart_azure_cores|default:'gif' }};base64,{{ chart_images.chart_azure_cores }}" alt="CPU core optimization" class="h-full w-full object-contain">
+                            {% else %}
+                            <div class="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">No chart data</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="flex-shrink-0 mb-6">
+                <div class="dashboard-panel-card">
+                    <div class="mb-4 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">AI Generated Insight Panel</h3>
+                            <p class="mt-1 text-sm text-slate-500">Recommendations based on demand, PAYG candidates, and retired-device findings.</p>
+                        </div>
+                    </div>
+                    <div id="dashboard-ai-recommendations" class="dashboard-ai-content rounded-[22px] bg-slate-50 px-5 py-4 text-sm text-slate-700 prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5"></div>
+                    <div id="dashboard-cost-tips-fallback" class="hidden">
+                        {% if cost_reduction_tips %}
+                        <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {% for tip in cost_reduction_tips %}
+                            <div class="rounded-[20px] border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-sm">
+                                <div class="mb-3 flex items-center justify-between">
+                                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">BYOL to PAYG candidates</span>
+                                    <span class="rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-semibold text-white">High Impact</span>
+                                </div>
+                                <p class="font-semibold text-slate-900">Switch BYOL Candidates to Pay-As-You-Go</p>
+                                <p class="mt-2 text-slate-600">{{ tip }}</p>
+                                <p class="mt-3 text-xs text-slate-500">Estimated Savings : {{ potential_savings|floatformat:0 }}</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="mt-3 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">Review PAYG candidates and retired devices to reduce over-licensing. Use Developer for dev/test and Standard or Enterprise only where needed. Configure Azure OpenAI for AI-generated cost reduction and server conversion recommendations.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+            {{ cost_reduction_ai_recommendations|default:""|json_script:"cost-reduction-ai-text" }}
+            <script>
+            (function() {
+                var el = document.getElementById('cost-reduction-ai-text');
+                var raw = (el && el.textContent) ? (function() { try { return JSON.parse(el.textContent); } catch(e) { return ''; } })() : '';
+                var container = document.getElementById('dashboard-ai-recommendations');
+                var fallback = document.getElementById('dashboard-cost-tips-fallback');
+                if (container) {
+                    if (raw && typeof marked !== 'undefined') {
+                        container.innerHTML = (marked.parse || marked)(raw, { gfm: true });
+                        if (fallback) fallback.classList.add('hidden');
+                    } else {
+                        if (raw) container.textContent = raw;
+                        else {
+                            container.classList.add('hidden');
+                            if (fallback) { fallback.classList.remove('hidden'); fallback.style.display = 'block'; }
+                        }
+                    }
+                }
+            })();
+            </script>
+
+            <!--
+            <section class="flex-shrink-0 mb-6">
+                <div class="dashboard-panel-card">
+                    <div class="mb-4 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">Rule Result Snapshots</h3>
+                            <p class="mt-1 text-sm text-slate-500">Quick previews from the two active optimization rules.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        <div class="overflow-hidden rounded-[22px] border border-slate-200 bg-white">
+                            <h4 class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">Rule 1: Azure PAYG</h4>
+                            <div class="overflow-x-auto overflow-y-auto" style="max-height:220px;">
+                                {% if rule1_keys and azure_payg_page %}
+                                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                    <thead class="sticky top-0 bg-slate-50"><tr>{% for key in rule1_keys %}<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ key }}</th>{% endfor %}</tr></thead>
+                                    <tbody class="divide-y divide-slate-100">{% for row in azure_payg_page|slice:":5" %}<tr class="hover:bg-slate-50">{% for val in row %}<td class="px-3 py-2 text-slate-700">{{ val|default:"â€”" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+                                </table>
+                                {% if total_rule1_pages %}<p class="px-3 py-3 text-xs text-slate-500">Showing first 5 rows. Switch to <strong>PAYG Recommendation</strong> for the full table.</p>{% endif %}
+                                {% else %}<p class="p-4 text-sm text-slate-500">No Rule 1 data.</p>{% endif %}
+                            </div>
+                        </div>
+                        <div class="overflow-hidden rounded-[22px] border border-slate-200 bg-white">
+                            <h4 class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">Rule 2: Retired Devices</h4>
+                            <div class="overflow-x-auto overflow-y-auto" style="max-height:220px;">
+                                {% if rule2_keys and retired_devices_page %}
+                                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                                    <thead class="sticky top-0 bg-slate-50"><tr>{% for key in rule2_keys %}<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ key }}</th>{% endfor %}</tr></thead>
+                                    <tbody class="divide-y divide-slate-100">{% for row in retired_devices_page|slice:":5" %}<tr class="hover:bg-slate-50">{% for val in row %}<td class="px-3 py-2 text-slate-700">{{ val|default:"â€”" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+                                </table>
+                                {% if total_rule2_pages %}<p class="px-3 py-3 text-xs text-slate-500">Showing first 5 rows. Switch to <strong>Retired Devices</strong> for the full table.</p>{% endif %}
+                                {% else %}<p class="p-4 text-sm text-slate-500">No Rule 2 data.</p>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            -->
+
+            <section class="flex-shrink-0 mb-0">
+                <div class="dashboard-panel-card">
+                    <div class="mb-4 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">License Optimization</h3>
+                            <p class="mt-1 text-sm text-slate-500">Reduce or increase allocations to align cost with actual workload demand.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div class="dashboard-optimization-card border-t-4 border-t-sky-500">
+                            <span class="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">Standard Licenses</span>
+                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Move {{ azure_payg_count }} PAYG candidates to Azure Pay-As-You-Go to reduce standard license count and cost.</p>
+                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Add only where production workloads genuinely require full standard coverage.</p>
+                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: align standard count with actual production demand.</p>
+                        </div>
+                        <div class="dashboard-optimization-card border-t-4 border-t-emerald-500">
+                            <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Developer Licenses</span>
+                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Use developer editions for dev and test instead of standard or enterprise to cut cost.</p>
+                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Remove developer licenses for retired or unused environments such as the {{ retired_count }} flagged devices.</p>
+                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: dev and test on developer only, never production.</p>
+                        </div>
+                        <div class="dashboard-optimization-card border-t-4 border-t-lime-500">
+                            <span class="rounded-full bg-lime-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-lime-700">Enterprise Licenses</span>
+                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Migrate eligible workloads to PAYG or Standard where enterprise-only features are not required.</p>
+                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Reserve enterprise for systems that need advanced capabilities and consolidate duplicate coverage.</p>
+                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: right-size enterprise demand against {{ total_demand_quantity }} total required licenses.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+    </div>
+    {% endwith %}
+</div>
+
+{{ rule1_data_json|json_script:"rule1-data" }}
+{{ rule2_data_json|json_script:"rule2-data" }}
+{{ chart_specs|json_script:"chart-specs-data" }}
+
+<style>
+    .tab-content-panel {
+        display: none !important;
+    }
+
+    .tab-content-panel.active-panel {
+        display: flex !important;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    .dashboard-hero {
+        background:
+            radial-gradient(circle at top left, rgba(255, 255, 255, 0.16), transparent 32%),
+            linear-gradient(90deg, #0b72a8 0%, #2f8fc1 42%, #78c04b 100%);
+    }
+
+    .results-kpi-strip {
+        background: linear-gradient(90deg, #1a5675 0%, #1486b8 45%, #52b86a 76%, #84d91d 100%);
+    }
+
+    .results-kpi-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .results-kpi-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(255, 255, 255, 0.72);
+    }
+
+    .results-kpi-value {
+        font-size: 2rem;
+        line-height: 1;
+        font-weight: 800;
+        color: #ffffff;
+    }
+
+    .optimizer-tab-link {
+        position: relative;
+        color: #475569;
+        background: transparent;
+        -webkit-text-fill-color: currentColor;
+    }
+
+    .optimizer-tab-link.tab-active {
+        background: #ffffff;
+        color: #0f172a !important;
+        border-color: transparent;
+        box-shadow: inset 0 -2px 0 #0f7aa8;
+        -webkit-text-fill-color: #0f172a;
+    }
+
+    .optimizer-tab-link.tab-inactive {
+        background-color: transparent;
+        color: #475569 !important;
+        border-color: transparent;
+        -webkit-text-fill-color: #475569;
+    }
+
+    .optimizer-tab-link.tab-inactive:hover {
+        background-color: #f8fafc;
+        color: #0f172a;
+    }
+
+    .dashboard-mini-stat,
+    .dashboard-panel-card,
+    .dashboard-kpi-card,
+    .dashboard-license-card,
+    .dashboard-optimization-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    }
+
+    .dashboard-mini-stat {
+        padding: 0.95rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .dashboard-mini-label,
+    .dashboard-section-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+
+    .dashboard-mini-value {
+        font-size: 1.35rem;
+        line-height: 1.2;
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .dashboard-feature-card {
+        border-radius: 28px;
+        padding: 1.5rem;
+        background:
+            radial-gradient(circle at top left, rgba(255,255,255,0.72), transparent 30%),
+            linear-gradient(145deg, #fff8df 0%, #ffffff 42%, #f6f8fb 100%);
+        border: 1px solid #e8e2bf;
+        box-shadow: 0 12px 28px rgba(148, 163, 184, 0.12);
+    }
+
+    .dashboard-summary-savings {
+        background: #ffffff;
+    }
+
+    .payg-hero-card,
+    .payg-metric-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        box-shadow: 0 16px 38px rgba(15, 23, 42, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .payg-hero-card {
+        min-height: 168px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: stretch;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .payg-hero-eyebrow {
+        font-size: 0.65rem;
+        line-height: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #94a3b8;
+    }
+
+    .payg-hero-lines {
+        width: 96px;
+        border-radius: 18px;
+        background:
+            radial-gradient(circle at 20% 20%, rgba(132, 204, 22, 0.45) 0 1.5px, transparent 1.5px) 0 0 / 10px 10px,
+            linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(132, 204, 22, 0.12));
+        mask-image: linear-gradient(135deg, transparent 0%, black 18%, black 100%);
+        opacity: 0.95;
+    }
+
+    .payg-metric-card {
+        padding: 1.5rem;
+    }
+
+    .payg-hero-card-compact {
+        min-height: 120px;
+        padding: 1rem 1rem 1rem 1.1rem;
+        border-radius: 18px;
+    }
+
+    .payg-metric-card-compact {
+        padding: 1rem;
+        border-radius: 18px;
+    }
+
+    .payg-metric-card-compact .grid {
+        gap: 0.5rem;
+    }
+
+    .payg-metric-card-compact .border-b {
+        padding-bottom: 0.75rem;
+        margin-bottom: 0;
+    }
+
+    .dashboard-panel-card,
+    .dashboard-kpi-card,
+    .dashboard-license-card,
+    .dashboard-optimization-card {
+        padding: 1.35rem;
+    }
+
+    .dashboard-license-standard {
+        border-top: 4px solid #38bdf8;
+    }
+
+    .dashboard-license-developer {
+        border-top: 4px solid #22c55e;
+    }
+
+    .dashboard-license-enterprise {
+        border-top: 4px solid #84cc16;
+    }
+
+    .dashboard-license-neutral {
+        border-top: 4px solid #94a3b8;
+    }
+
+    .dashboard-license-card-compact {
+        min-height: 166px;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chart-container {
+        animation: chartReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        overflow: visible;
+        width: 100%;
+        max-width: 100%;
+        min-height: 0;
+    }
+
+    .chart-card {
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        position: relative;
+        padding: 1.5rem;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+        border: 1px solid #dbe5f0;
+        border-radius: 24px;
+        box-shadow: 0 16px 35px rgba(15, 23, 42, 0.06);
+    }
+
+    .chart-card .chart-container {
+        flex: 1 1 auto;
+    }
+
+    .chart-card-featured {
+        padding-bottom: 1.25rem;
+    }
+
+    .chart-card-reference {
+        border-radius: 18px;
+        padding: 1rem;
+    }
+
+    .chart-card-reference .chart-card-head {
+        margin-bottom: 0.6rem;
+    }
+
+    .chart-card-reference .chart-legend-hint {
+        font-size: 0.65rem;
+        gap: 0.35rem;
+    }
+
+    .chart-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .chart-card-title {
+        font-size: 0.75rem;
+        line-height: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+
+    .chart-legend-hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #64748b;
+        flex-wrap: wrap;
+    }
+
+    .chart-dot {
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 9999px;
+        display: inline-block;
+    }
+
+    .chart-height-lg {
+        height: 320px;
+        min-height: 320px;
+    }
+
+    .chart-height-reference {
+        height: 230px;
+        min-height: 230px;
+    }
+
+    .chart-height-md {
+        height: 300px;
+        min-height: 300px;
+    }
+
+    .chart-empty-state {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 0.875rem;
+        background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+        border-radius: 18px;
+    }
+
+    .plotly-chart {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        min-height: 0;
+        overflow: visible !important;
+    }
+
+    .plotly-chart .svg-container,
+    .plotly-chart .plot-container,
+    .plotly-chart .main-svg {
+        max-width: 100% !important;
+        width: 100% !important;
+        overflow: visible !important;
+    }
+
+    .plotly-chart .legend {
+        overflow: visible !important;
+    }
+
+    .plotly-chart .modebar-container,
+    .plotly-chart .modebar {
+        display: none !important;
+    }
+
+    .optimizer-page-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 #e2e8f0;
+    }
+
+    .optimizer-page-scroll::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    .optimizer-page-scroll::-webkit-scrollbar-track {
+        background: #e2e8f0;
+        border-radius: 9999px;
+    }
+
+    .optimizer-page-scroll::-webkit-scrollbar-thumb {
+        background: #94a3b8;
+        border-radius: 9999px;
+        border: 2px solid #e2e8f0;
+    }
+
+    .optimizer-page-scroll::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+    }
+
+    @keyframes chartReveal {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var specsEl = document.getElementById('chart-specs-data');
+        if (specsEl && typeof Plotly !== 'undefined') {
+            try {
+                var chartSpecs = JSON.parse(specsEl.textContent || '{}');
+                var plotlyConfig = { responsive: true, displayModeBar: false, displaylogo: false, staticPlot: false };
+
+                // ✅ mergeLayout defined FIRST before use
+                function mergeLayout(base, overrides) {
+                    if (!overrides) return base;
+                    var result = Object.assign({}, base);
+                    for (var k in overrides) {
+                        if (overrides.hasOwnProperty(k)) {
+                            if (result[k] && typeof result[k] === 'object' && !Array.isArray(result[k])) {
+                                result[k] = Object.assign({}, result[k], overrides[k]);
+                            } else {
+                                result[k] = overrides[k];
+                            }
+                        }
+                    }
+                    return result;
+                }
+
+                var layoutDefaults = {
+                    margin: { l: 52, r: 24, t: 70, b: 56 },
+                    font: { family: "'Segoe UI', system-ui, sans-serif", size: 12, color: '#334155' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    colorway: ['#1ea7e1', '#84cc16', '#0f766e', '#f59e0b', '#6366f1'],
+                    xaxis: { automargin: true, tickfont: { size: 11, color: '#64748b' }, title: { font: { size: 12, color: '#334155' } }, gridcolor: '#eef4f8', linecolor: '#d9e3ec', tickangle: 0, zeroline: false },
+                    yaxis: { automargin: true, tickfont: { size: 11, color: '#64748b' }, title: { font: { size: 12, color: '#334155' } }, gridcolor: '#eef4f8', linecolor: '#d9e3ec', zeroline: false }
+                };
+
+                // ✅ SINGLE loop only — duplicate removed
+                for (var id in chartSpecs) {
+                    if (!chartSpecs.hasOwnProperty(id) || !chartSpecs[id] || !chartSpecs[id].data) continue;
+                    var spec = chartSpecs[id];
+                    var layout = mergeLayout(layoutDefaults, spec.layout || {});
+
+                    // ✅ Force legend AFTER merge — Python spec cannot override this
+                    layout.legend = {
+                        orientation: 'h',
+                        yanchor: 'bottom',
+                        y: 1.08,
+                        xanchor: 'right',
+                        x: 1,
+                        font: { size: 11, color: '#334155' },
+                        bgcolor: 'rgba(255,255,255,0)',
+                        borderwidth: 0
+                    };
+
+                    // ✅ Force margin AFTER merge too
+                    layout.margin = { l: 52, r: 24, t: 70, b: 56 };
+
+                    // Pie/donut — different margin, no external legend needed
+                    if (spec.data[0] && (spec.data[0].type === 'pie' || spec.data[0].type === 'sunburst')) {
+                        layout.margin = { l: 20, r: 20, t: 60, b: 20 };
+                    }
+
+                    var ids = ['chart-' + id, 'chart-dash-' + id];
+                    for (var i = 0; i < ids.length; i++) {
+                        var el = document.getElementById(ids[i]);
+                        if (el) {
+                            Plotly.newPlot(el, spec.data, layout, plotlyConfig);
+                        }
+                    }
+                }
+
+                // Resize after DOM settles
+                setTimeout(function () {
+                    document.querySelectorAll('.plotly-chart').forEach(function (el) {
+                        if (el.offsetParent !== null) Plotly.Plots.resize(el);
+                    });
+                }, 150);
+
+            } catch (e) { console.warn('Plotly charts init:', e); }
+        }
+
+        var validTabs = ['rule1', 'rule2', 'combined', 'dashboard'];
+        window.setOptimizerTab = function (tabId) {
+            validTabs.forEach(function (id) {
+                var linkEl = document.getElementById('tablink-' + id);
+                var panelEl = document.getElementById('panel-' + id);
+                if (id === tabId) {
+                    if (linkEl) { linkEl.classList.add('tab-active'); linkEl.classList.remove('tab-inactive'); }
+                    if (panelEl) {
+                        panelEl.classList.add('active-panel');
+                        panelEl.style.display = 'flex';
+                        panelEl.removeAttribute('hidden');
+                    }
+                    if (history.replaceState) history.replaceState(null, null, '#' + id);
+                    else window.location.hash = '#' + id;
+                } else {
+                    if (linkEl) { linkEl.classList.remove('tab-active'); linkEl.classList.add('tab-inactive'); }
+                    if (panelEl) {
+                        panelEl.classList.remove('active-panel');
+                        panelEl.style.display = 'none';
+                        panelEl.setAttribute('hidden', 'hidden');
+                    }
+                }
+            });
+            setTimeout(function () {
+                var panelEl = document.getElementById('panel-' + tabId);
+                if (panelEl && typeof Plotly !== 'undefined') {
+                    panelEl.querySelectorAll('.plotly-chart').forEach(function (el) {
+                        Plotly.Plots.resize(el);
+                    });
+                }
+                window.dispatchEvent(new Event('resize'));
+            }, 80);
+        };
+
+        var currentHash = (window.location.hash || '').replace('#', '');
+        if (!validTabs.includes(currentHash)) currentHash = 'dashboard';
+        window.setOptimizerTab(currentHash);
+        window.addEventListener('hashchange', function () {
+            var id = (window.location.hash || '').replace('#', '');
+            if (validTabs.includes(id)) window.setOptimizerTab(id);
+        });
+
+        // Client-side pagination (no full page reload)
+        var PER_PAGE = 6;
+        var rule1DataEl = document.getElementById('rule1-data');
+        var rule2DataEl = document.getElementById('rule2-data');
+        var rule1Data = rule1DataEl ? JSON.parse(rule1DataEl.textContent) : [];
+        var rule2Data = rule2DataEl ? JSON.parse(rule2DataEl.textContent) : [];
+        var nav1 = document.querySelector('nav[data-rule="1"]');
+        var nav2 = document.querySelector('nav[data-rule="2"]');
+        var rule1Page = nav1 ? parseInt(nav1.getAttribute('data-current-page'), 10) : 1;
+        var rule2Page = nav2 ? parseInt(nav2.getAttribute('data-current-page'), 10) : 1;
+        var totalRule1Pages = nav1 ? parseInt(nav1.getAttribute('data-total-pages'), 10) : 1;
+        var totalRule2Pages = nav2 ? parseInt(nav2.getAttribute('data-total-pages'), 10) : 1;
+        var basePath = window.location.pathname;
+
+        function safeText(val) {
+            if (val === null || val === undefined || val === '') return '—';
+            return String(val);
+        }
+
+        function escapeHtml(s) {
+            var div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
+        }
+
+        function getActionCellHtml() {
+            return '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full bg-blue-600 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">Send Trigger</button></td>';
+        }
+
+        function renderTableBody(tbodyId, data, page, rowClass) {
+            var tbody = document.getElementById(tbodyId);
+            if (!tbody) return;
+            var start = (page - 1) * PER_PAGE;
+            var slice = data.slice(start, start + PER_PAGE);
+            var html = '';
+            for (var i = 0; i < slice.length; i++) {
+                var row = slice[i];
+                html += '<tr class="' + rowClass + '">';
+                for (var j = 0; j < row.length; j++) {
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[j])) + '</td>';
+                }
+                if (tbodyId === 'rule1-tbody' || tbodyId === 'rule2-tbody') {
+                    html += getActionCellHtml();
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        function updatePagination(rule, page, totalPages, otherPage) {
+            var prefix = rule === 1 ? 'rule1' : 'rule2';
+            var display = document.getElementById(prefix + '-page-display');
+            var prevLink = document.getElementById(prefix + '-prev');
+            var nextLink = document.getElementById(prefix + '-next');
+            if (display) display.textContent = 'Page ' + page + ' of ' + totalPages;
+            if (prevLink) {
+                prevLink.href = basePath + (rule === 1 ? '?rule1_page=' + (page - 1) + '&rule2_page=' + otherPage : '?rule1_page=' + otherPage + '&rule2_page=' + (page - 1));
+                prevLink.classList.toggle('text-slate-300', page <= 1);
+                prevLink.classList.toggle('pointer-events-none', page <= 1);
+                prevLink.classList.toggle('text-slate-700', page > 1);
+                prevLink.classList.toggle('hover:bg-slate-100', page > 1);
+            }
+            if (nextLink) {
+                nextLink.href = basePath + (rule === 1 ? '?rule1_page=' + (page + 1) + '&rule2_page=' + otherPage : '?rule1_page=' + otherPage + '&rule2_page=' + (page + 1));
+                nextLink.classList.toggle('text-slate-300', page >= totalPages);
+                nextLink.classList.toggle('pointer-events-none', page >= totalPages);
+                nextLink.classList.toggle('text-slate-700', page < totalPages);
+                nextLink.classList.toggle('hover:bg-slate-100', page < totalPages);
+            }
+        }
+
+        function updateUrl() {
+            var q = '?rule1_page=' + rule1Page + '&rule2_page=' + rule2Page;
+            if (history.replaceState) history.replaceState(null, '', basePath + q);
+        }
+
+        function onRule1Prev(e) { e.preventDefault(); if (rule1Page <= 1) return; rule1Page--; renderTableBody('rule1-tbody', rule1Data, rule1Page, 'hover:bg-sky-50/60 transition-colors'); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
+        function onRule1Next(e) { e.preventDefault(); if (rule1Page >= totalRule1Pages) return; rule1Page++; renderTableBody('rule1-tbody', rule1Data, rule1Page, 'hover:bg-sky-50/60 transition-colors'); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
+        function onRule2Prev(e) { e.preventDefault(); if (rule2Page <= 1) return; rule2Page--; renderTableBody('rule2-tbody', rule2Data, rule2Page, 'hover:bg-slate-50 transition-colors'); updatePagination(2, rule2Page, totalRule2Pages, rule1Page); updateUrl(); }
+        function onRule2Next(e) { e.preventDefault(); if (rule2Page >= totalRule2Pages) return; rule2Page++; renderTableBody('rule2-tbody', rule2Data, rule2Page, 'hover:bg-slate-50 transition-colors'); updatePagination(2, rule2Page, totalRule2Pages, rule1Page); updateUrl(); }
+
+        var r1Prev = document.getElementById('rule1-prev');
+        var r1Next = document.getElementById('rule1-next');
+        var r2Prev = document.getElementById('rule2-prev');
+        var r2Next = document.getElementById('rule2-next');
+        if (r1Prev) r1Prev.addEventListener('click', onRule1Prev);
+        if (r1Next) r1Next.addEventListener('click', onRule1Next);
+        if (r2Prev) r2Prev.addEventListener('click', onRule2Prev);
+        if (r2Next) r2Next.addEventListener('click', onRule2Next);
+    });
+</script>
+{% endblock %}

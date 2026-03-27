@@ -1,2 +1,2 @@
-# SQL_OPTIMIZER_LATEST
-SQL_OPTIMIZER_LATEST
+# af-agentcell-template
+Template repository for Agentic Foundation agent cell repositories.

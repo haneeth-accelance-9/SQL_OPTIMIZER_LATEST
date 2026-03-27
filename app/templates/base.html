@@ -1,0 +1,126 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title|default:"SQL License Optimizer" }}{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy: #0f172a;
+            --navy-light: #1e293b;
+            --slate: #334155;
+            --slate-muted: #64748b;
+            --teal: #0d9488;
+            --teal-light: #14b8a6;
+            --accent: #0369a1;
+            --accent-light: #0ea5e9;
+            --card-bg: #f8fafc;
+            --border: #e2e8f0;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .tab-content-panel { display: none !important; flex: 1 1 0; min-height: 0; flex-direction: column; overflow: hidden; }
+        .tab-content-panel:target { display: flex !important; }
+        .optimizer-tab-link { text-decoration: none; cursor: pointer; border: 1px solid var(--border); }
+        .optimizer-tab-link.tab-active { background: linear-gradient(135deg, var(--navy-light) 0%, var(--accent) 100%); color: white !important; border-color: var(--accent); box-shadow: 0 2px 4px rgba(15,23,42,.25); }
+        .optimizer-tab-link.tab-inactive { background: var(--card-bg); color: var(--slate); }
+        .optimizer-tab-link.tab-inactive:hover { background: #e2e8f0; color: var(--navy); }
+        .data-window { height: 200px; max-height: 200px; overflow: auto; font-size: 10px; }
+        .data-window table { font-size: 10px; }
+        .data-window th, .data-window td { padding: 2px 6px; white-space: nowrap; }
+        .chart-container { height: 180px; min-height: 180px; position: relative; }
+        .chart-container.h-24 { height: 6rem; min-height: 6rem; }
+        .app-shell { background: linear-gradient(180deg, #eef2f7 0%, #f8fafc 24%, #f1f5f9 100%); }
+        .appbar-wrap { padding: 10px 10px 0; }
+        .appbar {
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+            backdrop-filter: blur(10px);
+        }
+        .appbar-link {
+            position: relative;
+            color: #475569;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            transition: color .2s ease;
+        }
+        .appbar-link:hover { color: #0f172a; }
+        .appbar-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -8px;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #0b72a8 0%, #5fbb61 100%);
+            transform: scaleX(0);
+            transform-origin: center;
+            transition: transform .2s ease;
+        }
+        .appbar-link:hover::after,
+        .appbar-link.is-current::after { transform: scaleX(1); }
+        .appbar-link.is-current { color: #0f172a; }
+        .appbar-avatar {
+            background: linear-gradient(135deg, #0b72a8 0%, #5fbb61 100%);
+            box-shadow: 0 10px 24px rgba(11, 114, 168, 0.2);
+        }
+        @keyframes load-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.05); } }
+        @keyframes load-spin { to { transform: rotate(360deg); } }
+        @keyframes load-shine { 0% { left: -100%; } 100% { left: 100%; } }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="app-shell text-slate-800 overflow-hidden h-screen flex flex-col">
+    <div class="appbar-wrap">
+        <nav class="appbar" role="navigation" aria-label="Main">
+            <div class="flex w-full min-h-[74px] items-center justify-between px-4 lg:px-8">
+                <a href="{% url 'optimizer:home' %}" class="flex items-center gap-4 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white" aria-label="Enterprise SQL Optimizer Home">
+                    <img src="{% static 'assets/logo.svg' %}" alt="Enterprise SQL Optimizer logo" class="h-11 w-11 object-contain">
+                    <div class="flex flex-col">
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Enterprise sql optimizer</span>
+                        <!-- <span class="text-[1.85rem] font-extrabold tracking-tight text-slate-900 leading-none">ENTERPRISE SQL OPTIMIZER</span> -->
+                    </div>
+                </a>
+                <div class="flex items-center gap-5 lg:gap-8">
+                    {% if user.is_authenticated %}
+                    {% if request.session.optimizer_analysis_id %}
+                    <a href="{% url 'optimizer:results' %}" class="appbar-link {% if request.resolver_match.url_name == 'results' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">RESULTS</a>
+                    <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
+                    {% endif %}
+                    <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Log out</a>
+                    <div class="appbar-avatar flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white">
+                        {{ user.username|default:"U"|slice:":1"|upper }}
+                    </div>
+                    {% else %}
+                    <a href="{% url 'optimizer:login' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Sign in</a>
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
+    </div>
+    <main class="flex-1 min-h-0 overflow-hidden" role="main">
+        {% if messages %}
+        <div class="flex-shrink-0 px-4 py-2 sm:px-6" role="region" aria-label="Notifications">
+            {% for message in messages %}
+            <div class="max-w-4xl mx-auto mb-2 last:mb-0 p-4 rounded-xl text-sm font-medium border shadow-sm
+                {% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-800
+                {% elif message.tags == 'success' %}bg-emerald-50 border-emerald-200 text-emerald-800
+                {% elif message.tags == 'warning' %}bg-amber-50 border-amber-200 text-amber-800
+                {% else %}bg-slate-50 border-slate-200 text-slate-700{% endif %}"
+                role="alert">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

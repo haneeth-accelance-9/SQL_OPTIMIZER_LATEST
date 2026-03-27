@@ -1,0 +1,66 @@
+name: Syntax Checks
+
+on:
+  workflow_call:
+    inputs:
+      event_name:
+        required: false
+        type: string
+        default: "push"
+      continue-on-error:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION || '1.6.6' }}
+  PYTHON_VERSION: ${{ vars.PYTHON_VERSION || '3.12' }}
+  PRE_COMMIT_VERSION: ${{ vars.PRE_COMMIT_VERSION || '4.1.0' }}
+  CHECKOV_VERSION: ${{ vars.CHECKOV_VERSION || '3.2.370' }}
+  TERRAFORM_DOCS_VERSION: ${{ vars.TERRAFORM_DOCS_VERSION || '0.16.0' }}
+  TFLINT_VERSION: ${{ vars.TFLINT_VERSION || '0.55.1' }}
+
+jobs:
+  syntax-checks:
+    name: Syntax Checks
+    runs-on: [external-k8s-v2]
+    continue-on-error: ${{ inputs.continue-on-error }}
+    container:
+      image: official-dockerhub-images.artifactory.bayer.com/ubuntu:24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        shell: bash
+        working-directory: ./.github/workflows/scripts/
+        run: |
+          . install-terraform.sh && \
+          . install-git.sh && \
+          . install-python.sh && \
+          . install-pre-commit.sh
+
+      - name: Prepare git
+        run: |
+          git config --global credential.helper 'store --file ~/.git-credentials'
+          git config --global url."https://token:${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}@github.com/bayer-int".insteadOf https://github.com/bayer-int
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Execute pre-commit on all files
+        run: |
+          pre-commit run --all-files
+
+      - name: Post failure comment to PR
+        if: failure() && inputs.event_name == 'pull_request'
+        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc # v2.8.2
+        with:
+          message: |
+            #### ⚠️ **Warning:** Syntax checks failed, please [review](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})!
+            To prevent this warning, employ \`pre-commit\` while handling the repository. For more details, please refer to the README.
+          message-id: syntax-check-failure

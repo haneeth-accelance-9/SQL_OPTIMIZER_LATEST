@@ -1,0 +1,77 @@
+  name: Deploy App to Container App                                                                                                                              
+
+  on:
+    workflow_dispatch:
+      inputs:
+        image_tag:
+          required: false                                                                                                                                        
+          description: "Image tag to deploy (defaults to latest)"
+          default: latest                                                                                                                                        
+          type: string                                                                                                                                           
+
+  permissions:                                                                                                                                                   
+    contents: read                                          
+    id-token: write
+
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      environment: ${{ vars.BUILD_ENVIRONMENT || 'sandbox' }}                                                                                                    
+      steps:
+        - name: Azure Login (OIDC)                                                                                                                               
+          uses: azure/login@v2                              
+          with:                                                                                                                                                  
+            client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}                                                                                    
+            subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Deploy to Container App                     
+          run: |                                                                                                                                                 
+            az containerapp update \                        
+              --name ca-webapp-licagree-sandbox-gwc \
+              --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+              --image ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.PROJECT_NAME }}/app:${{ inputs.image_tag }}
+
+# name: Deploy App                                                                                                                                               
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       environment:
+#         description: 'Target environment'
+#         required: true
+#         type: choice                                                                                                                                           
+#         options:
+#           - sandbox                                                                                                                                            
+#           - dev 
+#           - test
+#         default: sandbox
+#       image_tag:
+#         description: 'Docker image tag (SHA or run number)'                                                                                                    
+#         required: true                                                                                                                                         
+#         type: string                                                                                                                                           
+
+# permissions:    
+#   id-token: write
+#   contents: read
+
+# jobs:
+#   deploy:
+#     name: Deploy Django App to Container App
+#     runs-on: ubuntu-latest                                                                                                                                     
+#     environment: ${{ inputs.environment }}
+#     steps:                                                                                                                                                     
+#       - name: Azure Login (OIDC)
+#         uses: azure/login@v2                                                                                                                                   
+#         with:
+#           client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}                                                                                    
+#           tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}                                                                                    
+#           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+#       - name: Update Container App image
+#         run: |                                                                                                                                                 
+#           IMAGE="${{ vars.ARTIFACTORY_REPOSITORY_NAME }}/${{ vars.PROJECT_NAME }}/app:${{ inputs.image_tag }}"
+#           az containerapp update \                                                                                                                             
+#             --name "ca-${{ vars.PROJECT_NAME }}-${{ inputs.environment }}-gwc" \                                                                               
+#             --resource-group "${{ vars.AZURE_TF_RG_NAME }}" \                                                                                                  
+#             --image "$IMAGE"                                                                                                                                   

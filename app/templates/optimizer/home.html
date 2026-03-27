@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}{{ title|default:"Enterprise SQL Optimizer" }}{% endblock %}
+{% block content %}
+<div class="min-h-full overflow-y-auto home-shell">
+    <section class="relative overflow-hidden">
+        <div class="absolute inset-0 home-aurora pointer-events-none"></div>
+        <div class="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-cyan-300/20 blur-3xl pointer-events-none"></div>
+        <div class="absolute top-20 right-0 w-80 h-80 rounded-full bg-lime-300/20 blur-3xl pointer-events-none"></div>
+
+        <div class="relative hero-shell mx-auto px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+            <div class="hero-grid grid gap-10 items-center">
+                <div class="text-center hero-copy mx-auto w-full">
+                    <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/60 bg-white/70 shadow-sm backdrop-blur text-slate-700 text-sm font-semibold">
+                        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                        Bayer SQL licensing workflow
+                    </div>
+
+                    <h1 class="hero-heading mt-6 font-extrabold tracking-tight text-slate-900 max-w-3xl mx-auto">
+                        Enterprise SQL Server license optimization for a clearer, friendlier experience
+                    </h1>
+                    <p class="hero-description mt-4 text-slate-700 max-w-2xl mx-auto">
+                        Upload your enterprise asset workbook to identify Bring-Your-Own-License versus Pay-As-You-Go opportunities, review retired device exposure, and move from raw inventory to action-ready recommendations.
+                    </p>
+
+                    <div class="mt-7 grid gap-3 sm:grid-cols-3 text-left max-w-3xl mx-auto">
+                        <div class="feature-chip">
+                            <span class="feature-dot bg-cyan-500"></span>
+                            BYOL vs PAYG insights
+                        </div>
+                        <div class="feature-chip">
+                            <span class="feature-dot bg-lime-500"></span>
+                            Retired device compliance checks
+                        </div>
+                        <div class="feature-chip">
+                            <span class="feature-dot bg-slate-900"></span>
+                            Executive-ready outputs
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative w-full">
+                    {% if error %}
+                    <div class="mb-5 mx-auto max-w-2xl p-4 bg-red-50 border border-red-200 rounded-2xl text-red-800 text-sm shadow-sm flex items-start gap-3">
+                        <svg class="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                        <div class="font-medium">{{ error }}</div>
+                    </div>
+                    {% endif %}
+
+                    <div class="upload-card p-6 md:p-7 rounded-3xl max-w-2xl mx-auto">
+                        <div class="flex items-start justify-between gap-4 mb-6">
+                            <div>
+                                <p class="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-700">Upload Workbook</p>
+                                <h2 class="mt-2 text-xl sm:text-2xl font-bold text-slate-900">Start your optimization run</h2>
+                                <p class="mt-2 text-sm text-slate-600">Drop in the Excel file and we will prepare the analysis dashboard automatically.</p>
+                            </div>
+                            <div class="hidden sm:flex items-center justify-center h-14 w-14 rounded-2xl bg-slate-900 text-white shadow-lg">
+                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 17v-6m3 6V7m3 10v-4m3 8H6a2 2 0 01-2-2V5a2 2 0 012-2h7.586a1 1 0 01.707.293l4.414 4.414A1 1 0 0119 8.414V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <form id="upload-form" action="{% url 'optimizer:upload' %}" method="post" enctype="multipart/form-data" class="space-y-4">
+                            {% csrf_token %}
+                            <div class="border-2 border-dashed border-slate-300 rounded-[1.75rem] p-7 text-center transition-all duration-200 group upload-drop-zone"
+                                id="drop-zone">
+                                <input type="file" name="excel_file" id="excel_file" accept=".xlsx,.xls" class="hidden" required>
+                                <label for="excel_file" class="cursor-pointer block relative">
+                                    <div class="bg-gradient-to-br from-cyan-100 to-lime-100 w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-105 transition-transform">
+                                        <svg class="h-8 w-8 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                        </svg>
+                                    </div>
+                                    <span class="block text-slate-800 font-semibold text-lg sm:text-xl">Drag and drop your Excel file here</span>
+                                    <span class="mt-2 block text-slate-500 text-sm">or <span class="text-cyan-700 font-semibold">browse files</span> from your computer</span>
+                                    <span class="mt-5 inline-flex px-3 py-1.5 bg-slate-100 rounded-full text-xs text-slate-500 font-semibold tracking-wide">SUPPORTS .XLSX, .XLS</span>
+                                </label>
+                            </div>
+
+                            <div id="file-name" class="hidden flex items-center gap-3 text-sm text-cyan-900 bg-cyan-50/80 p-3 rounded-2xl border border-cyan-100">
+                                <div class="p-2 bg-cyan-100 rounded-xl text-cyan-700 flex-shrink-0">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-semibold text-cyan-950 truncate" id="file-name-text">Selected File</p>
+                                    <p class="text-xs text-cyan-700/80">Ready to analyze</p>
+                                </div>
+                            </div>
+
+                            <button type="submit" id="submit-btn" disabled
+                                class="w-full py-3.5 px-4 bg-slate-900 text-white text-base font-semibold rounded-2xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 flex justify-center items-center gap-2">
+                                Analyze Asset Data
+                                <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                </svg>
+                            </button>
+                        </form>
+
+                        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+                            <div class="info-card">
+                                <p class="info-title">Input</p>
+                                <p class="info-text">Enterprise inventory workbook</p>
+                            </div>
+                            <div class="info-card">
+                                <p class="info-title">Engine</p>
+                                <p class="info-text">License and compliance analysis</p>
+                            </div>
+                            <div class="info-card">
+                                <p class="info-title">Outcome</p>
+                                <p class="info-text">Dashboard and executive summary</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div id="loading-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4"
+    style="background: rgba(15,23,42,0.85); backdrop-filter: blur(4px);">
+    <div class="relative bg-white rounded-2xl overflow-hidden max-w-sm w-full"
+        style="box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+        <div class="absolute inset-0 overflow-hidden pointer-events-none">
+            <div class="absolute top-0 bottom-0 w-1/2 bg-gradient-to-r from-transparent via-teal-100/30 to-transparent"
+                style="left: -50%; animation: load-shine 2s ease-in-out infinite;"></div>
+        </div>
+        <div class="p-8 text-center relative z-10">
+            <div class="flex justify-center gap-1.5 mb-8">
+                <span class="w-2.5 h-2.5 rounded-full bg-teal-500 animate-pulse" style="animation-delay: 0ms;"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" style="animation-delay: 150ms;"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" style="animation-delay: 300ms;"></span>
+            </div>
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-6 bg-slate-50 border-4 border-white shadow-sm ring-1 ring-slate-100">
+                <svg class="w-8 h-8 text-teal-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-80" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                    </path>
+                </svg>
+            </div>
+            <p class="text-lg font-bold text-slate-800 mb-1">Processing Analysis</p>
+            <p class="text-slate-500 text-sm mb-6">Cross-referencing asset compliance...</p>
+            <div class="space-y-2.5 text-left bg-slate-50 rounded-xl p-4 text-xs font-medium border border-slate-100">
+                <p class="flex items-center gap-2.5 text-slate-600"><span class="inline-block w-2 h-2 rounded-full bg-teal-500"></span>Parsing Excel sheets</p>
+                <p class="flex items-center gap-2.5 text-slate-600"><span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>Evaluating BYOL to PAYG</p>
+                <p class="flex items-center gap-2.5 text-slate-600"><span class="inline-block w-2 h-2 rounded-full bg-indigo-500"></span>Matching retired assets</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    (function () {
+        var form = document.getElementById('upload-form');
+        var fileInput = document.getElementById('excel_file');
+        var submitBtn = document.getElementById('submit-btn');
+        var fileNameContainer = document.getElementById('file-name');
+        var fileNameText = document.getElementById('file-name-text');
+        var dropZone = document.getElementById('drop-zone');
+        var overlay = document.getElementById('loading-overlay');
+
+        function handleFile(file) {
+            if (file) {
+                submitBtn.disabled = false;
+                fileNameText.textContent = file.name;
+                fileNameContainer.classList.remove('hidden');
+                fileNameContainer.classList.add('flex');
+                dropZone.classList.add('border-cyan-500', 'bg-cyan-50');
+            }
+        }
+
+        fileInput.addEventListener('change', function () {
+            if (this.files.length) {
+                handleFile(this.files[0]);
+            }
+        });
+
+        form.addEventListener('submit', function () {
+            overlay.classList.remove('hidden');
+        });
+
+        dropZone.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            dropZone.classList.add('border-cyan-400', 'bg-cyan-50');
+        });
+        dropZone.addEventListener('dragleave', function () {
+            dropZone.classList.remove('border-cyan-400', 'bg-cyan-50');
+        });
+        dropZone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            dropZone.classList.remove('border-cyan-400', 'bg-cyan-50');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+    })();
+</script>
+<style>
+    .hero-shell {
+        width: min(100%, 118rem);
+    }
+
+    .hero-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    .hero-copy {
+        max-width: 42rem;
+    }
+
+    .hero-heading {
+        font-size: 2rem;
+        line-height: 1.12;
+        letter-spacing: -0.03em;
+    }
+
+    .hero-description {
+        font-size: 1rem;
+        line-height: 2rem;
+    }
+
+    .home-shell {
+        background:
+            radial-gradient(circle at top left, rgba(34, 211, 238, 0.15), transparent 28%),
+            radial-gradient(circle at top right, rgba(163, 230, 53, 0.16), transparent 30%),
+            linear-gradient(180deg, #f7fbfd 0%, #eef5f8 55%, #f8fafc 100%);
+    }
+
+    .home-aurora {
+        background:
+            linear-gradient(120deg, rgba(14, 165, 233, 0.08), rgba(132, 204, 22, 0.08)),
+            radial-gradient(circle at 20% 20%, rgba(14, 165, 233, 0.16), transparent 20%),
+            radial-gradient(circle at 80% 10%, rgba(132, 204, 22, 0.16), transparent 24%);
+    }
+
+    .upload-card {
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(255, 255, 255, 0.75);
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(12px);
+    }
+
+    .upload-drop-zone {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(241, 245, 249, 0.78));
+    }
+
+    @media (min-width: 1024px) {
+        .hero-grid {
+            grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+            gap: 2.5rem;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .hero-grid {
+            gap: 2rem;
+        }
+    }
+
+    .feature-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1rem;
+        border-radius: 1rem;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(226, 232, 240, 0.85);
+        box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1e293b;
+        line-height: 1.45;
+        min-height: 4.5rem;
+    }
+
+    .feature-dot {
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 999px;
+        flex-shrink: 0;
+    }
+
+    .info-card {
+        padding: 0.95rem;
+        border-radius: 1rem;
+        background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.95));
+        border: 1px solid #e2e8f0;
+        min-height: 7rem;
+    }
+
+    .info-title {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #0369a1;
+    }
+
+    .info-text {
+        margin-top: 0.45rem;
+        font-size: 0.88rem;
+        color: #334155;
+        line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    @keyframes load-shine {
+        0% {
+            left: -100%;
+            top: -100%;
+        }
+
+        100% {
+            left: 100%;
+            top: 100%;
+        }
+    }
+
+    @media (min-width: 640px) {
+        .hero-heading {
+            font-size: 2rem;
+             line-height: 1.12;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .hero-grid {
+            grid-template-columns: minmax(0, 1.2fr) minmax(25rem, 31rem);
+            gap: 3rem;
+        }
+
+        .hero-copy {
+            max-width: 100%;
+        }
+
+        .hero-heading {
+           font-size: 2.5rem;
+            max-width: 48rem;
+             line-height: 1.5;
+        }
+
+        .hero-description {
+            max-width: 44rem;
+        }
+    }
+
+    @media (min-width: 1440px) {
+        .hero-shell {
+            width: min(100%, 124rem);
+        }
+
+        .hero-grid {
+            grid-template-columns: minmax(0, 1.15fr) minmax(27rem, 31rem);
+            gap: 3rem;
+        }
+
+        .hero-copy {
+            max-width: 48rem;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-heading {
+           font-size:2rem;
+            max-width: 48rem;
+        }
+
+        .hero-description {
+            max-width: 42rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+
+        .feature-chip {
+            min-height: auto;
+        }
+
+        .info-card {
+            min-height: auto;
+        }
+    }
+</style>
+{% endblock %}

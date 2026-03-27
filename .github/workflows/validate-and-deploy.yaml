@@ -1,0 +1,78 @@
+name: Validate and Deploy
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION || '1.6.6' }}
+
+jobs:
+  syntax-checks:
+    name: Syntax Checks
+    uses: ./.github/workflows/syntax-checks.yaml
+    with:
+      continue-on-error: true
+    secrets: inherit
+
+  security-checks:
+    name: Security Checks
+    needs: syntax-checks
+    uses: ./.github/workflows/security-checks.yaml
+    with:
+      continue-on-error: true
+    secrets: inherit
+
+  template_validation:
+    name: Template Validation
+    runs-on: [external-k8s-v2]
+    container:
+      image: official-dockerhub-images.artifactory.bayer.com/ubuntu:24.04
+    needs: security-checks
+    outputs:
+      is_env_branch: ${{ steps.check_branch_name.outputs.is_env_branch }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        shell: bash
+        working-directory: ./.github/workflows/scripts/
+        run: |
+          . install-terraform.sh && \
+          . install-git.sh
+
+      - name: Prepare
+        run: |
+          git config --global credential.helper 'store --file ~/.git-credentials'
+          git config --global url."https://token:${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}@github.com/bayer-int".insteadOf https://github.com/bayer-int
+
+      - name: Terraform Init
+        working-directory: configuration
+        run: |
+          terraform version
+          terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: configuration
+        run: terraform validate
+
+  # +-------------------------------------+
+  # |              Deploy                 |
+  # +-------------------------------------+
+  deploy:
+    name: Deploy to ${{ github.ref_name }} Environment
+    needs: template_validation
+    permissions:
+      contents: write
+      id-token: write
+    if: github.ref_name == 'sandbox' || github.ref_name == 'dev' || github.ref_name == 'qa' || github.ref_name == 'prod'
+    uses: ./.github/workflows/deploy.yaml
+    secrets: inherit
+    with:
+      environment: ${{ github.ref_name }}

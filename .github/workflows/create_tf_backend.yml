@@ -1,0 +1,71 @@
+name: Create Terraform Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment for which to run this workflow
+        type: environment
+        required: true
+      location:
+        description: The location for the storage account
+        type: string
+        required: true
+        default: westeurope
+
+permissions:
+  id-token: write
+
+jobs:
+  create_tf_backend:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+    - name: Login
+      uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+      with:
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+
+    - name: Create Storage Account
+      uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
+      env:
+        RG_NAME: ${{ vars.AZURE_RESOURCE_GROUP }}
+        BACKEND_NAME: ${{ vars.AZURE_TF_BACKEND_NAME }}
+      continue-on-error: true
+      with:
+        azcliversion: latest
+        inlineScript: |
+          az storage account create --name $BACKEND_NAME \
+                          --resource-group $RG_NAME \
+                          --access-tier Hot \
+                          --allow-blob-public-access false \
+                          --allow-cross-tenant-replication false \
+                          --allow-shared-key-access true \
+                          --default-action Allow \
+                          --https-only true \
+                          --kind StorageV2 \
+                          --location ${{ inputs.location }} \
+                          --public-network-access Enabled \
+                          --sku Standard_GRS \
+                          --tags purpose=terraform-state \
+                          --min-tls-version TLS1_2
+
+    - name: Create Storage Container
+      uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
+      env:
+        RG_NAME: ${{ vars.AZURE_RESOURCE_GROUP }}
+        BACKEND_NAME: ${{ vars.AZURE_TF_BACKEND_NAME }}
+        CONTAINER_NAME: ${{ vars.AZURE_TF_BACKEND_CONTAINER_NAME }}
+      with:
+        azcliversion: latest
+        inlineScript: |
+          if [[ "$(az storage container exists --account-name $BACKEND_NAME --name $CONTAINER_NAME --auth-mode login -o tsv)" != "True" ]]
+          then
+            az storage container create --name $CONTAINER_NAME \
+                            --account-name $BACKEND_NAME \
+                            --public-access off \
+                            --auth-mode login
+          fi

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 225 225" width="225" height="225" role="img" aria-label="Bayer logo">
+  <g fill="none" stroke-linecap="round" stroke-width="10">
+    <path d="M42 158 A78 78 0 1 1 161 46" stroke="#89D329"/>
+    <path d="M164 49 A78 78 0 1 1 45 161" stroke="#00BCFF"/>
+  </g>
+  <g fill="#10384F" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="112.5" y="65" font-size="22">B</text>
+    <text x="112.5" y="90" font-size="22">A</text>
+    <text x="112.5" y="155" font-size="22">E</text>
+    <text x="112.5" y="180" font-size="22">R</text>
+    <text x="112.5" y="123" font-size="31" letter-spacing="-1">BAYER</text>
+  </g>
+</svg>
