@@ -22,7 +22,8 @@ from django.utils import timezone
 
 import pandas as pd
 from optimizer.models import AnalysisSession
-from optimizer.forms import SignUpForm
+from optimizer.forms import SignUpForm, UserProfileForm
+from optimizer.models import UserProfile
 from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
 from optimizer.services.excel_processor import ExcelProcessor
 from optimizer.services.report_export import export_pdf, export_docx, normalize_report_title_text
@@ -67,6 +68,39 @@ logger = logging.getLogger(__name__)
 ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx"})
 ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
 PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
+
+
+def _get_or_create_user_profile(user):
+    """Return the persisted profile row for the authenticated user."""
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
+
+
+def _build_profile_context(user, profile, form=None):
+    """Shared template context for the profile page."""
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    display_name = full_name or user.username
+    initials = (
+        "".join(
+            part[0].upper()
+            for part in [user.first_name.strip(), user.last_name.strip()]
+            if part
+        )[:2]
+        or user.username[:1].upper()
+        or "U"
+    )
+    return {
+        "title": "Profile",
+        "profile_form": form or UserProfileForm(instance=profile, user=user),
+        "profile_image_url": profile.image_url,
+        "profile_team_name": profile.team_name or "Not set yet",
+        "profile_display_name": display_name,
+        "profile_initials": initials,
+        "profile_email": user.email or "Not set yet",
+        "profile_first_name": user.first_name or "Not set yet",
+        "profile_last_name": user.last_name or "Not set yet",
+        "profile_username": user.username,
+    }
 
 
 def _normalize_analysis_context(analysis):
@@ -443,6 +477,24 @@ def results(request):
 def dashboard(request):
     """Same as results: unified tabbed view."""
     return results(request)
+
+
+@require_http_methods(["GET", "POST"])
+@csrf_protect
+@login_required
+def profile_page(request):
+    """Display and update the logged-in user's profile details."""
+    profile = _get_or_create_user_profile(request.user)
+    if request.method == "POST":
+        form = UserProfileForm(request.POST, instance=profile, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("optimizer:profile")
+    else:
+        form = UserProfileForm(instance=profile, user=request.user)
+    context = _build_profile_context(request.user, profile, form=form)
+    return render(request, "optimizer/profile.html", context)
 
 
 @require_GET

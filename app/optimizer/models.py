@@ -38,3 +38,23 @@ class AnalysisSession(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Analysis session"
         verbose_name_plural = "Analysis sessions"
+
+
+class UserProfile(models.Model):
+    """Stores optional user profile details shown on the profile page."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="optimizer_profile",
+    )
+    team_name = models.CharField(max_length=120, blank=True)
+    image_url = models.URLField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User profile"
+        verbose_name_plural = "User profiles"
+
+    def __str__(self):
+        return f"Profile for {self.user.username}"
