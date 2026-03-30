@@ -13,6 +13,7 @@ urlpatterns = [
     path("upload/", views.upload, name="upload"),
     path("results/", views.results, name="results"),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("analysis-logs/", views.analysis_logs, name="analysis_logs"),
     path("report/", views.report_page, name="report"),
     path("report/download/<str:format_type>/", views.report_download, name="report_download"),
     path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
