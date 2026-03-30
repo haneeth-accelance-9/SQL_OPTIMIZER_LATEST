@@ -3,7 +3,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from optimizer.models import AnalysisSession
+from optimizer.models import AnalysisSession, UserProfile
 
 
 @pytest.mark.django_db
@@ -85,6 +85,7 @@ def test_results_uses_persisted_analysis_data(client):
 
 
 @pytest.mark.django_db
+<<<<<<< HEAD
 def test_report_page_normalizes_currency_symbols(client):
     euro = "\u20ac"
     user = get_user_model().objects.create_user(username="reporter", password="secret123")
@@ -266,3 +267,50 @@ def test_analysis_logs_returns_only_current_user_logs(client):
     assert payload["logs"][0]["username"] == "log-view-user"
     assert payload["logs"][0]["file_name"] == "mine.xlsx"
     assert payload["logs"][0]["summary_metrics"]["total_devices_analyzed"] == 42
+=======
+def test_profile_page_renders_for_authenticated_user(client):
+    user = get_user_model().objects.create_user(
+        username="business",
+        password="secret123",
+        first_name="Business",
+        last_name="Owner",
+        email="business@example.com",
+    )
+    UserProfile.objects.create(user=user, team_name="MVP Team", image_url="https://example.com/avatar.png")
+
+    client.force_login(user)
+    response = client.get(reverse("optimizer:profile"))
+
+    assert response.status_code == 200
+    assert b"Manage your profile" in response.content
+    assert response.context["profile_team_name"] == "MVP Team"
+    assert response.context["profile_display_name"] == "Business Owner"
+
+
+@pytest.mark.django_db
+def test_profile_page_updates_user_and_profile_details(client):
+    user = get_user_model().objects.create_user(username="business", password="secret123")
+    UserProfile.objects.create(user=user, team_name="Initial Team")
+
+    client.force_login(user)
+    response = client.post(
+        reverse("optimizer:profile"),
+        {
+            "first_name": "Business",
+            "last_name": "Leader",
+            "email": "business@example.com",
+            "team_name": "Finance Systems",
+            "image_url": "https://example.com/business.png",
+        },
+        follow=True,
+    )
+
+    user.refresh_from_db()
+    profile = user.optimizer_profile
+    assert response.status_code == 200
+    assert user.first_name == "Business"
+    assert user.last_name == "Leader"
+    assert user.email == "business@example.com"
+    assert profile.team_name == "Finance Systems"
+    assert profile.image_url == "https://example.com/business.png"
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
