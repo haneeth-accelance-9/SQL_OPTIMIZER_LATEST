@@ -1,4 +1,4 @@
-"""
+﻿"""
 Views for SQL License Optimizer: upload, process, results, dashboard, report.
 All optimizer views require authentication (enterprise security).
 Uses AnalysisSession for persistence and TTL; session stores only analysis_id.
@@ -10,7 +10,7 @@ import uuid
 from django.conf import settings
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods
 from django.contrib.auth import logout as auth_logout
 from django.views.decorators.csrf import csrf_protect
@@ -21,11 +21,18 @@ from django.contrib import messages
 from django.utils import timezone
 
 import pandas as pd
-from optimizer.models import AnalysisSession
-from optimizer.forms import SignUpForm
+from optimizer.models import AnalysisSession, UserProfile
+from optimizer.forms import SignUpForm, UserProfileForm
 from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
+from optimizer.services.analysis_logs import build_analysis_summary_metrics, get_user_analysis_logs
 from optimizer.services.excel_processor import ExcelProcessor
-from optimizer.services.report_export import export_pdf, export_docx, normalize_report_title_text
+from optimizer.services.report_export import (
+    export_pdf,
+    export_docx,
+    export_xlsx,
+    normalize_report_content_text,
+    build_report_markdown,
+)
 
 try:
     from optimizer.services.plotly_charts import get_all_plotly_specs
@@ -64,21 +71,49 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx"})
+REPORT_FORMAT_ALIASES = {
+    "excel": "xlsx",
+}
+ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx", "xlsx", *REPORT_FORMAT_ALIASES.keys()})
 ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
 PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
 
 
-def _normalize_analysis_context(analysis):
-    """Return a predictable render context from a persisted analysis record."""
-    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
-    context = dict(raw_context)
-    context["rule_results"] = context.get("rule_results") or {}
-    context["license_metrics"] = context.get("license_metrics") or {}
-    context["sheet_names_used"] = context.get("sheet_names_used") or {}
-    context["file_name"] = context.get("file_name") or analysis.file_name or ""
-    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
-    return context
+def _build_profile_initials(user) -> str:
+    """Build a short initials badge from the user's name, falling back to username."""
+    first = (getattr(user, "first_name", "") or "").strip()
+    last = (getattr(user, "last_name", "") or "").strip()
+    if first or last:
+        initials = f"{first[:1]}{last[:1]}".strip()
+    else:
+        username = (getattr(user, "username", "") or "").strip()
+        parts = [part for part in re.split(r"[\s._-]+", username) if part]
+        initials = "".join(part[:1] for part in parts[:2]) or username[:2]
+    return (initials or "U").upper()
+
+
+def _build_profile_context(user, profile, form=None):
+    """Build the display context expected by the profile page template."""
+    full_name = f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
+    display_name = full_name or user.username
+    return {
+        "title": "Profile",
+        "profile_form": form or UserProfileForm(instance=profile, user=user),
+        "profile_display_name": display_name,
+        "profile_initials": _build_profile_initials(user),
+        "profile_email": user.email or "Not provided",
+        "profile_username": user.username,
+        "profile_team_name": profile.team_name or "Not provided",
+        "profile_image_url": profile.image_url or "",
+        "profile_first_name": user.first_name or "Not provided",
+        "profile_last_name": user.last_name or "Not provided",
+    }
+
+
+def _get_or_create_user_profile(user):
+    """Return the persisted profile row for the authenticated user."""
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
 
 
 def _get_analysis_file_path(analysis):
@@ -145,6 +180,26 @@ def _get_analysis_record(request):
     return analysis, None
 
 
+def _normalize_analysis_context(analysis):
+    """Return a safe, normalized analysis context from persisted result data."""
+    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
+    context = dict(raw_context)
+    context["rule_results"] = context.get("rule_results") or {}
+    context["license_metrics"] = context.get("license_metrics") or {}
+    context["file_name"] = context.get("file_name") or analysis.file_name or ""
+    context["sheet_names_used"] = context.get("sheet_names_used") or {}
+    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
+    context["report_text"] = context.get("report_text") or ""
+    context["report_used_fallback"] = bool(context.get("report_used_fallback", False))
+    context["cost_reduction_ai_recommendations"] = context.get("cost_reduction_ai_recommendations") or ""
+
+    dashboard_defaults = build_dashboard_context(context)
+    context["rule_wise_savings"] = context.get("rule_wise_savings") or dashboard_defaults.get("rule_wise_savings", {})
+    context["scenario_wise_savings"] = context.get("scenario_wise_savings") or dashboard_defaults.get("scenario_wise_savings", {})
+    context["total_savings"] = float(context.get("total_savings", dashboard_defaults.get("total_savings", 0)) or 0)
+    return context
+
+
 def _get_analysis_context(request):
     """
     Load analysis context from DB by session's analysis_id. Check TTL and ownership.
@@ -157,6 +212,21 @@ def _get_analysis_context(request):
     if not raw_context:
         return None, redirect("optimizer:home")
     return _normalize_analysis_context(analysis), None
+
+
+def _build_report_render_context(context):
+    dashboard_context = build_dashboard_context(context)
+    return {
+        "azure_payg_count": context.get("rule_results", {}).get("azure_payg_count", 0),
+        "retired_count": context.get("rule_results", {}).get("retired_count", 0),
+        "total_demand_quantity": context.get("license_metrics", {}).get("total_demand_quantity", 0),
+        "total_license_cost": context.get("license_metrics", {}).get("total_license_cost", 0),
+        "by_product": context.get("license_metrics", {}).get("by_product", []),
+        "rule_wise_savings": dashboard_context.get("rule_wise_savings", {}),
+        "total_savings": dashboard_context.get("total_savings", 0),
+        "azure_payg_savings": dashboard_context.get("azure_payg_savings", 0),
+        "retired_devices_savings": dashboard_context.get("retired_devices_savings", 0),
+    }
 
 
 def _get_page_number(request, param_name, default=1):
@@ -317,20 +387,45 @@ def upload(request):
         messages.error(request, error_msg or "Invalid file.")
         return render(request, "optimizer/home.html", {"error": error_msg, "title": "SQL License Optimizer"})
 
+    if not request.session.session_key:
+        request.session.save()
+
     analysis_record = AnalysisSession(
         user=request.user,
         file_name=file_obj.name,
         file_path=os.path.basename(file_path),
         status="processing",
+        session_key=request.session.session_key or "",
     )
     analysis_record.save()
     request_id = getattr(request, "request_id", None)
+    logger.info(
+        "Analysis started analysis_id=%s user_id=%s username=%s file_name=%s uploaded_at=%s request_id=%s",
+        analysis_record.id,
+        request.user.id,
+        request.user.username,
+        file_obj.name,
+        timezone.localtime(analysis_record.created_at).isoformat() if analysis_record.created_at else None,
+        request_id,
+    )
 
     result = run_analysis(file_path, file_obj.name)
     if not result["success"]:
         analysis_record.status = "failed"
         analysis_record.error_message = result["error"] or ""
+        analysis_record.completed_at = timezone.now()
+        analysis_record.summary_metrics = {}
         analysis_record.save()
+        logger.warning(
+            "Analysis failed analysis_id=%s user_id=%s username=%s file_name=%s completed_at=%s error=%s request_id=%s",
+            analysis_record.id,
+            request.user.id,
+            request.user.username,
+            file_obj.name,
+            timezone.localtime(analysis_record.completed_at).isoformat() if analysis_record.completed_at else None,
+            analysis_record.error_message,
+            request_id,
+        )
         try:
             os.remove(file_path)
         except OSError:
@@ -339,15 +434,27 @@ def upload(request):
         return render(request, "optimizer/home.html", {"error": result["error"], "title": "SQL License Optimizer"})
 
     context = result["context"]
+    summary_metrics = build_analysis_summary_metrics(context)
     analysis_record.status = "completed"
     analysis_record.result_data = _make_json_serializable(context)
+    analysis_record.summary_metrics = _make_json_serializable(summary_metrics)
+    analysis_record.completed_at = timezone.now()
     analysis_record.save()
 
     request.session["optimizer_analysis_id"] = analysis_record.id
     request.session.pop("optimizer_results", None)
     request.session.pop("optimizer_file_path", None)
     request.session.pop("optimizer_file_name", None)
-    logger.info("Analysis completed analysis_id=%s user_id=%s request_id=%s", analysis_record.id, request.user.id, request_id)
+    logger.info(
+        "Analysis completed analysis_id=%s user_id=%s username=%s file_name=%s completed_at=%s summary_metrics=%s request_id=%s",
+        analysis_record.id,
+        request.user.id,
+        request.user.username,
+        file_obj.name,
+        timezone.localtime(analysis_record.completed_at).isoformat() if analysis_record.completed_at else None,
+        summary_metrics,
+        request_id,
+    )
     return redirect("optimizer:results")
 
 
@@ -445,6 +552,24 @@ def dashboard(request):
     return results(request)
 
 
+@require_http_methods(["GET", "POST"])
+@csrf_protect
+@login_required
+def profile_page(request):
+    """Display and update the logged-in user's profile details."""
+    profile = _get_or_create_user_profile(request.user)
+    if request.method == "POST":
+        form = UserProfileForm(request.POST, instance=profile, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("optimizer:profile")
+    else:
+        form = UserProfileForm(instance=profile, user=request.user)
+    context = _build_profile_context(request.user, profile, form=form)
+    return render(request, "optimizer/profile.html", context)
+
+
 @require_GET
 @login_required
 def report_page(request):
@@ -454,15 +579,19 @@ def report_page(request):
         return redir
     context.setdefault("title", "IT License and Cost Optimization Report")
     if context.get("report_text"):
-        context["report_text"] = normalize_report_title_text(context["report_text"])
+        context["report_text"] = build_report_markdown(
+            context["report_text"],
+            report_context=_build_report_render_context(context),
+        )
     return render(request, "optimizer/report.html", context)
 
 
 @require_GET
 @login_required
 def report_download(request, format_type):
-    """Download report as PDF or docx. format_type whitelisted to pdf, docx."""
-    if format_type not in ALLOWED_REPORT_FORMATS:
+    """Download report as PDF, Word, or Excel."""
+    normalized_format = REPORT_FORMAT_ALIASES.get(format_type, format_type)
+    if normalized_format not in ALLOWED_REPORT_FORMATS:
         return HttpResponse("Invalid format.", status=400)
     context, redir = _get_analysis_context(request)
     if redir is not None:
@@ -475,32 +604,43 @@ def report_download(request, format_type):
         "total_license_cost": context.get("license_metrics", {}).get("total_license_cost", 0),
         "demand_row_count": 0,
     })
-    report_text = normalize_report_title_text(report_text)
-    report_export_context = {
-        "azure_payg_count": context.get("rule_results", {}).get("azure_payg_count", 0),
-        "retired_count": context.get("rule_results", {}).get("retired_count", 0),
-        "total_demand_quantity": context.get("license_metrics", {}).get("total_demand_quantity", 0),
-        "total_license_cost": context.get("license_metrics", {}).get("total_license_cost", 0),
-        "by_product": context.get("license_metrics", {}).get("by_product", []),
-    }
+    report_text = normalize_report_content_text(report_text)
+    report_export_context = _build_report_render_context(context)
     generated_at = timezone.localtime()
     analysis_id = request.session.get("optimizer_analysis_id")
     base_name = f"sql_license_optimization_report_{analysis_id or 'report'}"
-    if format_type == "pdf":
+    if normalized_format == "pdf":
         content = export_pdf(report_text, generated_at=generated_at, report_context=report_export_context)
         if content is None:
             return HttpResponse("PDF export not available (install reportlab).", status=501)
         response = HttpResponse(content, content_type="application/pdf")
         response["Content-Disposition"] = _safe_content_disposition(f"{base_name}.pdf")
         return response
-    if format_type == "docx":
+    if normalized_format == "docx":
         content = export_docx(report_text, generated_at=generated_at, report_context=report_export_context)
         if content is None:
             return HttpResponse("Word export not available (install python-docx).", status=501)
         response = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         response["Content-Disposition"] = _safe_content_disposition(f"{base_name}.docx")
         return response
+    if normalized_format == "xlsx":
+        content = export_xlsx(report_text, generated_at=generated_at, report_context=report_export_context)
+        if content is None:
+            return HttpResponse("Excel export not available (install openpyxl).", status=501)
+        response = HttpResponse(
+            content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = _safe_content_disposition(f"{base_name}.xlsx")
+        return response
     return HttpResponse("Invalid format.", status=400)
+
+
+@require_GET
+@login_required
+def analysis_logs(request):
+    """Return all persisted analysis logs for the authenticated user."""
+    return JsonResponse({"logs": get_user_analysis_logs(request.user)})
 
 
 @require_GET

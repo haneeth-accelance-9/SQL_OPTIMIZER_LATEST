@@ -1,10 +1,12 @@
-"""
+﻿"""
 AI report generator using Azure OpenAI.
 Produces a professional optimization report from rule results and license metrics.
 """
 import json
 import logging
 from typing import Any, Dict, Optional
+
+from optimizer.services.report_export import format_currency, normalize_report_content_text
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +40,16 @@ def build_prompt(context: Dict[str, Any]) -> str:
     retired_count = context.get("retired_count", 0)
     total_demand = context.get("total_demand_quantity", 0)
     total_cost = context.get("total_license_cost", 0)
+    total_cost_display = format_currency(total_cost)
     by_product = context.get("by_product", [])[:20]
 
     prompt = f"""You are an expert IT license and cost optimization analyst. Write a professional, descriptive report in Markdown format (about 1-2 pages) with clear structure and emphasis.
 
 Requirements:
 - Use Markdown: # for main title, ## for major sections, ### for subsections. Use **bold** for key terms and important numbers. Use *italic* for emphasis where appropriate.
-- Include: Executive Summary (2-3 sentences on current state and main opportunities), Current State (license demand, cost, product mix), Optimization Opportunities (Azure BYOL→PAYG: {azure_count} devices—explain benefits and risks; Retired devices: {retired_count}—explain data quality and decommissioning implications), Risks (data quality, compliance, cost), and Recommendations (3-5 prioritized, actionable steps).
-- Be descriptive and professional. Use short paragraphs and bullet points. Do not invent numbers; use only: total demand {total_demand}, total cost {total_cost}, Azure PAYG candidates {azure_count}, retired devices with installations {retired_count}."""
+- Include: Executive Summary (2-3 sentences on current state and main opportunities), Current State (license demand, cost, product mix), Optimization Opportunities (Azure BYOLâ†’PAYG: {azure_count} devicesâ€”explain benefits and risks; Retired devices: {retired_count}â€”explain data quality and decommissioning implications), Risks (data quality, compliance, cost), and Recommendations (3-5 prioritized, actionable steps).
+- Use {format_currency(1)} as the currency format example for every cost, price, savings, or money value.
+- Be descriptive and professional. Use short paragraphs and bullet points. Do not invent numbers; use only: total demand {total_demand}, total cost {total_cost_display}, Azure PAYG candidates {azure_count}, retired devices with installations {retired_count}."""
 
     return prompt
 
@@ -78,7 +82,7 @@ def generate_report_text(context: Dict[str, Any]) -> Optional[str]:
         text = response.choices[0].message.content if response.choices else None
         if text and "**" not in text and "##" not in text:
             text = text.replace("Executive Summary", "## Executive Summary").replace("Current State", "## Current State").replace("Recommendations", "## Recommendations")
-        return text
+        return normalize_report_content_text(text) if text else None
     except Exception as e:
         logger.exception("Azure OpenAI report generation failed: %s", e)
         return None
@@ -111,7 +115,7 @@ def generate_cost_reduction_recommendations(
     for row in dist:
         table_lines.append(
             f"- **{row.get('type', '')}**: quantity {row.get('quantity', 0)}, "
-            f"total cost {row.get('total_cost', 0):,.2f}, avg price {row.get('avg_price', 0):,.2f}"
+            f"total cost {format_currency(row.get('total_cost', 0))}, avg price {format_currency(row.get('avg_price', 0))}"
         )
     edition_summary = "\n".join(table_lines) if table_lines else "No edition breakdown available."
 
@@ -119,7 +123,7 @@ def generate_cost_reduction_recommendations(
 
 **License data:**
 - Total demand (licenses): {total_demand}
-- Total license cost: {total_cost:,.2f}
+- Total license cost: {format_currency(total_cost)}
 - Price distribution by edition:
 {edition_summary}
 
@@ -128,10 +132,10 @@ def generate_cost_reduction_recommendations(
 - Retired devices still reporting installations (to reconcile): {retired_count}
 
 **Required sections (use Markdown ## and ###):**
-1. **How to decrease costs** – 3–5 specific, actionable steps to reduce SQL Server license spend (e.g. move dev/test to Developer, consolidate Enterprise where not needed, leverage PAYG for cloud workloads).
-2. **Which servers/workloads to convert to Developer edition** – Identify scenarios (e.g. dev, test, non-production) and estimated impact.
-3. **Which servers/workloads to keep or move to Enterprise** – When Enterprise features are justified.
-4. **Which servers/workloads to keep or move to Standard** – When Standard is sufficient for production.
+1. **How to decrease costs** â€“ 3â€“5 specific, actionable steps to reduce SQL Server license spend (e.g. move dev/test to Developer, consolidate Enterprise where not needed, leverage PAYG for cloud workloads).
+2. **Which servers/workloads to convert to Developer edition** â€“ Identify scenarios (e.g. dev, test, non-production) and estimated impact.
+3. **Which servers/workloads to keep or move to Enterprise** â€“ When Enterprise features are justified.
+4. **Which servers/workloads to keep or move to Standard** â€“ When Standard is sufficient for production.
 
 Use only the numbers provided. Be specific and practical. Keep each section to a short paragraph or bullet list."""
 
@@ -147,7 +151,7 @@ Use only the numbers provided. Be specific and practical. Keep each section to a
             timeout=timeout,
         )
         text = response.choices[0].message.content if response.choices else None
-        return text
+        return normalize_report_content_text(text) if text else None
     except Exception as e:
         logger.exception("Azure OpenAI cost reduction recommendations failed: %s", e)
         return None
@@ -159,8 +163,9 @@ def get_fallback_report(context: Dict[str, Any]) -> str:
     retired_count = context.get("retired_count", 0)
     total_demand = context.get("total_demand_quantity", 0)
     total_cost = context.get("total_license_cost", 0)
+    total_cost_display = format_currency(total_cost)
 
-    return f"""# SQL Server License Optimization Report
+    return normalize_report_content_text(f"""# SQL Server License Optimization Report
 
 ## Executive Summary
 
@@ -169,14 +174,14 @@ This report presents a **detailed analysis** of your SQL Server license posture 
 ## Current State
 
 - **Total license demand (quantity):** {total_demand}
-- **Total estimated license cost:** {total_cost:.2f}
+- **Total estimated license cost:** {total_cost_display}
 - **Demand records processed:** {context.get('demand_row_count', 0)}
 
 Understanding your *current state* is essential before making optimization decisions. The figures above reflect the aggregated demand and cost from the processed inventory.
 
 ## Optimization Opportunities
 
-### 1. Azure BYOL → PAYG
+### 1. Azure BYOL â†’ PAYG
 
 - **Eligible devices:** **{azure_count}**
 - These devices are running SQL Server in *Azure* (Public Cloud, Private Cloud AVS, or Private Cloud) and are not on *"License included"*. They represent candidates for switching to **Pay-As-You-Go** licensing, which can simplify billing and reduce upfront commitment.
@@ -198,9 +203,9 @@ Understanding your *current state* is essential before making optimization decis
 1. **Prioritize** review of Azure PAYG candidates and model cost impact before migrating.
 2. **Clean up** retired device records and discovery data to improve accuracy.
 3. **Establish** periodic re-runs of this analysis to track improvement over time.
-4. **Consider** a tagging and approval workflow for BYOL → PAYG changes.
+4. **Consider** a tagging and approval workflow for BYOL â†’ PAYG changes.
 5. **Document** the license assignment and retirement process for audit and governance.
 
 ---
 *Report generated by SQL License Optimizer. For a more tailored narrative, configure Azure OpenAI.*
-"""
+""")
