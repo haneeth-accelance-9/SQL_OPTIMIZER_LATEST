@@ -20,6 +20,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib import messages
 from django.utils import timezone
 
+<<<<<<< HEAD
 import pandas as pd
 from optimizer.models import AnalysisSession, UserProfile
 from optimizer.forms import SignUpForm, UserProfileForm
@@ -33,6 +34,15 @@ from optimizer.services.report_export import (
     normalize_report_content_text,
     build_report_markdown,
 )
+=======
+import pandas as pd
+from optimizer.models import AnalysisSession
+from optimizer.forms import SignUpForm, UserProfileForm
+from optimizer.models import UserProfile
+from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
+from optimizer.services.excel_processor import ExcelProcessor
+from optimizer.services.report_export import export_pdf, export_docx, normalize_report_title_text
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
 try:
     from optimizer.services.plotly_charts import get_all_plotly_specs
@@ -71,6 +81,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 REPORT_FORMAT_ALIASES = {
     "excel": "xlsx",
 }
@@ -110,11 +121,60 @@ def _build_profile_context(user, profile, form=None):
     }
 
 
+=======
+ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx"})
+ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
+PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
+
+
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 def _get_or_create_user_profile(user):
     """Return the persisted profile row for the authenticated user."""
     profile, _ = UserProfile.objects.get_or_create(user=user)
     return profile
 
+<<<<<<< HEAD
+=======
+
+def _build_profile_context(user, profile, form=None):
+    """Shared template context for the profile page."""
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    display_name = full_name or user.username
+    initials = (
+        "".join(
+            part[0].upper()
+            for part in [user.first_name.strip(), user.last_name.strip()]
+            if part
+        )[:2]
+        or user.username[:1].upper()
+        or "U"
+    )
+    return {
+        "title": "Profile",
+        "profile_form": form or UserProfileForm(instance=profile, user=user),
+        "profile_image_url": profile.image_url,
+        "profile_team_name": profile.team_name or "Not set yet",
+        "profile_display_name": display_name,
+        "profile_initials": initials,
+        "profile_email": user.email or "Not set yet",
+        "profile_first_name": user.first_name or "Not set yet",
+        "profile_last_name": user.last_name or "Not set yet",
+        "profile_username": user.username,
+    }
+
+
+def _normalize_analysis_context(analysis):
+    """Return a predictable render context from a persisted analysis record."""
+    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
+    context = dict(raw_context)
+    context["rule_results"] = context.get("rule_results") or {}
+    context["license_metrics"] = context.get("license_metrics") or {}
+    context["sheet_names_used"] = context.get("sheet_names_used") or {}
+    context["file_name"] = context.get("file_name") or analysis.file_name or ""
+    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
+    return context
+
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
 def _get_analysis_file_path(analysis):
     """Resolve the persisted upload path for an analysis record when it still exists on disk."""
@@ -547,6 +607,7 @@ def results(request):
 
 @require_GET
 @login_required
+<<<<<<< HEAD
 def dashboard(request):
     """Same as results: unified tabbed view."""
     return results(request)
@@ -573,6 +634,34 @@ def profile_page(request):
 @require_GET
 @login_required
 def report_page(request):
+=======
+def dashboard(request):
+    """Same as results: unified tabbed view."""
+    return results(request)
+
+
+@require_http_methods(["GET", "POST"])
+@csrf_protect
+@login_required
+def profile_page(request):
+    """Display and update the logged-in user's profile details."""
+    profile = _get_or_create_user_profile(request.user)
+    if request.method == "POST":
+        form = UserProfileForm(request.POST, instance=profile, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("optimizer:profile")
+    else:
+        form = UserProfileForm(instance=profile, user=request.user)
+    context = _build_profile_context(request.user, profile, form=form)
+    return render(request, "optimizer/profile.html", context)
+
+
+@require_GET
+@login_required
+def report_page(request):
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
     """Report page with AI-generated text and download links."""
     context, redir = _get_analysis_context(request)
     if redir is not None:
