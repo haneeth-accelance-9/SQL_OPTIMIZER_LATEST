@@ -79,6 +79,14 @@
         background-color: #f8fafc;
         border-radius: 0 0.5rem 0.5rem 0;
     }
+
+    .export-dropdown-menu {
+        display: none;
+    }
+
+    .export-dropdown-menu.is-open {
+        display: block;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -95,33 +103,47 @@
                 class="flex-shrink-0 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
                 Back to Dashboard
             </a>
-            <a href="{% url 'optimizer:report_download' 'pdf' %}"
-                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
-                <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                </svg>
-                Export PDF
-            </a>
-            <a href="{% url 'optimizer:report_download' 'docx' %}"
-                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all hover:bg-blue-700">
-                <svg class="w-4 h-4 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                </svg>
-                Export Word
-            </a>
-            <a href="{% url 'optimizer:report_download' 'xlsx' %}"
-                class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all hover:bg-emerald-700">
-                <svg class="w-4 h-4 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                </svg>
-                Export Excel
-            </a>
+            <div class="relative" id="export-dropdown">
+                <button type="button" id="export-dropdown-toggle"
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                    aria-controls="export-dropdown-menu"
+                    class="flex w-52 flex-shrink-0 items-center justify-between px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                    <span class="inline-flex items-center gap-2">
+                    <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Export
+                    </span>
+                    <svg class="w-4 h-4 text-slate-300 transition-transform duration-200" id="export-dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="export-dropdown-menu"
+                    role="menu"
+                    class="export-dropdown-menu absolute right-0 top-full z-20 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                    <a href="{% url 'optimizer:report_download' 'pdf' %}"
+                        role="menuitem"
+                        class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">P</span>
+                        Export PDF
+                    </a>
+                    <a href="{% url 'optimizer:report_download' 'docx' %}"
+                        role="menuitem"
+                        class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-sky-50">
+                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">W</span>
+                        Export Word
+                    </a>
+                    <a href="{% url 'optimizer:report_download' 'excel' %}"
+                        role="menuitem"
+                        class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-emerald-50">
+                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-white">X</span>
+                        Export Excel
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
     {% if report_used_fallback %}
@@ -137,6 +159,52 @@
 {{ report_text|default:""|json_script:"report-text" }}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var exportDropdown = document.getElementById('export-dropdown');
+        var exportToggle = document.getElementById('export-dropdown-toggle');
+        var exportMenu = document.getElementById('export-dropdown-menu');
+        var exportArrow = document.getElementById('export-dropdown-arrow');
+
+        function setExportDropdown(open) {
+            if (!exportMenu || !exportToggle) return;
+            exportMenu.classList.toggle('is-open', open);
+            exportToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            exportMenu.setAttribute('aria-hidden', open ? 'false' : 'true');
+            if (exportArrow) {
+                exportArrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
+        }
+
+        if (exportToggle && exportMenu) {
+            exportToggle.addEventListener('click', function (event) {
+                event.stopPropagation();
+                setExportDropdown(!exportMenu.classList.contains('is-open'));
+            });
+
+            exportToggle.addEventListener('keydown', function (event) {
+                if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setExportDropdown(true);
+                    var firstItem = exportMenu.querySelector('a');
+                    if (firstItem) firstItem.focus();
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    setExportDropdown(false);
+                    exportToggle.focus();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (exportDropdown && !exportDropdown.contains(event.target)) {
+                    setExportDropdown(false);
+                }
+            });
+        }
+
+        setExportDropdown(false);
+
         var el = document.getElementById('report-text');
         var raw = '';
         if (el) try { raw = JSON.parse(el.textContent || '""'); } catch (e) { raw = el.textContent || ''; }

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Models for SQL License Optimizer.
 Stores upload metadata and processing results for audit and TTL.
 """
@@ -10,6 +10,7 @@ class AnalysisSession(models.Model):
     """Tracks an analysis run (upload + processing). Persists result payload for TTL and audit."""
 
     created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     file_name = models.CharField(max_length=255, blank=True)
     file_path = models.CharField(max_length=500, blank=True)  # relative to MEDIA_ROOT; avoid storing absolute path
     status = models.CharField(
@@ -33,8 +34,29 @@ class AnalysisSession(models.Model):
     )
     # Persist full result payload (rule_results, license_metrics, report_text) for TTL and loading by analysis_id
     result_data = models.JSONField(default=dict, blank=True)
+    summary_metrics = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Analysis session"
         verbose_name_plural = "Analysis sessions"
+
+
+class UserProfile(models.Model):
+    """Stores optional user profile details shown on the profile page."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="optimizer_profile",
+    )
+    team_name = models.CharField(max_length=120, blank=True)
+    image_url = models.URLField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User profile"
+        verbose_name_plural = "User profiles"
+
+    def __str__(self):
+        return f"Profile for {self.user.username}"

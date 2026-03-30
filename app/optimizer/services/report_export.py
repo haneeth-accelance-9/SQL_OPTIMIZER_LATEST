@@ -1,4 +1,4 @@
-"""
+﻿"""
 Export report text to PDF and Word (.docx).
 """
 import io
@@ -25,6 +25,33 @@ TEXT_REPLACEMENTS = {
     "\u2014": "-",
     "\u2013": "-",
 }
+EURO_SYMBOL = "\u20ac"
+MONETARY_CONTEXT_LABELS = (
+    "total estimated license cost",
+    "total annual license cost",
+    "total license cost",
+    "total annual cost",
+    "annual cost",
+    "license cost",
+    "license price",
+    "average price",
+    "avg price",
+    "total cost",
+    "cost savings",
+    "expenses",
+    "expense",
+    "savings",
+    "spend",
+    "price",
+    "cost",
+    "money",
+)
+MONETARY_CONTEXT_PATTERN = re.compile(
+    rf"(?i)(?P<label>\b(?:{'|'.join(re.escape(label) for label in MONETARY_CONTEXT_LABELS)})\b"
+    r"(?:\s+(?:of|is|was|at))?"
+    r"(?:\*{0,2})?\s*[:=-]?\s*(?:\*{0,2})?\s*)"
+    rf"(?P<amount>(?<![{re.escape(EURO_SYMBOL)}$])\d[\d,]*(?:\.\d+)?)"
+)
 
 
 def _project_root() -> Path:
@@ -48,8 +75,17 @@ def _normalize_report_text(text: str) -> str:
     return normalized.strip()
 
 
-def normalize_report_title_text(text: str) -> str:
-    normalized = _normalize_report_text(text)
+def normalize_report_currency_text(text: str) -> str:
+    normalized = (text or "").replace("$", EURO_SYMBOL)
+
+    def _replace_amount(match: re.Match) -> str:
+        return f"{match.group('label')}{EURO_SYMBOL}{match.group('amount')}"
+
+    return MONETARY_CONTEXT_PATTERN.sub(_replace_amount, normalized)
+
+
+def normalize_report_content_text(text: str) -> str:
+    normalized = normalize_report_currency_text(_normalize_report_text(text))
     for legacy_title in LEGACY_REPORT_TITLES:
         normalized = re.sub(
             rf"(?mi)^#\s*{re.escape(legacy_title)}\s*$",
@@ -62,6 +98,10 @@ def normalize_report_title_text(text: str) -> str:
             normalized,
         )
     return normalized
+
+
+def normalize_report_title_text(text: str) -> str:
+    return normalize_report_content_text(text)
 
 
 def _ordinal(value: int) -> str:
@@ -270,8 +310,12 @@ def _format_count(value) -> str:
     return f"{_to_int(value):,}"
 
 
+def format_currency(value) -> str:
+    return f"{EURO_SYMBOL}{_to_float(value):,.2f}"
+
+
 def _format_currency(value) -> str:
-    return f"${_to_float(value):,.2f}"
+    return format_currency(value)
 
 
 def _default_executive_summary(report_context) -> str:
@@ -303,11 +347,23 @@ def _extract_executive_summary(report_text: str, report_context) -> str:
     return _default_executive_summary(report_context)
 
 
+def _resolve_savings_value(report_context, direct_key: str, rule_key: Optional[str] = None):
+    value = report_context.get(direct_key)
+    if value is None and rule_key:
+        value = (report_context.get("rule_wise_savings") or {}).get(rule_key)
+    return value
+
+
 def _build_template_blocks(report_text: str, report_context):
     azure_count = _format_count(report_context.get("azure_payg_count"))
     retired_count = _format_count(report_context.get("retired_count"))
     total_demand = _format_count(report_context.get("total_demand_quantity"))
     total_cost = _format_currency(report_context.get("total_license_cost"))
+    total_savings = _format_currency(_resolve_savings_value(report_context, "total_savings"))
+    azure_payg_savings = _format_currency(_resolve_savings_value(report_context, "azure_payg_savings", "azure_payg"))
+    retired_devices_savings = _format_currency(
+        _resolve_savings_value(report_context, "retired_devices_savings", "retired_devices")
+    )
     summary = _extract_executive_summary(report_text, report_context)
 
     blocks = [
@@ -336,6 +392,10 @@ def _build_template_blocks(report_text: str, report_context):
             "kind": "bullet",
             "text": "High costs associated with underutilized Azure BYOL licenses and licenses on retired devices.",
         },
+        {"kind": "subsection", "text": "Savings"},
+        {"kind": "bullet", "text": f"Total savings: {total_savings}"},
+        {"kind": "bullet", "text": f"BYOL to PAYG Savings: {azure_payg_savings}"},
+        {"kind": "bullet", "text": f"Retired but reporting Savings: {retired_devices_savings}"},
         {"kind": "subsection", "text": "Product Mix"},
         {
             "kind": "bullet",
@@ -416,6 +476,33 @@ def _get_render_blocks(report_text: str, report_context=None):
     if report_context:
         return _build_template_blocks(report_text, report_context)
     return _parse_report_blocks(report_text)
+
+
+def build_report_markdown(report_text: str, report_context=None) -> str:
+    report_title, blocks = _get_render_blocks(report_text, report_context=report_context)
+    lines = [f"# {report_title}"]
+
+    for block in blocks:
+        kind = block["kind"]
+        text = block.get("text", "")
+        if kind == "section":
+            lines.extend(["", f"## {text}"])
+        elif kind == "subsection":
+            lines.extend(["", f"### {text}"])
+        elif kind == "bullet":
+            lines.append(f"- {text}")
+        elif kind == "bullet_group":
+            lines.append(f"- {text}")
+        elif kind == "sub_bullet":
+            lines.append(f"  - {text}")
+        elif kind == "numbered":
+            lines.append(f"{block.get('label', '1.')} {text}")
+        elif kind == "rule":
+            lines.extend(["", "---"])
+        else:
+            lines.extend(["", text])
+
+    return normalize_report_content_text("\n".join(lines).strip())
 
 
 def export_pdf(report_text: str, generated_at=None, report_context=None) -> Optional[bytes]:
@@ -640,5 +727,106 @@ def export_docx(report_text: str, generated_at=None, report_context=None) -> Opt
 
     buf = io.BytesIO()
     doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_xlsx(report_text: str, generated_at=None, report_context=None) -> Optional[bytes]:
+    """Generate Excel workbook bytes. Returns None if openpyxl not installed."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    except ImportError:
+        logger.warning("openpyxl not installed; Excel export disabled")
+        return None
+
+    report_title, blocks = _get_render_blocks(report_text, report_context=report_context)
+    generated_label = _format_generated_at(generated_at)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Report"
+    sheet.sheet_view.showGridLines = False
+    sheet.freeze_panes = "A4"
+
+    title_fill = PatternFill(fill_type="solid", fgColor="10384F")
+    section_fill = PatternFill(fill_type="solid", fgColor="EAF4FB")
+    subsection_fill = PatternFill(fill_type="solid", fgColor="F8FAFC")
+    thin_rule = Side(style="thin", color="D3DDE5")
+    wrap_alignment = Alignment(vertical="top", wrap_text=True)
+
+    sheet.merge_cells("A1:D1")
+    title_cell = sheet["A1"]
+    title_cell.value = report_title
+    title_cell.font = Font(name="Calibri", size=16, bold=True, color="FFFFFF")
+    title_cell.fill = title_fill
+    title_cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    sheet.merge_cells("A2:D2")
+    meta_cell = sheet["A2"]
+    meta_cell.value = generated_label
+    meta_cell.font = Font(name="Calibri", size=10, italic=True, color="5B6470")
+    meta_cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    current_row = 4
+    section_row = None
+
+    for block in blocks:
+        kind = block["kind"]
+        raw_text = _markdown_to_plain(block.get("text", ""))
+
+        if kind == "section":
+            current_row += 1
+            sheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            cell = sheet.cell(row=current_row, column=1, value=raw_text)
+            cell.font = Font(name="Calibri", size=13, bold=True, color="10384F")
+            cell.fill = section_fill
+            cell.alignment = wrap_alignment
+            cell.border = Border(top=thin_rule, bottom=thin_rule)
+            section_row = current_row
+        elif kind == "subsection":
+            current_row += 1
+            sheet.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=4)
+            cell = sheet.cell(row=current_row, column=1, value=raw_text)
+            cell.font = Font(name="Calibri", size=11, bold=True, color="475569")
+            cell.fill = subsection_fill
+            cell.alignment = wrap_alignment
+        elif kind in {"bullet", "bullet_group", "sub_bullet", "numbered", "paragraph"}:
+            current_row += 1
+            label = ""
+            if kind == "sub_bullet":
+                label = "  - "
+            elif kind == "numbered":
+                label = f"{block.get('label', '1.')} "
+            elif kind in {"bullet", "bullet_group"}:
+                label = "- "
+            cell = sheet.cell(row=current_row, column=1, value=f"{label}{raw_text}")
+            cell.font = Font(name="Calibri", size=10)
+            cell.alignment = wrap_alignment
+        elif kind == "rule":
+            current_row += 1
+            for col in range(1, 5):
+                cell = sheet.cell(row=current_row, column=col)
+                cell.border = Border(bottom=thin_rule)
+        else:
+            current_row += 1
+            cell = sheet.cell(row=current_row, column=1, value=raw_text)
+            cell.font = Font(name="Calibri", size=10)
+            cell.alignment = wrap_alignment
+
+        if section_row and current_row > section_row:
+            for col in range(1, 5):
+                sheet.cell(row=current_row, column=col).alignment = wrap_alignment
+
+    sheet.column_dimensions["A"].width = 110
+    sheet.column_dimensions["B"].width = 18
+    sheet.column_dimensions["C"].width = 18
+    sheet.column_dimensions["D"].width = 18
+
+    for row_idx in range(1, current_row + 1):
+        sheet.row_dimensions[row_idx].height = 22
+
+    buf = io.BytesIO()
+    workbook.save(buf)
     buf.seek(0)
     return buf.getvalue()
