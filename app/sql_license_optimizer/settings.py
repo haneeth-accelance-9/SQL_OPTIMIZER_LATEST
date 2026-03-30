@@ -120,6 +120,18 @@ if _IS_PRODUCTION:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{h.strip()}"                                                                                                                                     
+    for h in os.environ.get("ALLOWED_HOSTS", "localhost").split(",")                                                                                           
+    if h.strip() and h.strip() not in ("localhost", "127.0.0.1")                                                                                               
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
 AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
 AZURE_OPENAI_DEPLOYMENT = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4").strip() or "gpt-4"
