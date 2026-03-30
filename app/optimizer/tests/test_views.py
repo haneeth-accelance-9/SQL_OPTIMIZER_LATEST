@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 ﻿"""View tests: health, ready, auth redirect."""
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from optimizer.models import AnalysisSession, UserProfile
+=======
+"""View tests: health, ready, auth redirect."""
+import pytest
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
+from optimizer.models import AnalysisSession, UserProfile
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
 
 @pytest.mark.django_db
@@ -78,6 +87,7 @@ def test_results_uses_persisted_analysis_data(client):
     assert response.context["total_license_cost"] == 345.6
     assert response.context["rule1_page"] == 1
     assert response.context["rule2_page"] == 1
+<<<<<<< HEAD
     assert response.context["rule1_keys"] == ["device_name", "cpu_cores_overall_device"]
     assert response.context["rule2_keys"] == ["device_name", "inventory_status_standard"]
     assert response.context["azure_payg_page"] == [["vm-01", 8], ["vm-02", 16]]
@@ -332,11 +342,30 @@ def test_profile_page_renders_saved_profile_details(client):
         team_name="FinOps",
         image_url="https://example.com/avatar.png",
     )
+=======
+    assert response.context["rule1_keys"] == ["device_name", "cpu_cores_overall_device"]
+    assert response.context["rule2_keys"] == ["device_name", "inventory_status_standard"]
+    assert response.context["azure_payg_page"] == [["vm-01", 8], ["vm-02", 16]]
+    assert response.context["retired_devices_page"] == [["old-sql-01", "Retired"]]
+
+
+@pytest.mark.django_db
+def test_profile_page_renders_for_authenticated_user(client):
+    user = get_user_model().objects.create_user(
+        username="business",
+        password="secret123",
+        first_name="Business",
+        last_name="Owner",
+        email="business@example.com",
+    )
+    UserProfile.objects.create(user=user, team_name="MVP Team", image_url="https://example.com/avatar.png")
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
     client.force_login(user)
     response = client.get(reverse("optimizer:profile"))
 
     assert response.status_code == 200
+<<<<<<< HEAD
     assert response.context["profile_display_name"] == "Asha Patel"
     assert response.context["profile_email"] == "asha@example.com"
     assert response.context["profile_team_name"] == "FinOps"
@@ -348,10 +377,22 @@ def test_profile_page_renders_saved_profile_details(client):
 def test_profile_page_updates_user_and_profile_fields(client):
     user = get_user_model().objects.create_user(username="editor", password="secret123")
     UserProfile.objects.create(user=user)
+=======
+    assert b"Manage your profile" in response.content
+    assert response.context["profile_team_name"] == "MVP Team"
+    assert response.context["profile_display_name"] == "Business Owner"
+
+
+@pytest.mark.django_db
+def test_profile_page_updates_user_and_profile_details(client):
+    user = get_user_model().objects.create_user(username="business", password="secret123")
+    UserProfile.objects.create(user=user, team_name="Initial Team")
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
     client.force_login(user)
     response = client.post(
         reverse("optimizer:profile"),
+<<<<<<< HEAD
         data={
             "first_name": "Riya",
             "last_name": "Shah",
@@ -359,10 +400,21 @@ def test_profile_page_updates_user_and_profile_fields(client):
             "team_name": "Platform Engineering",
             "image_url": "https://example.com/riya.png",
         },
+=======
+        {
+            "first_name": "Business",
+            "last_name": "Leader",
+            "email": "business@example.com",
+            "team_name": "Finance Systems",
+            "image_url": "https://example.com/business.png",
+        },
+        follow=True,
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
     )
 
     user.refresh_from_db()
     profile = user.optimizer_profile
+<<<<<<< HEAD
 
     assert response.status_code == 302
     assert response.url == reverse("optimizer:profile")
@@ -371,3 +423,11 @@ def test_profile_page_updates_user_and_profile_fields(client):
     assert user.email == "riya@example.com"
     assert profile.team_name == "Platform Engineering"
     assert profile.image_url == "https://example.com/riya.png"
+=======
+    assert response.status_code == 200
+    assert user.first_name == "Business"
+    assert user.last_name == "Leader"
+    assert user.email == "business@example.com"
+    assert profile.team_name == "Finance Systems"
+    assert profile.image_url == "https://example.com/business.png"
+>>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
