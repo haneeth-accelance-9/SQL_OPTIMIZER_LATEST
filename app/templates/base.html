@@ -94,9 +94,9 @@
                     <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
                     {% endif %}
                     <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Log out</a>
-                    <div class="appbar-avatar flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white">
+                    <a href="{% url 'optimizer:profile' %}" class="appbar-avatar {% if request.resolver_match.url_name == 'profile' %}ring-4 ring-sky-100{% endif %} flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white" aria-label="Open profile page">
                         {{ user.username|default:"U"|slice:":1"|upper }}
-                    </div>
+                    </a>
                     {% else %}
                     <a href="{% url 'optimizer:login' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Sign in</a>
                     {% endif %}
