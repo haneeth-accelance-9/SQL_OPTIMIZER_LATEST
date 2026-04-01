@@ -177,8 +177,10 @@ def run_analysis(file_path: str, file_name: str) -> Dict[str, Any]:
         "sheet_names_used": data.get("sheet_names_used", {}),
         "total_devices_analyzed": total_devices_analyzed,
     }
-    context.update(_calculate_savings(rule_results, license_metrics))
+    # context.update(_calculate_savings(rule_results, license_metrics))
 
+    savings_data = _calculate_savings(rule_results, license_metrics)
+    context.update(savings_data)
     report_text = None
     used_fallback = False
     if getattr(settings, "OPTIMIZER_AI_REPORT_ENABLED", True):
@@ -189,6 +191,8 @@ def run_analysis(file_path: str, file_name: str) -> Dict[str, Any]:
             "total_license_cost": license_metrics.get("total_license_cost", 0),
             "by_product": license_metrics.get("by_product", []),
             "demand_row_count": license_metrics.get("demand_row_count", 0),
+            "scenario_wise_savings": savings_data.get("scenario_wise_savings", {}),
+            "total_savings_value": savings_data.get("total_savings", 0),
         }
         report_text = generate_report_text(report_context)
     if not report_text:

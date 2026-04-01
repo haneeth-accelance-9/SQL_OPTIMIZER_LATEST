@@ -7,7 +7,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from optimizer.services.report_export import format_currency, normalize_report_content_text
-
+# from optimizer.services.analysis_service import _calculate_savings
 logger = logging.getLogger(__name__)
 
 
@@ -41,7 +41,8 @@ def build_prompt(context: Dict[str, Any]) -> str:
     total_demand = context.get("total_demand_quantity", 0)
     total_cost = context.get("total_license_cost", 0)
     total_cost_display = format_currency(total_cost)
-    by_product = context.get("by_product", [])[:20]
+    payg_savings = (context.get("rule_results", {}), context.get("license_metrics", {})).get("rule_wise_savings", {}).get("azure_payg", 0)
+    retired_savings = (context.get("rule_results", {}), context.get("license_metrics", {})).get("rule_wise_savings", {}).get("retired_devices", 0)
 
     prompt = f"""You are an expert IT license and cost optimization analyst. Write a professional, descriptive report in Markdown format (about 1-2 pages) with clear structure and emphasis.
 
@@ -49,7 +50,9 @@ Requirements:
 - Use Markdown: # for main title, ## for major sections, ### for subsections. Use **bold** for key terms and important numbers. Use *italic* for emphasis where appropriate.
 - Include: Executive Summary (2-3 sentences on current state and main opportunities), Current State (license demand, cost, product mix), Optimization Opportunities (Azure BYOLâ†’PAYG: {azure_count} devicesâ€”explain benefits and risks; Retired devices: {retired_count}â€”explain data quality and decommissioning implications), Risks (data quality, compliance, cost), and Recommendations (3-5 prioritized, actionable steps).
 - Use {format_currency(1)} as the currency format example for every cost, price, savings, or money value.
-- Be descriptive and professional. Use short paragraphs and bullet points. Do not invent numbers; use only: total demand {total_demand}, total cost {total_cost_display}, Azure PAYG candidates {azure_count}, retired devices with installations {retired_count}."""
+- Be descriptive and professional. Use short paragraphs and bullet points. Do not invent numbers; use only: total demand {total_demand}, total cost {total_cost_display}, Azure PAYG candidates {azure_count}, retired devices with installations {retired_count}.
+- Also include scenario based savings estimates: potential savings from Azure PAYG migration {format_currency(payg_savings)}, potential savings from retired device cleanup {format_currency(retired_savings)}.
+- Do not include any sections or details not supported by the provided data. Focus on clarity, accuracy, and actionable insights based on the numbers given."""
 
     return prompt
 
@@ -110,6 +113,8 @@ def generate_cost_reduction_recommendations(
     retired_count = rule_results.get("retired_count", 0) or 0
     total_demand = license_metrics.get("total_demand_quantity", 0) or 0
     total_cost = license_metrics.get("total_license_cost", 0) or 0
+    payg_savings = _calculate_savings(rule_results, license_metrics).get("scenario_wise_savings", {}).get("cloud_licensing_optimization", 0)
+    retired_savings = _calculate_savings(rule_results, license_metrics).get("scenario_wise_savings", {}).get("retired_device_optimization", 0)
 
     table_lines = []
     for row in dist:
