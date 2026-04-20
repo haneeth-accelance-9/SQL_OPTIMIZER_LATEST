@@ -31,3 +31,9 @@ override.tf.json
 # example: *tfplan*
 
 github_conf/
+
+# Local environment / secrets
+.env
+grafana.env
+*.local.json
+.claude/
