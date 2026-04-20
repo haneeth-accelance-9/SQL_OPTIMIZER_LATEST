@@ -1,0 +1,80 @@
+[project]
+name = "liscence-optimizer-agent"
+version = "0.1.0"
+description = "This agent creates executive summary or the results that are obtained by applying usecases on the data"
+authors = [
+    { name = "ishaan", email = "ishaan.bhata.ext@bayer.com" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    "agentic-ai-sdk[microsoft,a2a,cosmosdb,observability]>=1.2.0,==1.2.*",
+    "pydantic>=2.0.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "debugpy>=1.8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["a2a_server", "tools"]
+
+[tool.setuptools.package-data]
+"*" = ["configs/*.yaml", "prompts/*.md"]
+
+[project.scripts]
+liscence-optimizer = "liscence_optimizer.a2a_server:main"
+liscence-optimizer-cli = "cli.main:main"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.uv]
+index-strategy = "first-index"
+prerelease = "allow"
+override-dependencies = ["openai>=2.0.0"]
+
+[[tool.uv.index]]
+name = "bayer-artifactory"
+url = "https://artifactory.bayer.com/artifactory/api/pypi/agf-pypi-dev-sdk/simple"
+
+[tool.uv.sources]
+agentic-ai-sdk = { index = "bayer-artifactory" }
+
+[tool.product]
+name = "lisence-optimizer"
+version = "1.0.0"
+description = "This agent creates executive summary or the results that are obtained by applying usecases on the data"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=. --cov-report=term-missing"
