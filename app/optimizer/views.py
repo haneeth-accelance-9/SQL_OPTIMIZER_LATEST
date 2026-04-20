@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import uuid
+from io import BytesIO
 from django.conf import settings
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -20,11 +21,12 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib import messages
 from django.utils import timezone
 
-<<<<<<< HEAD
 import pandas as pd
 from optimizer.models import AnalysisSession, UserProfile
 from optimizer.forms import SignUpForm, UserProfileForm
 from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
+from optimizer.services.alerts import build_alert_page_context
+from optimizer.services.data_quality import build_data_quality_context
 from optimizer.services.analysis_logs import build_analysis_summary_metrics, get_user_analysis_logs
 from optimizer.services.excel_processor import ExcelProcessor
 from optimizer.services.report_export import (
@@ -34,15 +36,12 @@ from optimizer.services.report_export import (
     normalize_report_content_text,
     build_report_markdown,
 )
-=======
-import pandas as pd
-from optimizer.models import AnalysisSession
-from optimizer.forms import SignUpForm, UserProfileForm
-from optimizer.models import UserProfile
-from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
-from optimizer.services.excel_processor import ExcelProcessor
-from optimizer.services.report_export import export_pdf, export_docx, normalize_report_title_text
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
+from rightsizing import (
+    FILE_PATH as RIGHTSIZING_FILE_PATH,
+    OUTPUT as RIGHTSIZING_OUTPUT,
+    RIGHTSIZING_SHEETS,
+    build_rightsizing_report,
+)
 
 try:
     from optimizer.services.plotly_charts import get_all_plotly_specs
@@ -81,13 +80,81 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-<<<<<<< HEAD
 REPORT_FORMAT_ALIASES = {
     "excel": "xlsx",
 }
 ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx", "xlsx", *REPORT_FORMAT_ALIASES.keys()})
 ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
 PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
+RIGHTSIZING_SHEET_MAP = {sheet_key: {"excel_name": excel_name, "label": label} for sheet_key, excel_name, label in RIGHTSIZING_SHEETS}
+
+
+def _build_rightsizing_display_context():
+    """Build lightweight rightsizing summary/cards for the Strategy 3 tab."""
+    sheet_groups = [
+        {
+            "title": "Production CPU",
+            "accent": "sky",
+            "items": [
+                {"key": "prod_cpu_optimization", "label": RIGHTSIZING_SHEET_MAP["prod_cpu_optimization"]["label"], "kind": "Optimization"},
+                {"key": "prod_cpu_recommendation", "label": RIGHTSIZING_SHEET_MAP["prod_cpu_recommendation"]["label"], "kind": "Recommendation"},
+            ],
+        },
+        {
+            "title": "Non-Production CPU",
+            "accent": "cyan",
+            "items": [
+                {"key": "nonprod_cpu_optimization", "label": RIGHTSIZING_SHEET_MAP["nonprod_cpu_optimization"]["label"], "kind": "Optimization"},
+                {"key": "nonprod_cpu_recommendation", "label": RIGHTSIZING_SHEET_MAP["nonprod_cpu_recommendation"]["label"], "kind": "Recommendation"},
+            ],
+        },
+        {
+            "title": "Production RAM",
+            "accent": "emerald",
+            "items": [
+                {"key": "prod_ram_optimization", "label": RIGHTSIZING_SHEET_MAP["prod_ram_optimization"]["label"], "kind": "Optimization"},
+                {"key": "prod_ram_recommendation", "label": RIGHTSIZING_SHEET_MAP["prod_ram_recommendation"]["label"], "kind": "Recommendation"},
+            ],
+        },
+        {
+            "title": "Non-Production RAM",
+            "accent": "lime",
+            "items": [
+                {"key": "nonprod_ram_optimization", "label": RIGHTSIZING_SHEET_MAP["nonprod_ram_optimization"]["label"], "kind": "Optimization"},
+                {"key": "nonprod_ram_recommendation", "label": RIGHTSIZING_SHEET_MAP["nonprod_ram_recommendation"]["label"], "kind": "Recommendation"},
+            ],
+        },
+    ]
+
+    try:
+        _content, summary, sheet_frames = build_rightsizing_report(RIGHTSIZING_FILE_PATH)
+    except Exception as exc:
+        logger.warning("Rightsizing summary context unavailable: %s", exc)
+        return {
+            "rightsizing_summary": {},
+            "rightsizing_sheet_groups": sheet_groups,
+            "rightsizing_totals": {"cpu_total": 0, "ram_total": 0, "overall_total": 0, "sheet_count": len(RIGHTSIZING_SHEETS)},
+            "rightsizing_available": False,
+        }
+
+    row_counts = {sheet_key: len(frame) for sheet_key, frame in sheet_frames.items()}
+    for group in sheet_groups:
+        for item in group["items"]:
+            item["row_count"] = row_counts.get(item["key"], 0)
+
+    cpu_total = int(summary.get("prod_cpu_optimization", 0) or 0) + int(summary.get("nonprod_cpu_optimization", 0) or 0)
+    ram_total = int(summary.get("prod_ram_optimization", 0) or 0) + int(summary.get("nonprod_ram_optimization", 0) or 0)
+    return {
+        "rightsizing_summary": summary,
+        "rightsizing_sheet_groups": sheet_groups,
+        "rightsizing_totals": {
+            "cpu_total": cpu_total,
+            "ram_total": ram_total,
+            "overall_total": cpu_total + ram_total,
+            "sheet_count": len(RIGHTSIZING_SHEETS),
+        },
+        "rightsizing_available": True,
+    }
 
 
 def _build_profile_initials(user) -> str:
@@ -119,62 +186,10 @@ def _build_profile_context(user, profile, form=None):
         "profile_first_name": user.first_name or "Not provided",
         "profile_last_name": user.last_name or "Not provided",
     }
-
-
-=======
-ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx"})
-ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
-PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
-
-
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 def _get_or_create_user_profile(user):
     """Return the persisted profile row for the authenticated user."""
     profile, _ = UserProfile.objects.get_or_create(user=user)
     return profile
-
-<<<<<<< HEAD
-=======
-
-def _build_profile_context(user, profile, form=None):
-    """Shared template context for the profile page."""
-    full_name = f"{user.first_name} {user.last_name}".strip()
-    display_name = full_name or user.username
-    initials = (
-        "".join(
-            part[0].upper()
-            for part in [user.first_name.strip(), user.last_name.strip()]
-            if part
-        )[:2]
-        or user.username[:1].upper()
-        or "U"
-    )
-    return {
-        "title": "Profile",
-        "profile_form": form or UserProfileForm(instance=profile, user=user),
-        "profile_image_url": profile.image_url,
-        "profile_team_name": profile.team_name or "Not set yet",
-        "profile_display_name": display_name,
-        "profile_initials": initials,
-        "profile_email": user.email or "Not set yet",
-        "profile_first_name": user.first_name or "Not set yet",
-        "profile_last_name": user.last_name or "Not set yet",
-        "profile_username": user.username,
-    }
-
-
-def _normalize_analysis_context(analysis):
-    """Return a predictable render context from a persisted analysis record."""
-    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
-    context = dict(raw_context)
-    context["rule_results"] = context.get("rule_results") or {}
-    context["license_metrics"] = context.get("license_metrics") or {}
-    context["sheet_names_used"] = context.get("sheet_names_used") or {}
-    context["file_name"] = context.get("file_name") or analysis.file_name or ""
-    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
-    return context
-
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
 def _get_analysis_file_path(analysis):
     """Resolve the persisted upload path for an analysis record when it still exists on disk."""
@@ -222,21 +237,40 @@ def _ensure_payg_zone_breakdown(analysis, context):
 
 def _get_analysis_record(request):
     """Load the current persisted analysis record and enforce ownership/TTL checks."""
+    analysis = None
+
+    # 1. Try the session-pinned analysis — must have data and belong to this user
     analysis_id = request.session.get("optimizer_analysis_id")
-    if not analysis_id:
+    if analysis_id:
+        candidate = AnalysisSession.objects.filter(pk=analysis_id).first()
+        if candidate and candidate.result_data:
+            user_id = getattr(request.user, "id", None)
+            if not candidate.user_id or candidate.user_id == user_id:
+                analysis = candidate
+
+    # 2. Session had no usable analysis — find the authenticated user's latest with real data
+    if analysis is None and request.user.is_authenticated:
+        for candidate in (
+            AnalysisSession.objects
+            .filter(user=request.user, status="completed")
+            .order_by("-created_at")[:10]
+        ):
+            if candidate.result_data:
+                analysis = candidate
+                request.session["optimizer_analysis_id"] = candidate.pk
+                break
+
+    if analysis is None:
         return None, redirect("optimizer:home")
-    analysis = AnalysisSession.objects.filter(pk=analysis_id).first()
-    if not analysis:
-        messages.info(request, "Analysis not found. Please upload a new file.")
-        return None, redirect("optimizer:home")
-    if analysis.user_id and analysis.user_id != request.user.id:
-        return None, redirect("optimizer:home")
+
+    # 3. TTL check
     ttl = getattr(settings, "OPTIMIZER_ANALYSIS_TTL_SECONDS", 86400)
     if ttl > 0 and analysis.created_at:
         from datetime import timedelta
         if timezone.now() - analysis.created_at > timedelta(seconds=ttl):
             messages.info(request, "This analysis has expired. Please upload a new file.")
             return None, redirect("optimizer:home")
+
     return analysis, None
 
 
@@ -297,6 +331,18 @@ def _get_page_number(request, param_name, default=1):
         return default
 
 
+def _format_table_header_label(raw_key):
+    """Convert raw data keys like source_key or location_city into readable table labels."""
+    text = str(raw_key or "").strip()
+    if not text:
+        return ""
+    text = text.replace("/", " ")
+    text = text.replace(",", " ")
+    text = text.replace("_", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text.title()
+
+
 def _validate_excel_upload(file_path, original_filename):
     """
     Validate saved file by magic bytes. Returns (True, None) if valid, (False, error_message) otherwise.
@@ -338,6 +384,18 @@ class OptimizerLoginView(LoginView):
     """Enterprise login: unified auth page (Sign in | Create account)."""
     template_name = "optimizer/auth.html"
     redirect_authenticated_user = True
+
+    def get_success_url(self):
+        from optimizer.models import AnalysisSession
+        latest = (
+            AnalysisSession.objects
+            .filter(user=self.request.user, status="completed")
+            .order_by("-created_at")
+            .first()
+        )
+        if latest and latest.result_data:
+            return reverse("optimizer:results") + "#dashboard"
+        return reverse("optimizer:home")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -562,10 +620,14 @@ def results(request):
     render_context["total_rule2_pages"] = total_rule2_pages
     render_context["rule1_keys"] = rule1_keys
     render_context["rule2_keys"] = rule2_keys
+    render_context["rule1_headers"] = [_format_table_header_label(key) for key in rule1_keys]
+    render_context["rule2_headers"] = [_format_table_header_label(key) for key in rule2_keys]
     render_context["rule1_prev"] = max(1, rule1_page - 1)
     render_context["rule1_next"] = min(total_rule1_pages, rule1_page + 1)
     render_context["rule2_prev"] = max(1, rule2_page - 1)
     render_context["rule2_next"] = min(total_rule2_pages, rule2_page + 1)
+    render_context["rule1_row_offset"] = (rule1_page - 1) * per_page
+    render_context["rule2_row_offset"] = (rule2_page - 1) * per_page
     # Full data as JSON for client-side pagination (no full page reload)
     render_context["rule1_data_json"] = [
         [r.get(k) for k in rule1_keys] for r in azure_full
@@ -602,15 +664,34 @@ def results(request):
     else:
         render_context.setdefault("chart_images", {})
         render_context.setdefault("chart_formats", {})
+    render_context.update(_build_rightsizing_display_context())
     return render(request, "optimizer/dashboard.html", render_context)
 
 
 @require_GET
 @login_required
-<<<<<<< HEAD
 def dashboard(request):
     """Same as results: unified tabbed view."""
     return results(request)
+
+
+@require_GET
+@login_required
+def alerts_page(request):
+    """Detailed alerts page with dummy data and filter controls."""
+    return render(request, "optimizer/alerts.html", build_alert_page_context(request.GET))
+
+
+@require_GET
+@login_required
+def data_quality_page(request):
+    """Data quality page for the current analysis session."""
+    analysis, redir = _get_analysis_record(request)
+    if redir is not None:
+        return redir
+    context = _normalize_analysis_context(analysis)
+    context = _ensure_payg_zone_breakdown(analysis, context)
+    return render(request, "optimizer/data_quality.html", build_data_quality_context(context, analysis))
 
 
 @require_http_methods(["GET", "POST"])
@@ -634,34 +715,6 @@ def profile_page(request):
 @require_GET
 @login_required
 def report_page(request):
-=======
-def dashboard(request):
-    """Same as results: unified tabbed view."""
-    return results(request)
-
-
-@require_http_methods(["GET", "POST"])
-@csrf_protect
-@login_required
-def profile_page(request):
-    """Display and update the logged-in user's profile details."""
-    profile = _get_or_create_user_profile(request.user)
-    if request.method == "POST":
-        form = UserProfileForm(request.POST, instance=profile, user=request.user)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Profile updated successfully.")
-            return redirect("optimizer:profile")
-    else:
-        form = UserProfileForm(instance=profile, user=request.user)
-    context = _build_profile_context(request.user, profile, form=form)
-    return render(request, "optimizer/profile.html", context)
-
-
-@require_GET
-@login_required
-def report_page(request):
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
     """Report page with AI-generated text and download links."""
     context, redir = _get_analysis_context(request)
     if redir is not None:
@@ -727,6 +780,59 @@ def report_download(request, format_type):
 
 @require_GET
 @login_required
+def full_report_download(request):
+    """Download the full rightsizing workbook for the current analysis."""
+    analysis, redir = _get_analysis_record(request)
+    if redir is not None:
+        return redir
+
+    try:
+        content, _summary, _sheet_frames = build_rightsizing_report(RIGHTSIZING_FILE_PATH)
+    except Exception as exc:
+        logger.exception("Full rightsizing report generation failed for analysis_id=%s: %s", analysis.id, exc)
+        return HttpResponse(f"Unable to generate the rightsizing report. {exc}", status=400)
+
+    response = HttpResponse(
+        content,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = _safe_content_disposition(RIGHTSIZING_OUTPUT)
+    return response
+
+
+@require_GET
+@login_required
+def full_report_sheet_download(request, sheet_key):
+    """Download a single rightsizing sheet as a one-sheet Excel workbook."""
+    analysis, redir = _get_analysis_record(request)
+    if redir is not None:
+        return redir
+    if sheet_key not in RIGHTSIZING_SHEET_MAP:
+        return HttpResponse("Invalid rightsizing sheet.", status=400)
+
+    try:
+        _content, _summary, sheet_frames = build_rightsizing_report(RIGHTSIZING_FILE_PATH)
+    except Exception as exc:
+        logger.exception("Rightsizing single-sheet download failed for analysis_id=%s sheet=%s: %s", analysis.id, sheet_key, exc)
+        return HttpResponse(f"Unable to generate the rightsizing report. {exc}", status=400)
+
+    frame = sheet_frames[sheet_key]
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        frame.to_excel(writer, sheet_name=RIGHTSIZING_SHEET_MAP[sheet_key]["excel_name"], index=False)
+    buf.seek(0)
+
+    filename = f"{RIGHTSIZING_SHEET_MAP[sheet_key]['excel_name']}.xlsx"
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = _safe_content_disposition(filename)
+    return response
+
+
+@require_GET
+@login_required
 def analysis_logs(request):
     """Return all persisted analysis logs for the authenticated user."""
     return JsonResponse({"logs": get_user_analysis_logs(request.user)})
@@ -751,7 +857,6 @@ def download_rule_data(request, rule_id):
     if not data:
         return HttpResponse("No data to download.", status=404)
     df = pd.DataFrame(data)
-    from io import BytesIO
     buf = BytesIO()
     df.to_excel(buf, index=False, engine="openpyxl")
     buf.seek(0)

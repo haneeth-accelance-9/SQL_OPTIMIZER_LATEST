@@ -23,8 +23,8 @@
             --border: #e2e8f0;
         }
         body { font-family: 'Inter', system-ui, sans-serif; }
-        .tab-content-panel { display: none !important; flex: 1 1 0; min-height: 0; flex-direction: column; overflow: hidden; }
-        .tab-content-panel:target { display: flex !important; }
+        .tab-content-panel { display: none !important; }
+        .tab-content-panel.active-panel { display: flex !important; flex-direction: column; }
         .optimizer-tab-link { text-decoration: none; cursor: pointer; border: 1px solid var(--border); }
         .optimizer-tab-link.tab-active { background: linear-gradient(135deg, var(--navy-light) 0%, var(--accent) 100%); color: white !important; border-color: var(--accent); box-shadow: 0 2px 4px rgba(15,23,42,.25); }
         .optimizer-tab-link.tab-inactive { background: var(--card-bg); color: var(--slate); }
@@ -70,13 +70,114 @@
             background: linear-gradient(135deg, #0b72a8 0%, #5fbb61 100%);
             box-shadow: 0 10px 24px rgba(11, 114, 168, 0.2);
         }
+        .notification-trigger {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            color: #334155;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+            transition: transform .2s ease, box-shadow .2s ease, color .2s ease;
+        }
+        .notification-trigger:hover {
+            color: #0369a1;
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+        }
+        .notification-trigger.is-current,
+        .notification-trigger[aria-expanded="true"] {
+            color: #0369a1;
+            border-color: rgba(14, 165, 233, 0.45);
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.12);
+        }
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 1.35rem;
+            height: 1.35rem;
+            padding: 0 0.3rem;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.35rem;
+            text-align: center;
+            box-shadow: 0 8px 18px rgba(239, 68, 68, 0.3);
+        }
+        .notification-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.22);
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease;
+            z-index: 40;
+        }
+        .notification-overlay.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .notification-drawer {
+            position: fixed;
+            top: 88px;
+            right: 18px;
+            width: min(420px, calc(100vw - 24px));
+            max-height: calc(100vh - 108px);
+            display: flex;
+            flex-direction: column;
+            border-radius: 28px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
+            backdrop-filter: blur(14px);
+            transform: translateY(-8px) scale(0.98);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s ease, transform .2s ease;
+            z-index: 50;
+            overflow: hidden;
+        }
+        .notification-drawer.is-open {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .notification-drawer-header {
+            background:
+                radial-gradient(circle at top right, rgba(132, 217, 29, 0.24), transparent 40%),
+                linear-gradient(135deg, rgba(11, 114, 168, 0.08), rgba(95, 187, 97, 0.06));
+        }
+        .notification-chip {
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: rgba(248, 250, 252, 0.95);
+        }
+        .notification-severity-high { background: #ffedd5; color: #c2410c; }
+        .notification-severity-medium { background: #fef3c7; color: #b45309; }
+        .notification-severity-low { background: #dcfce7; color: #15803d; }
+        @media (max-width: 640px) {
+            .notification-drawer {
+                top: 82px;
+                right: 12px;
+                left: 12px;
+                width: auto;
+                max-height: calc(100vh - 96px);
+            }
+        }
         @keyframes load-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.05); } }
         @keyframes load-spin { to { transform: rotate(360deg); } }
         @keyframes load-shine { 0% { left: -100%; } 100% { left: 100%; } }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="app-shell text-slate-800 overflow-hidden h-screen flex flex-col">
+<body class="{% block body_class %}app-shell text-slate-800 overflow-hidden h-screen flex flex-col{% endblock %}">
     <div class="appbar-wrap">
         <nav class="appbar" role="navigation" aria-label="Main">
             <div class="flex w-full min-h-[74px] items-center justify-between px-4 lg:px-8">
@@ -94,6 +195,19 @@
                     <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
                     {% endif %}
                     <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Log out</a>
+                    <button type="button"
+                        id="notification-trigger"
+                        class="notification-trigger {% if request.resolver_match.url_name == 'alerts' %}is-current{% endif %} focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                        aria-label="Open notifications"
+                        aria-expanded="false"
+                        aria-controls="notification-drawer">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0m6 0H9"/>
+                        </svg>
+                        {% if header_alert_count %}
+                        <span class="notification-badge">{{ header_alert_count }}</span>
+                        {% endif %}
+                    </button>
                     <a href="{% url 'optimizer:profile' %}" class="appbar-avatar {% if request.resolver_match.url_name == 'profile' %}ring-4 ring-sky-100{% endif %} flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white" aria-label="Open profile page">
                         {{ user.username|default:"U"|slice:":1"|upper }}
                     </a>
@@ -104,7 +218,82 @@
             </div>
         </nav>
     </div>
-    <main class="flex-1 min-h-0 overflow-hidden" role="main">
+    {% if user.is_authenticated %}
+    <div id="notification-overlay" class="notification-overlay" hidden></div>
+    <aside id="notification-drawer" class="notification-drawer" aria-hidden="true" aria-label="Notifications panel">
+        <div class="notification-drawer-header border-b border-slate-200 px-5 py-5">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <!-- <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Alerts</p> -->
+                    <h2 class="mt-2 text-xl font-extrabold tracking-tight text-slate-900">Alerts</h2>
+                    <!-- <h2 class="mt-2 text-xl font-extrabold tracking-tight text-slate-900">Summary View</h2>
+                    <p class="mt-1 text-sm text-slate-600">Dummy alerts panel for header notifications.</p> -->
+                </div>
+                <button type="button" id="notification-close" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="notification-chip rounded-2xl px-3 py-3">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Total</p>
+                    <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ header_alert_summary.total }}</p>
+                </div>
+                <div class="notification-chip rounded-2xl px-3 py-3">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">High</p>
+                    <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ header_alert_summary.high }}</p>
+                </div>
+                <div class="notification-chip rounded-2xl px-3 py-3">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Medium</p>
+                    <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ header_alert_summary.medium }}</p>
+                </div>
+                <div class="notification-chip rounded-2xl px-3 py-3">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Low</p>
+                    <p class="mt-2 text-2xl font-extrabold text-slate-900">{{ header_alert_summary.low }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {% if header_alerts %}
+            <div class="space-y-3">
+                {% for alert in header_alerts %}
+                <article class="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{{ alert.category }}</p>
+                            <h3 class="mt-1 text-sm font-bold text-slate-900">{{ alert.title }}</h3>
+                        </div>
+                        <span class="notification-severity-{{ alert.severity|lower }} rounded-full px-2.5 py-1 text-[11px] font-bold">{{ alert.severity }}</span>
+                    </div>
+                    <p class="mt-3 text-sm leading-6 text-slate-600">{{ alert.message }}</p>
+                    <div class="mt-4 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+                        <span>{{ alert.source }}</span>
+                        <span>{{ alert.created_at }}</span>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="rounded-[22px] border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
+                <p class="text-sm font-semibold text-slate-600">No alerts available.</p>
+                <p class="mt-2 text-sm text-slate-500">The summary drawer is ready for live notification data whenever you want to connect it.</p>
+            </div>
+            {% endif %}
+        </div>
+        <div class="border-t border-slate-200 bg-white px-5 py-4">
+            <div class="flex items-center justify-end">
+                <a href="{% url 'optimizer:alerts' %}" class="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-600">
+                    View more
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </aside>
+    {% endif %}
+    <main class="{% block main_class %}flex-1 min-h-0 overflow-hidden{% endblock %}" role="main">
         {% if messages %}
         <div class="flex-shrink-0 px-4 py-2 sm:px-6" role="region" aria-label="Notifications">
             {% for message in messages %}
@@ -121,6 +310,50 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+    {% if user.is_authenticated %}
+    <script>
+        (function () {
+            var trigger = document.getElementById('notification-trigger');
+            var drawer = document.getElementById('notification-drawer');
+            var overlay = document.getElementById('notification-overlay');
+            var closeButton = document.getElementById('notification-close');
+
+            if (!trigger || !drawer || !overlay) return;
+
+            function setDrawerOpen(open) {
+                trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+                drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+                drawer.classList.toggle('is-open', open);
+                overlay.classList.toggle('is-open', open);
+                if (open) {
+                    overlay.removeAttribute('hidden');
+                } else {
+                    overlay.setAttribute('hidden', 'hidden');
+                }
+            }
+
+            trigger.addEventListener('click', function () {
+                setDrawerOpen(trigger.getAttribute('aria-expanded') !== 'true');
+            });
+
+            if (closeButton) {
+                closeButton.addEventListener('click', function () {
+                    setDrawerOpen(false);
+                });
+            }
+
+            overlay.addEventListener('click', function () {
+                setDrawerOpen(false);
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    setDrawerOpen(false);
+                }
+            });
+        })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

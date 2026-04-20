@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block body_class %}app-shell text-slate-800 min-h-screen flex flex-col{% endblock %}
+{% block main_class %}flex-1 overflow-visible{% endblock %}
+{% block content %}
+<div class="flex flex-col mx-4 lg:mx-8 my-6 rounded-[28px] overflow-visible shadow-[0_18px_40px_rgba(15,23,42,0.12)] bg-[#f6f8fb] border border-slate-200">
+    <div class="flex-shrink-0 bg-white px-8 py-8 lg:px-12 lg:py-10">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+                <h1 class="text-5xl font-extrabold tracking-tight text-slate-900">Data Quality</h1>
+                <p class="mt-3 max-w-3xl text-[15px] text-slate-500">
+                    {% if analysis_source_file_name %}
+                    <!-- Quality checks for the analyzed file <span class="font-semibold text-slate-700">{{ analysis_source_file_name }}</span>{% if analysis_created_at %} on {{ analysis_created_at|date:"M d, Y H:i" }}{% endif %}. -->
+                    {% else %}
+                    Review completeness and recommendation reliability before sharing the results.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Sections</p>
+                    <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ total_data_quality_sections }}</p>
+                </div>
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Complete</p>
+                    <p class="mt-2 text-3xl font-extrabold text-emerald-900">{{ data_quality_counts.complete }}</p>
+                </div>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Partial</p>
+                    <p class="mt-2 text-3xl font-extrabold text-amber-900">{{ data_quality_counts.partial }}</p>
+                </div>
+                <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700">Insufficient</p>
+                    <p class="mt-2 text-3xl font-extrabold text-rose-900">{{ data_quality_counts.insufficient }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-shrink-0 border-t border-slate-100">
+        <div class="results-kpi-strip px-8 py-5 lg:px-12">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[760px]">
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Devices Analyzed</span>
+                    <span class="results-kpi-value">{{ total_devices_analyzed|default:0 }}</span>
+                </div>
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Total Demand</span>
+                    <span class="results-kpi-value">{{ total_demand_quantity }}</span>
+                </div>
+                <div class="results-kpi-item">
+                    <span class="results-kpi-label">Current Cost</span>
+                    <span class="results-kpi-value">€{{ total_license_cost|floatformat:0 }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="results-sticky-tabs sticky top-0 z-30 border-b border-slate-200 bg-white px-8 py-2 lg:px-12">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{% url 'optimizer:results' %}#dashboard" class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">Dashboard</a>
+                    <a href="{% url 'optimizer:results' %}#rule1" class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">Strategy 1</a>
+                    <a href="{% url 'optimizer:results' %}#rule2" class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">Strategy 2</a>
+                    <a href="{% url 'optimizer:results' %}#cpu-rightsizing" class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">Strategy 3</a>
+                </div>
+                <span class="optimizer-tab-link tab-active rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">Data Quality</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="px-8 py-8 lg:px-12">
+        <section class="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-slate-900">Recommendation Reliability</h2>
+                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Each section below is assigned a data quality badge. <strong>Complete</strong> means all required fields are present. <strong>Partial</strong> means some fields are missing and the recommendation should be treated with caveats. <strong>Insufficient</strong> means critical inputs are missing and the recommendation is not reliable.</p>
+                </div>
+                <a href="{% url 'optimizer:results' %}" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Back to results</a>
+            </div>
+
+            <div class="mt-6 flex flex-wrap items-center gap-3">
+                <span class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-emerald-200">Complete</span>
+                <span class="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-amber-700 ring-1 ring-amber-200">Partial</span>
+                <span class="inline-flex items-center rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-rose-700 ring-1 ring-rose-200">Insufficient</span>
+            </div>
+
+            <div class="mt-6 overflow-hidden rounded-[22px] border border-slate-200">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-left">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Section</th>
+                                <th class="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Data Quality</th>
+                                <th class="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Description</th>
+                                <th class="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Evidence</th>
+                                <th class="px-5 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Recommendation</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            {% for row in data_quality_rows %}
+                            <tr class="align-top hover:bg-slate-50">
+                                <td class="px-5 py-4">
+                                    <p class="text-sm font-bold text-slate-900">{{ row.section }}</p>
+                                </td>
+                                <td class="px-5 py-4">
+                                    <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.16em]
+                                        {% if row.status == 'complete' %}bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200
+                                        {% elif row.status == 'partial' %}bg-amber-50 text-amber-700 ring-1 ring-amber-200
+                                        {% else %}bg-rose-50 text-rose-700 ring-1 ring-rose-200{% endif %}">
+                                        {{ row.status_label }}
+                                    </span>
+                                </td>
+                                <td class="px-5 py-4 text-sm leading-6 text-slate-600">{{ row.description }}</td>
+                                <td class="px-5 py-4">
+                                    <div class="space-y-2">
+                                        {% for item in row.evidence %}
+                                        <p class="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">{{ item }}</p>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td class="px-5 py-4 text-sm leading-6 text-slate-700">{{ row.recommendation }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<style>
+    .results-kpi-strip {
+        background: linear-gradient(90deg, #1a5675 0%, #1486b8 45%, #52b86a 76%, #84d91d 100%);
+    }
+    .results-sticky-tabs {
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }
+    .results-kpi-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    .results-kpi-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(255, 255, 255, 0.72);
+    }
+    .results-kpi-value {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+        color: white;
+    }
+</style>
+{% endblock %}

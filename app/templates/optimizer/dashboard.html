@@ -1,11 +1,30 @@
 {% extends "base.html" %}
 {% block title %}{{ title|default:"Enterprise Analytics dashboard" }}{% endblock %}
+{% block body_class %}app-shell text-slate-800 min-h-screen flex flex-col{% endblock %}
+{% block main_class %}flex-1 overflow-visible{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+    .sheet-dropdown-menu {
+        display: none;
+    }
+
+    .sheet-dropdown-menu.is-open {
+        display: block;
+    }
+
+    .cpu-rightsizing-toolbar {
+        display: none;
+    }
+
+    .cpu-rightsizing-toolbar.is-visible {
+        display: flex;
+    }
+</style>
 {% endblock %}
 {% block content %}
-<div class="h-full flex flex-col mx-4 lg:mx-8 my-6 rounded-[28px] overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.12)] bg-[#f6f8fb] border border-slate-200">
+<div class="flex flex-col mx-4 lg:mx-8 my-6 rounded-[28px] overflow-visible shadow-[0_18px_40px_rgba(15,23,42,0.12)] bg-[#f6f8fb] border border-slate-200">
     <!-- Header -->
     <div class="flex-shrink-0 bg-white px-8 py-8 lg:px-12 lg:py-10">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -36,6 +55,15 @@
                     </svg>
                     Download Report
                 </a>
+                <a href="{% url 'optimizer:full_report_download' %}"
+                    class="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Download Full report
+                </a>
             </div>
         </div>
     </div>
@@ -59,30 +87,77 @@
                 </div>
             </div>
         </div>
-        <div class="border-b border-slate-200 bg-white px-8 py-2 lg:px-12">
-            <div class="flex flex-wrap items-center gap-2">
-                <button onclick="setOptimizerTab('dashboard');" id="tablink-dashboard"
-                    class="optimizer-tab-link tab-active rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    Dashboard
-                </button>
-                <button onclick="setOptimizerTab('rule1');" id="tablink-rule1"
-                    class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    PAYG Recommendation
-                </button>
-                <button onclick="setOptimizerTab('rule2');" id="tablink-rule2"
-                    class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    Retired Devices
-                </button>
+        <div class="results-sticky-tabs sticky top-0 z-30 border-b border-slate-200 bg-white px-8 py-2 lg:px-12">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="#dashboard" id="tablink-dashboard"
+                        class="optimizer-tab-link tab-active rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                        Dashboard
+                    </a>
+                    <a href="#rule1" id="tablink-rule1"
+                        class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                        Strategy 1
+                    </a>
+                    <a href="#rule2" id="tablink-rule2"
+                        class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                         Strategy 2
+                    </a>
+                    <a href="#cpu-rightsizing" id="tablink-cpu-rightsizing"
+                        class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                        Strategy 3
+                    </a>
+                </div>
+                <a href="{% url 'optimizer:data_quality' %}"
+                    class="optimizer-tab-link tab-inactive rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                    Data Quality
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div id="cpu-rightsizing-toolbar" class="cpu-rightsizing-toolbar flex-shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-8 py-4 lg:px-12">
+        <div>
+            <h2 class="text-xl font-bold text-slate-900">CPU Rightsizing</h2>
+            <p class="mt-1 text-sm text-slate-500">Download individual rightsizing sheets from the full rightsizing workbook.</p>
+        </div>
+        <div class="relative" id="dashboard-sheet-dropdown">
+            <button type="button" id="dashboard-sheet-dropdown-toggle"
+                aria-expanded="false"
+                aria-haspopup="true"
+                aria-controls="dashboard-sheet-dropdown-menu"
+                class="inline-flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 min-w-[250px]">
+                <span class="inline-flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Download Sheets
+                </span>
+                <svg class="w-4 h-4 transition-transform duration-200" id="dashboard-sheet-dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+            <div id="dashboard-sheet-dropdown-menu"
+                class="sheet-dropdown-menu absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                <a href="{% url 'optimizer:full_report_sheet_download' 'prod_cpu_optimization' %}" class="flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Prod Cpu Optimization</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'prod_cpu_recommendation' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Prod Cpu Recommendation</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'nonprod_cpu_optimization' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Nonprod Cpu Optimization</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'nonprod_cpu_recommendation' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Nonprod Cpu Recommendation</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'prod_ram_optimization' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Prod Ram Optimization</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'prod_ram_recommendation' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Prod Ram Recommendation</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'nonprod_ram_optimization' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Nonprod Ram Optimization</a>
+                <a href="{% url 'optimizer:full_report_sheet_download' 'nonprod_ram_recommendation' %}" class="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Nonprod Ram Recommendation</a>
             </div>
         </div>
     </div>
 
     <!-- Tab Content Area -->
-    <div class="flex-1 min-h-0 overflow-y-auto bg-transparent optimizer-page-scroll">
+    <div class="bg-transparent optimizer-page-scroll overflow-visible">
 
         <!-- RULE 1: Azure PAYG -->
-        <div id="panel-rule1" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
-            data-tab="rule1">
+        <div id="panel-rule1" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
+            data-tab="rule1" hidden aria-hidden="true" style="display: none;">
             <div class="payg-rule-shell flex-shrink-0 mb-6">
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
@@ -239,6 +314,9 @@
                             <a id="rule1-next" href="?rule1_page={{ rule1_next }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page >= total_rule1_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
                         </nav>
                         {% endif %}
+                        <button type="button" id="rule1-email-btn" data-rule="rule1" disabled class="inline-flex items-center rounded-lg bg-sky-500 px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">
+                            Send Email
+                        </button>
                     </div>
                 </div>
                 <div class="overflow-x-auto p-0 relative bg-white">
@@ -256,7 +334,16 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white sticky top-0 z-10">
                             <tr>
-                                {% for key in rule1_keys %}
+                                <th
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    <input
+                                        type="checkbox"
+                                        id="rule1-select-page"
+                                        class="page-select-checkbox h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400"
+                                        data-rule="rule1"
+                                        aria-label="Select or unselect all rows on this page">
+                                </th>
+                                {% for key in rule1_headers %}
                                 <th
                                     class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
                                     {{ key }}</th>
@@ -269,6 +356,9 @@
                         <tbody id="rule1-tbody" class="bg-white divide-y divide-slate-100">
                             {% for row in azure_payg_page %}
                             <tr class="hover:bg-sky-50/60 transition-colors">
+                                <td class="px-4 py-3 text-center whitespace-nowrap">
+                                    <input type="checkbox" class="candidate-row-checkbox h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400" data-rule="rule1" data-row-index="{{ rule1_row_offset|add:forloop.counter0 }}">
+                                </td>
                                 {% for val in row %}
                                 <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                 {% endfor %}
@@ -301,8 +391,8 @@
         </div>
 
         <!-- RULE 2: Retired Devices -->
-        <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
-            data-tab="rule2">
+        <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
+            data-tab="rule2" hidden aria-hidden="true" style="display: none;">
             <div class="payg-rule-shell flex-shrink-0 mb-6">
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
@@ -384,6 +474,9 @@
                             <a id="rule2-next" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_next }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page >= total_rule2_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
                         </nav>
                         {% endif %}
+                        <button type="button" id="rule2-email-btn" data-rule="rule2" disabled class="inline-flex items-center rounded-lg bg-sky-500 px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">
+                            Send Email
+                        </button>
                     </div>
                 </div>
                 <div class="overflow-x-auto p-0 relative bg-white">
@@ -401,7 +494,16 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white sticky top-0 z-10">
                             <tr>
-                                {% for key in rule2_keys %}
+                                <th
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    <input
+                                        type="checkbox"
+                                        id="rule2-select-page"
+                                        class="page-select-checkbox h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400"
+                                        data-rule="rule2"
+                                        aria-label="Select or unselect all rows on this page">
+                                </th>
+                                {% for key in rule2_headers %}
                                 <th
                                     class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
                                     {{ key }}</th>
@@ -414,6 +516,9 @@
                         <tbody id="rule2-tbody" class="bg-white divide-y divide-slate-100">
                             {% for row in retired_devices_page %}
                             <tr class="hover:bg-sky-50/60 transition-colors">
+                                <td class="px-4 py-3 text-center whitespace-nowrap">
+                                    <input type="checkbox" class="candidate-row-checkbox h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400" data-rule="rule2" data-row-index="{{ rule2_row_offset|add:forloop.counter0 }}">
+                                </td>
                                 {% for val in row %}
                                 <td class="px-6 py-3.5 text-sm text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                 {% endfor %}
@@ -442,11 +547,199 @@
                 </div>
             </div>
         </div>
+
+        <div id="panel-cpu-rightsizing" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
+            data-tab="cpu-rightsizing" hidden aria-hidden="true" style="display: none;">
+            <div class="payg-rule-shell flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
+                    <div class="pt-2">
+                        <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">Strategy 3 Recommendations</h2>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify CPU and RAM rightsizing opportunities using a static sample view while keeping the current Strategy 3 download workflow intact.</p>
+                    </div>
+                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
+                        <div>
+                            <p class="payg-hero-eyebrow">Strategy 3 Candidates</p>
+                            <p class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">148</p>
+                            <p class="mt-2 text-[11px] font-semibold text-sky-600">Static Sample List</p>
+                        </div>
+                        <div class="payg-hero-lines" aria-hidden="true"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
+                    <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
+                            <span class="inline-flex items-center rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-700">Strategy 3</span>
+                        </div>
+                        <div class="mt-3">
+                            <p class="text-4xl font-extrabold tracking-tight text-slate-900">€182450</p>
+                        </div>
+                        <div class="mt-6 space-y-4">
+                            <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">€904200</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">318</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Candidates</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">148</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">€182450</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Strategy 3 Candidates</p>
+                                    <p class="mt-1 text-lg font-bold text-slate-900">148</p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
+                                    <a href="{% url 'optimizer:full_report_download' %}" class="mt-1 inline-flex text-sm font-bold text-sky-600 hover:text-sky-700">Download</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
+                        <div class="chart-card-head">
+                            <h3 class="chart-card-title">Strategy 3 Breakdown by Environment</h3>
+                            <div class="chart-legend-hint">
+                                <span class="chart-dot" style="background:#00BCFF"></span><span>CPU</span>
+                                <span class="chart-dot" style="background:#89D329"></span><span>RAM</span>
+                            </div>
+                        </div>
+                        <div class="rounded-[22px] border border-slate-200 bg-white px-5 py-5 min-h-[318px]">
+                            <div class="strategy3-chart-shell">
+                                <div class="strategy3-axis">
+                                    <span>150</span>
+                                    <span>100</span>
+                                    <span>50</span>
+                                    <span>0</span>
+                                </div>
+                                <div class="strategy3-chart-grid">
+                                    <div class="strategy3-grid-lines">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                    <div class="strategy3-bars">
+                                        <div class="strategy3-bar-group">
+                                            <div class="strategy3-bar strategy3-bar-cpu" style="height: 72%;"></div>
+                                            <div class="strategy3-bar strategy3-bar-ram" style="height: 42%;"></div>
+                                            <p>Production</p>
+                                        </div>
+                                        <div class="strategy3-bar-group">
+                                            <div class="strategy3-bar strategy3-bar-cpu" style="height: 56%;"></div>
+                                            <div class="strategy3-bar strategy3-bar-ram" style="height: 34%;"></div>
+                                            <p>Non-Production</p>
+                                        </div>
+                                        <div class="strategy3-bar-group">
+                                            <div class="strategy3-bar strategy3-bar-cpu" style="height: 66%;"></div>
+                                            <div class="strategy3-bar strategy3-bar-ram" style="height: 38%;"></div>
+                                            <p>Shared Hosts</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col mt-4 overflow-hidden flex-shrink-0 w-full">
+                    <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
+                        <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: 148</span>
+                            <nav class="flex items-center gap-1" aria-label="Strategy 3 pagination">
+                                <span class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-300">Prev</span>
+                                <span class="px-2 text-[10px] font-medium text-slate-600">Page 1 of 24</span>
+                                <span class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</span>
+                            </nav>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-white sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Server Name</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Environment</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Current vCPU</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Recommended vCPU</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Current RAM</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Recommended RAM</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Estimated Savings</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">SQL-PROD-01</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">Production</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">16</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">12</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">128 GiB</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">96 GiB</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-emerald-700 whitespace-nowrap">€21,400</td>
+                                    <td class="px-4 py-3 text-sm text-sky-600 whitespace-nowrap">Review</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">SQL-UAT-03</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">Non-Production</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">8</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">4</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">64 GiB</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">32 GiB</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-emerald-700 whitespace-nowrap">€12,860</td>
+                                    <td class="px-4 py-3 text-sm text-sky-600 whitespace-nowrap">Review</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">SQL-SHARED-07</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">Shared Hosts</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">12</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">8</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">96 GiB</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">64 GiB</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-emerald-700 whitespace-nowrap">€17,320</td>
+                                    <td class="px-4 py-3 text-sm text-sky-600 whitespace-nowrap">Review</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">SQL-PROD-11</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">Production</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">24</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">18</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">192 GiB</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">128 GiB</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-emerald-700 whitespace-nowrap">€28,910</td>
+                                    <td class="px-4 py-3 text-sm text-sky-600 whitespace-nowrap">Review</td>
+                                </tr>
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">SQL-DEV-14</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">Non-Production</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">6</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">4</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">48 GiB</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">24 GiB</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-emerald-700 whitespace-nowrap">€9,760</td>
+                                    <td class="px-4 py-3 text-sm text-sky-600 whitespace-nowrap">Review</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- COMBINED -->
-        <div id="panel-combined" class="tab-content-panel w-full flex flex-col p-6 overflow-y-auto"
-            data-tab="combined">
+        <div id="panel-combined" class="tab-content-panel w-full flex flex-col p-6 overflow-visible"
+            data-tab="combined" hidden aria-hidden="true" style="display: none;">
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
                 <div class="col-span-1 lg:col-span-1 grid grid-cols-1 gap-6">
@@ -514,8 +807,8 @@
         </div>
 
         <!-- DASHBOARD: Executive Summary + Charts + AI Insights + Rule Tables -->
-        <div id="panel-dashboard" class="tab-content-panel active-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
-            data-tab="dashboard" style="padding-bottom: 1.5rem;">
+        <div id="panel-dashboard" class="tab-content-panel active-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
+            data-tab="dashboard" aria-hidden="false" style="display: flex !important; opacity: 1 !important; visibility: visible !important; padding-bottom: 1.5rem;">
             <div class="mb-5 flex flex-col gap-1">
                 <h2 class="text-2xl font-bold text-slate-900">Dashboard</h2>
                 <p class="text-sm text-slate-500">Summary of the findings</p>
@@ -757,11 +1050,43 @@
         </div>
 
     </div>
+
+    <div id="email-preview-modal" class="candidate-email-modal hidden" aria-hidden="true">
+        <div id="email-preview-overlay" class="candidate-email-overlay"></div>
+        <div class="candidate-email-dialog">
+            <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Selected Rows</p>
+                    <h3 id="email-preview-title" class="mt-2 text-xl font-bold text-slate-900">Email Preview</h3>
+                    <p class="mt-1 text-sm text-slate-500">Review the selected candidates before sending.</p>
+                </div>
+                <button type="button" id="email-preview-close" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="px-6 py-5">
+                <div class="overflow-auto rounded-[20px] border border-slate-200" style="max-height: 420px;">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <thead id="email-preview-head" class="sticky top-0 bg-slate-50"></thead>
+                        <tbody id="email-preview-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                <button type="button" id="email-preview-cancel" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+                <button type="button" id="email-preview-send" class="inline-flex items-center rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-600">Send Email</button>
+            </div>
+        </div>
+    </div>
     {% endwith %}
 </div>
 
 {{ rule1_data_json|json_script:"rule1-data" }}
 {{ rule2_data_json|json_script:"rule2-data" }}
+{{ rule1_headers|json_script:"rule1-headers-data" }}
+{{ rule2_headers|json_script:"rule2-headers-data" }}
 {{ chart_specs|json_script:"chart-specs-data" }}
 
 <style>
@@ -771,7 +1096,8 @@
 
     .tab-content-panel.active-panel {
         display: flex !important;
-        animation: fadeIn 0.3s ease-out;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
 
     .dashboard-hero {
@@ -782,6 +1108,10 @@
 
     .results-kpi-strip {
         background: linear-gradient(90deg, #1a5675 0%, #1486b8 45%, #52b86a 76%, #84d91d 100%);
+    }
+
+    .results-sticky-tabs {
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
     }
 
     .results-kpi-item {
@@ -940,6 +1270,124 @@
     .payg-metric-card-compact .border-b {
         padding-bottom: 0.75rem;
         margin-bottom: 0;
+    }
+
+    .candidate-email-modal.hidden {
+        display: none;
+    }
+
+    .candidate-email-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+    }
+
+    .candidate-email-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.42);
+        backdrop-filter: blur(3px);
+    }
+
+    .candidate-email-dialog {
+        position: relative;
+        z-index: 1;
+        width: min(1100px, calc(100vw - 32px));
+        max-height: calc(100vh - 40px);
+        margin: 20px auto;
+        border-radius: 28px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+        overflow: hidden;
+    }
+
+    .strategy3-chart-shell {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 1rem;
+        align-items: stretch;
+        min-height: 250px;
+    }
+
+    .strategy3-axis {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 0.25rem 0 2.25rem;
+        font-size: 10px;
+        font-weight: 700;
+        color: #94a3b8;
+    }
+
+    .strategy3-chart-grid {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        min-height: 250px;
+        border-left: 1px solid #dbe4ee;
+        border-bottom: 1px solid #dbe4ee;
+        padding: 1rem 1.25rem 2.5rem;
+    }
+
+    .strategy3-grid-lines {
+        position: absolute;
+        inset: 0 0 2.5rem 0;
+        display: grid;
+        grid-template-rows: repeat(4, 1fr);
+        pointer-events: none;
+    }
+
+    .strategy3-grid-lines span {
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .strategy3-bars {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 2rem;
+        align-items: end;
+    }
+
+    .strategy3-bar-group {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 0.8rem;
+        height: 100%;
+        position: relative;
+    }
+
+    .strategy3-bar-group p {
+        position: absolute;
+        bottom: -2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .strategy3-bar {
+        width: 46px;
+        border-radius: 16px 16px 6px 6px;
+        box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    .strategy3-bar-cpu {
+        background: linear-gradient(180deg, #1fb0e5 0%, #0ea5e9 100%);
+    }
+
+    .strategy3-bar-ram {
+        background: linear-gradient(180deg, #9add31 0%, #84d91d 100%);
     }
 
     .dashboard-panel-card,
@@ -1135,6 +1583,46 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var cpuRightsizingToolbar = document.getElementById('cpu-rightsizing-toolbar');
+        var sheetDropdown = document.getElementById('dashboard-sheet-dropdown');
+        var sheetToggle = document.getElementById('dashboard-sheet-dropdown-toggle');
+        var sheetMenu = document.getElementById('dashboard-sheet-dropdown-menu');
+        var sheetArrow = document.getElementById('dashboard-sheet-dropdown-arrow');
+
+        function setDashboardSheetDropdown(open) {
+            if (!sheetMenu || !sheetToggle) return;
+            sheetMenu.classList.toggle('is-open', open);
+            sheetToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            sheetMenu.setAttribute('aria-hidden', open ? 'false' : 'true');
+            if (sheetArrow) {
+                sheetArrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
+        }
+
+        if (sheetToggle && sheetMenu) {
+            sheetToggle.addEventListener('click', function (event) {
+                event.stopPropagation();
+                setDashboardSheetDropdown(!sheetMenu.classList.contains('is-open'));
+            });
+
+            sheetToggle.addEventListener('keydown', function (event) {
+                if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setDashboardSheetDropdown(true);
+                    var firstSheetItem = sheetMenu.querySelector('a');
+                    if (firstSheetItem) firstSheetItem.focus();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (sheetDropdown && !sheetDropdown.contains(event.target)) {
+                    setDashboardSheetDropdown(false);
+                }
+            });
+        }
+
+        setDashboardSheetDropdown(false);
+
         var specsEl = document.getElementById('chart-specs-data');
         if (specsEl && typeof Plotly !== 'undefined') {
             try {
@@ -1212,7 +1700,7 @@
             } catch (e) { console.warn('Plotly charts init:', e); }
         }
 
-        var validTabs = ['rule1', 'rule2', 'combined', 'dashboard'];
+        var validTabs = ['rule1', 'rule2', 'cpu-rightsizing', 'combined', 'dashboard'];
         window.setOptimizerTab = function (tabId) {
             validTabs.forEach(function (id) {
                 var linkEl = document.getElementById('tablink-' + id);
@@ -1221,8 +1709,9 @@
                     if (linkEl) { linkEl.classList.add('tab-active'); linkEl.classList.remove('tab-inactive'); }
                     if (panelEl) {
                         panelEl.classList.add('active-panel');
-                        panelEl.style.display = 'flex';
+                        panelEl.style.cssText = 'display: flex !important; opacity: 1 !important; visibility: visible !important;';
                         panelEl.removeAttribute('hidden');
+                        panelEl.setAttribute('aria-hidden', 'false');
                     }
                     if (history.replaceState) history.replaceState(null, null, '#' + id);
                     else window.location.hash = '#' + id;
@@ -1230,11 +1719,18 @@
                     if (linkEl) { linkEl.classList.remove('tab-active'); linkEl.classList.add('tab-inactive'); }
                     if (panelEl) {
                         panelEl.classList.remove('active-panel');
-                        panelEl.style.display = 'none';
+                        panelEl.style.cssText = 'display: none !important;';
                         panelEl.setAttribute('hidden', 'hidden');
+                        panelEl.setAttribute('aria-hidden', 'true');
                     }
                 }
             });
+            if (cpuRightsizingToolbar) {
+                cpuRightsizingToolbar.classList.toggle('is-visible', tabId === 'cpu-rightsizing');
+            }
+            if (tabId !== 'cpu-rightsizing') {
+                setDashboardSheetDropdown(false);
+            }
             setTimeout(function () {
                 var panelEl = document.getElementById('panel-' + tabId);
                 if (panelEl && typeof Plotly !== 'undefined') {
@@ -1258,8 +1754,12 @@
         var PER_PAGE = 6;
         var rule1DataEl = document.getElementById('rule1-data');
         var rule2DataEl = document.getElementById('rule2-data');
+        var rule1HeadersEl = document.getElementById('rule1-headers-data');
+        var rule2HeadersEl = document.getElementById('rule2-headers-data');
         var rule1Data = rule1DataEl ? JSON.parse(rule1DataEl.textContent) : [];
         var rule2Data = rule2DataEl ? JSON.parse(rule2DataEl.textContent) : [];
+        var rule1Headers = rule1HeadersEl ? JSON.parse(rule1HeadersEl.textContent) : [];
+        var rule2Headers = rule2HeadersEl ? JSON.parse(rule2HeadersEl.textContent) : [];
         var nav1 = document.querySelector('nav[data-rule="1"]');
         var nav2 = document.querySelector('nav[data-rule="2"]');
         var rule1Page = nav1 ? parseInt(nav1.getAttribute('data-current-page'), 10) : 1;
@@ -1267,6 +1767,18 @@
         var totalRule1Pages = nav1 ? parseInt(nav1.getAttribute('data-total-pages'), 10) : 1;
         var totalRule2Pages = nav2 ? parseInt(nav2.getAttribute('data-total-pages'), 10) : 1;
         var basePath = window.location.pathname;
+        var selectedRowsByRule = { rule1: {}, rule2: {} };
+        var modalEl = document.getElementById('email-preview-modal');
+        var modalTitleEl = document.getElementById('email-preview-title');
+        var modalHeadEl = document.getElementById('email-preview-head');
+        var modalBodyEl = document.getElementById('email-preview-body');
+        var modalSendEl = document.getElementById('email-preview-send');
+        var modalCloseEl = document.getElementById('email-preview-close');
+        var modalCancelEl = document.getElementById('email-preview-cancel');
+        var modalOverlayEl = document.getElementById('email-preview-overlay');
+        var rule1EmailBtn = document.getElementById('rule1-email-btn');
+        var rule2EmailBtn = document.getElementById('rule2-email-btn');
+        var activeEmailRule = null;
 
         function safeText(val) {
             if (val === null || val === undefined || val === '') return '—';
@@ -1283,15 +1795,65 @@
             return '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full bg-blue-600 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">Send Trigger</button></td>';
         }
 
+        function getCheckboxCellHtml(ruleName, absoluteIndex) {
+            var checked = !!selectedRowsByRule[ruleName][absoluteIndex];
+            return '<td class="px-4 py-3 text-center whitespace-nowrap"><input type="checkbox" class="candidate-row-checkbox h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400" data-rule="' + ruleName + '" data-row-index="' + absoluteIndex + '"' + (checked ? ' checked' : '') + '></td>';
+        }
+
+        function updateEmailButtons() {
+            var rule1SelectedCount = Object.keys(selectedRowsByRule.rule1).length;
+            var rule2SelectedCount = Object.keys(selectedRowsByRule.rule2).length;
+            if (rule1EmailBtn) {
+                rule1EmailBtn.disabled = rule1SelectedCount === 0;
+                rule1EmailBtn.textContent = rule1SelectedCount > 0 ? 'Send Email (' + rule1SelectedCount + ')' : 'Send Email';
+            }
+            if (rule2EmailBtn) {
+                rule2EmailBtn.disabled = rule2SelectedCount === 0;
+                rule2EmailBtn.textContent = rule2SelectedCount > 0 ? 'Send Email (' + rule2SelectedCount + ')' : 'Send Email';
+            }
+        }
+
+        function syncPageSelectCheckbox(ruleName) {
+            var headerCheckbox = document.getElementById(ruleName + '-select-page');
+            var tbody = document.getElementById(ruleName + '-tbody');
+            if (!headerCheckbox || !tbody) return;
+            var rowCheckboxes = Array.prototype.slice.call(tbody.querySelectorAll('.candidate-row-checkbox'));
+            if (!rowCheckboxes.length) {
+                headerCheckbox.checked = false;
+                headerCheckbox.indeterminate = false;
+                return;
+            }
+            var checkedCount = rowCheckboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+            headerCheckbox.checked = checkedCount === rowCheckboxes.length;
+            headerCheckbox.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+        }
+
+        function togglePageSelection(ruleName, isChecked) {
+            var tbody = document.getElementById(ruleName + '-tbody');
+            var data = ruleName === 'rule1' ? rule1Data : rule2Data;
+            if (!tbody) return;
+            tbody.querySelectorAll('.candidate-row-checkbox').forEach(function (checkbox) {
+                var rowIndex = parseInt(checkbox.getAttribute('data-row-index'), 10);
+                checkbox.checked = isChecked;
+                if (isChecked) selectedRowsByRule[ruleName][rowIndex] = data[rowIndex];
+                else delete selectedRowsByRule[ruleName][rowIndex];
+            });
+            syncPageSelectCheckbox(ruleName);
+            updateEmailButtons();
+        }
+
         function renderTableBody(tbodyId, data, page, rowClass) {
             var tbody = document.getElementById(tbodyId);
             if (!tbody) return;
             var start = (page - 1) * PER_PAGE;
             var slice = data.slice(start, start + PER_PAGE);
             var html = '';
+            var ruleName = tbodyId === 'rule1-tbody' ? 'rule1' : 'rule2';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
+                var absoluteIndex = start + i;
                 html += '<tr class="' + rowClass + '">';
+                html += getCheckboxCellHtml(ruleName, absoluteIndex);
                 for (var j = 0; j < row.length; j++) {
                     html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[j])) + '</td>';
                 }
@@ -1301,6 +1863,88 @@
                 html += '</tr>';
             }
             tbody.innerHTML = html;
+            syncPageSelectCheckbox(ruleName);
+            updateEmailButtons();
+        }
+
+        function buildMailBody(ruleName, headers, rows) {
+            var intro = ruleName === 'rule1' ? 'Strategy 1 selected candidates' : 'Strategy 2 selected candidates';
+            var lines = [intro, '', headers.join(' | ')];
+            for (var i = 0; i < rows.length; i++) {
+                lines.push(rows[i].join(' | '));
+            }
+            return lines.join('\n');
+        }
+
+        function closeEmailPreview() {
+            activeEmailRule = null;
+            if (modalEl) {
+                modalEl.classList.add('hidden');
+                modalEl.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        function renderEmailPreview(ruleName) {
+            var selected = selectedRowsByRule[ruleName];
+            var indexes = Object.keys(selected).map(function (key) { return parseInt(key, 10); }).sort(function (a, b) { return a - b; });
+            if (!modalEl || !modalHeadEl || !modalBodyEl) return false;
+            if (!indexes.length) {
+                closeEmailPreview();
+                return false;
+            }
+            var headers = ruleName === 'rule1' ? rule1Headers : rule2Headers;
+            modalTitleEl.textContent = ruleName === 'rule1' ? 'Strategy 1 Email Preview' : 'Strategy 2 Email Preview';
+
+            var headHtml = '<tr>';
+            headHtml += '<th class="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">-</th>';
+            for (var i = 0; i < headers.length; i++) {
+                headHtml += '<th class="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">' + escapeHtml(headers[i]) + '</th>';
+            }
+            headHtml += '</tr>';
+            modalHeadEl.innerHTML = headHtml;
+
+            var bodyHtml = '';
+            for (var rowIdx = 0; rowIdx < indexes.length; rowIdx++) {
+                var row = selected[indexes[rowIdx]];
+                bodyHtml += '<tr>';
+                bodyHtml += '<td class="px-4 py-3 text-center whitespace-nowrap"><button type="button" class="email-preview-remove inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-sm font-bold leading-none text-rose-600 transition hover:bg-rose-100" data-rule="' + ruleName + '" data-row-index="' + indexes[rowIdx] + '" aria-label="Remove selected row">-</button></td>';
+                for (var colIdx = 0; colIdx < row.length; colIdx++) {
+                    bodyHtml += '<td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[colIdx])) + '</td>';
+                }
+                bodyHtml += '</tr>';
+            }
+            modalBodyEl.innerHTML = bodyHtml;
+            return true;
+        }
+
+        function openEmailPreview(ruleName) {
+            activeEmailRule = ruleName;
+            if (!renderEmailPreview(ruleName)) return;
+            modalEl.classList.remove('hidden');
+            modalEl.setAttribute('aria-hidden', 'false');
+        }
+
+        function removeSelectedRowFromPreview(ruleName, rowIndex) {
+            delete selectedRowsByRule[ruleName][rowIndex];
+            var rowCheckbox = document.querySelector('.candidate-row-checkbox[data-rule="' + ruleName + '"][data-row-index="' + rowIndex + '"]');
+            if (rowCheckbox) rowCheckbox.checked = false;
+            syncPageSelectCheckbox(ruleName);
+            updateEmailButtons();
+            if (activeEmailRule === ruleName) {
+                renderEmailPreview(ruleName);
+            }
+        }
+
+        function handleCheckboxChange(event) {
+            var checkbox = event.target;
+            if (!checkbox.classList.contains('candidate-row-checkbox')) return;
+            var ruleName = checkbox.getAttribute('data-rule');
+            var rowIndex = parseInt(checkbox.getAttribute('data-row-index'), 10);
+            var data = ruleName === 'rule1' ? rule1Data : rule2Data;
+            if (checkbox.checked) selectedRowsByRule[ruleName][rowIndex] = data[rowIndex];
+            else delete selectedRowsByRule[ruleName][rowIndex];
+            syncPageSelectCheckbox(ruleName);
+            updateEmailButtons();
         }
 
         function updatePagination(rule, page, totalPages, otherPage) {
@@ -1343,6 +1987,54 @@
         if (r1Next) r1Next.addEventListener('click', onRule1Next);
         if (r2Prev) r2Prev.addEventListener('click', onRule2Prev);
         if (r2Next) r2Next.addEventListener('click', onRule2Next);
+
+        var rule1Tbody = document.getElementById('rule1-tbody');
+        var rule2Tbody = document.getElementById('rule2-tbody');
+        var rule1SelectPage = document.getElementById('rule1-select-page');
+        var rule2SelectPage = document.getElementById('rule2-select-page');
+        if (rule1Tbody) rule1Tbody.addEventListener('change', handleCheckboxChange);
+        if (rule2Tbody) rule2Tbody.addEventListener('change', handleCheckboxChange);
+        if (rule1SelectPage) {
+            rule1SelectPage.addEventListener('change', function (event) {
+                togglePageSelection('rule1', event.target.checked);
+            });
+        }
+        if (rule2SelectPage) {
+            rule2SelectPage.addEventListener('change', function (event) {
+                togglePageSelection('rule2', event.target.checked);
+            });
+        }
+        if (rule1EmailBtn) rule1EmailBtn.addEventListener('click', function () { openEmailPreview('rule1'); });
+        if (rule2EmailBtn) rule2EmailBtn.addEventListener('click', function () { openEmailPreview('rule2'); });
+        if (modalCloseEl) modalCloseEl.addEventListener('click', closeEmailPreview);
+        if (modalCancelEl) modalCancelEl.addEventListener('click', closeEmailPreview);
+        if (modalOverlayEl) modalOverlayEl.addEventListener('click', closeEmailPreview);
+        if (modalBodyEl) {
+            modalBodyEl.addEventListener('click', function (event) {
+                var removeButton = event.target.closest('.email-preview-remove');
+                if (!removeButton) return;
+                var ruleName = removeButton.getAttribute('data-rule');
+                var rowIndex = parseInt(removeButton.getAttribute('data-row-index'), 10);
+                removeSelectedRowFromPreview(ruleName, rowIndex);
+            });
+        }
+        if (modalSendEl) {
+            modalSendEl.addEventListener('click', function () {
+                if (!activeEmailRule) return;
+                var headers = activeEmailRule === 'rule1' ? rule1Headers : rule2Headers;
+                var rows = Object.keys(selectedRowsByRule[activeEmailRule]).map(function (key) { return { index: parseInt(key, 10), row: selectedRowsByRule[activeEmailRule][key] }; }).sort(function (a, b) { return a.index - b.index; }).map(function (item) { return item.row; });
+                var subject = activeEmailRule === 'rule1' ? 'Strategy 1 Selected Candidates' : 'Strategy 2 Selected Candidates';
+                var body = buildMailBody(activeEmailRule, headers, rows);
+                window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+                closeEmailPreview();
+            });
+        }
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closeEmailPreview();
+        });
+        syncPageSelectCheckbox('rule1');
+        syncPageSelectCheckbox('rule2');
+        updateEmailButtons();
     });
 </script>
 {% endblock %}
