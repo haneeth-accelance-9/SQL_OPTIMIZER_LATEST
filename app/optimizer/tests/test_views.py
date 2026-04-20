@@ -1,4 +1,4 @@
-"""View tests: health, ready, auth redirect."""
+﻿"""View tests: health, ready, auth redirect."""
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -85,7 +85,6 @@ def test_results_uses_persisted_analysis_data(client):
 
 
 @pytest.mark.django_db
-<<<<<<< HEAD
 def test_report_page_normalizes_currency_symbols(client):
     euro = "\u20ac"
     user = get_user_model().objects.create_user(username="reporter", password="secret123")
@@ -234,6 +233,56 @@ def test_report_download_supports_xlsx(client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_report_download_supports_excel_alias(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="excel-exporter", password="secret123")
+    analysis = AnalysisSession.objects.create(
+        user=user,
+        file_name="uploaded.xlsx",
+        file_path="uploaded.xlsx",
+        status="completed",
+        result_data={
+            "report_text": """# SQL Server License Optimization Report
+
+## Current State
+
+- **Total estimated license cost:** 6504721.08
+""",
+            "rule_results": {
+                "azure_payg_count": 2,
+                "retired_count": 1,
+            },
+            "license_metrics": {
+                "total_demand_quantity": 20568,
+                "total_license_cost": 6504721.08,
+                "by_product": [],
+            },
+        },
+    )
+    captured = {}
+
+    def fake_export_xlsx(report_text, generated_at=None, report_context=None):
+        captured["report_text"] = report_text
+        captured["report_context"] = report_context
+        return b"PK\x03\x04test-excel"
+
+    monkeypatch.setattr("optimizer.views.export_xlsx", fake_export_xlsx)
+
+    client.force_login(user)
+    session = client.session
+    session["optimizer_analysis_id"] = analysis.id
+    session.save()
+
+    response = client.get(reverse("optimizer:report_download", args=["excel"]))
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert response.content == b"PK\x03\x04test-excel"
+    assert "filename=" in response["Content-Disposition"]
+    assert response["Content-Disposition"].endswith(".xlsx\"")
+    assert captured["report_context"]["total_license_cost"] == 6504721.08
+
+
+@pytest.mark.django_db
 def test_analysis_logs_returns_only_current_user_logs(client):
     user_model = get_user_model()
     user = user_model.objects.create_user(username="log-view-user", password="secret123")
@@ -267,50 +316,58 @@ def test_analysis_logs_returns_only_current_user_logs(client):
     assert payload["logs"][0]["username"] == "log-view-user"
     assert payload["logs"][0]["file_name"] == "mine.xlsx"
     assert payload["logs"][0]["summary_metrics"]["total_devices_analyzed"] == 42
-=======
-def test_profile_page_renders_for_authenticated_user(client):
+
+
+@pytest.mark.django_db
+def test_profile_page_renders_saved_profile_details(client):
     user = get_user_model().objects.create_user(
-        username="business",
+        username="profile-user",
         password="secret123",
-        first_name="Business",
-        last_name="Owner",
-        email="business@example.com",
+        first_name="Asha",
+        last_name="Patel",
+        email="asha@example.com",
     )
-    UserProfile.objects.create(user=user, team_name="MVP Team", image_url="https://example.com/avatar.png")
+    UserProfile.objects.create(
+        user=user,
+        team_name="FinOps",
+        image_url="https://example.com/avatar.png",
+    )
 
     client.force_login(user)
     response = client.get(reverse("optimizer:profile"))
 
     assert response.status_code == 200
-    assert b"Manage your profile" in response.content
-    assert response.context["profile_team_name"] == "MVP Team"
-    assert response.context["profile_display_name"] == "Business Owner"
+    assert response.context["profile_display_name"] == "Asha Patel"
+    assert response.context["profile_email"] == "asha@example.com"
+    assert response.context["profile_team_name"] == "FinOps"
+    assert response.context["profile_image_url"] == "https://example.com/avatar.png"
+    assert response.context["profile_initials"] == "AP"
 
 
 @pytest.mark.django_db
-def test_profile_page_updates_user_and_profile_details(client):
-    user = get_user_model().objects.create_user(username="business", password="secret123")
-    UserProfile.objects.create(user=user, team_name="Initial Team")
+def test_profile_page_updates_user_and_profile_fields(client):
+    user = get_user_model().objects.create_user(username="editor", password="secret123")
+    UserProfile.objects.create(user=user)
 
     client.force_login(user)
     response = client.post(
         reverse("optimizer:profile"),
-        {
-            "first_name": "Business",
-            "last_name": "Leader",
-            "email": "business@example.com",
-            "team_name": "Finance Systems",
-            "image_url": "https://example.com/business.png",
+        data={
+            "first_name": "Riya",
+            "last_name": "Shah",
+            "email": "riya@example.com",
+            "team_name": "Platform Engineering",
+            "image_url": "https://example.com/riya.png",
         },
-        follow=True,
     )
 
     user.refresh_from_db()
     profile = user.optimizer_profile
-    assert response.status_code == 200
-    assert user.first_name == "Business"
-    assert user.last_name == "Leader"
-    assert user.email == "business@example.com"
-    assert profile.team_name == "Finance Systems"
-    assert profile.image_url == "https://example.com/business.png"
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
+
+    assert response.status_code == 302
+    assert response.url == reverse("optimizer:profile")
+    assert user.first_name == "Riya"
+    assert user.last_name == "Shah"
+    assert user.email == "riya@example.com"
+    assert profile.team_name == "Platform Engineering"
+    assert profile.image_url == "https://example.com/riya.png"
