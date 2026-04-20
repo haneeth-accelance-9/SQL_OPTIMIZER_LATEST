@@ -1,0 +1,280 @@
+# LiscenceOptimizer Configuration
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging:
+  level: "${LOG_LEVEL:INFO}"
+
+# ============================================================================
+# GATEWAY CONFIGURATIONS
+# ============================================================================
+
+# LLM Gateway Configuration - Azure OpenAI
+llm:
+  provider: "azure_openai"
+  
+  config:
+    endpoint: "${AZURE_OPENAI_ENDPOINT}"
+    deployment_name: "${AZURE_OPENAI_DEPLOYMENT_NAME:gpt-4o}"
+    api_version: "${AZURE_OPENAI_API_VERSION:2024-12-01-preview}"
+    use_managed_identity: false
+    api_key: "${AZURE_OPENAI_API_KEY}"
+    timeout: 600
+  
+  caching:
+    enabled: true
+    ttl: 3600
+    backend: "memory"
+  
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    backend: "memory"
+  
+  logging:
+    enabled: true
+    level: "${LOG_LEVEL:INFO}"
+    log_requests: true
+    log_responses: true
+  
+  max_retries: 3
+
+# Memory Gateway Configuration - Cosmos DB
+memory:
+  provider: "cosmosdb"
+  
+  config:
+    endpoint: "${COSMOSDB_ENDPOINT}"
+    database_name: "${COSMOSDB_DATABASE_NAME:agenticai}"
+    use_managed_identity: false
+    key: "${COSMOSDB_KEY}"
+    session_ttl_seconds: 2592000
+    message_ttl_seconds: 2592000
+  
+  enable_history: true
+  max_history_messages: 5
+
+# Observability Gateway Configuration - Azure Monitor
+observability:
+  provider: "azure_monitor"
+  
+  enable_sensitive_data: true
+  
+  azure_monitor:
+    connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    use_managed_identity: false
+    
+    service_name: "liscence-optimizer"
+    service_version: "0.1.0"
+    deployment_environment: "development"
+    
+    export_interval_millis: 5000
+    sampling_ratio: 1.0
+    
+    enable_traces: true
+    enable_metrics: true
+    enable_logs: true
+    enable_live_metrics: false
+    
+    timeout: 10
+  
+  log_level: "${LOG_LEVEL:INFO}"
+
+# ============================================================================
+# EXECUTOR CONFIGURATION
+# ============================================================================
+
+executor:
+  type: "phased_orchestration"
+  streaming: true
+  
+  agents:
+    - name: "main_agent"
+      model:
+        name: "${AZURE_OPENAI_DEPLOYMENT_NAME:gpt-4o}"
+        type: "chat"
+        max_tokens: 50000
+        temperature: 0.0
+      
+      system_prompt: |
+        You are an AI agent built with the AgenticAI SDK.
+        
+        **Your Purpose:**
+        This agent creates executive summary or the results that are obtained by applying usecases on the data
+        
+        **Operational Guidelines:**
+        - This is a fully autonomous agent that processes tasks independently
+        - Make all decisions based on the data and requirements provided
+        - Always explain your decisions and reasoning in your responses
+        - Complete all phases from start to finish automatically
+        
+        **CRITICAL - Reasoning Format:**
+        Before calling ANY tool, you MUST output your reasoning using EXACTLY this format:
+        
+        [REASONING]: Your explanation here in 1-2 sentences about what you're about to do and why.
+        
+        Example:
+        [REASONING]: I need to check what files are available in this session before processing.
+        
+        Then call the tool. This format is REQUIRED for every single tool call.
+      
+      tools:
+        # AgenticAI SDK built-in tools
+        - "list_available_files"
+        - "upload_dataframe"
+        - "describe_dataframe"
+        - "execute_sql_query"
+        - "get_table_columns"
+        - "get_table_count"
+        - "list_tables"
+        - "calculator"
+        - "calculate_expression"
+        - "calculate_statistics"
+        # Phase communication tools
+        - "store_phase_result"
+        - "get_phase_result"
+        - "get_all_phase_results"
+  
+  phases:
+    - name: "Analysis Phase"
+      agent: "main_agent"
+      number: 1
+      instructions: |
+        **Objective:** Analyze the provided data and generate insights.
+        
+        **Steps:**
+        1. List available files using list_available_files()
+        2. Load and examine the data
+        3. Perform analysis
+        4. Store results using store_phase_result()
+    
+    - name: "Report Generation Phase"
+      agent: "main_agent"
+      number: 2
+      instructions: |
+        **Objective:** Generate a comprehensive report based on analysis.
+        
+        **Steps:**
+        1. Retrieve analysis results using get_phase_result("Analysis Phase")
+        2. Generate markdown report with findings
+        3. Include recommendations and next steps
+
+# ============================================================================
+# MCP SERVER CONFIGURATION (Optional)
+# ============================================================================
+
+# Model Context Protocol (MCP) server configuration for extending agents with custom tools
+mcp:
+  servers: []
+    # ============================================================================
+    # MCP SERVER CONFIGURATION - Per-Request Agent Pattern
+    # ============================================================================
+    # 
+    # Authentication Behavior (Per-Request):
+    # - Agents are created fresh for each request with current authentication
+    # - Tokens are acquired at request time (no expiration issues)
+    # - Tools are cleaned up after each request completes
+    # 
+    # Authentication Priority (evaluated per request):
+    # 1. User token from RequestContext (if use_user_token_passthrough=true AND token provided)
+    # 2. Fresh Managed Identity token (if use_managed_identity=true)
+    # 3. Static headers from config
+    # 
+    # ============================================================================
+    
+    # Example 1: Managed Identity (Service-to-Service)
+    # Use when: MCP server doesn't need user-specific permissions
+    # - name: "analytics-mcp"
+    #   description: "Analytics MCP server with data tools"
+    #   transport: "http"
+    #   endpoint: "${MCP_ANALYTICS_ENDPOINT:https://analytics-mcp.azurecontainer.io}"
+    #   use_managed_identity: true
+    #   audience: "api://analytics-mcp"  # Required for MI
+    #   managed_identity_client_id: "${ANALYTICS_MCP_CLIENT_ID}"  # Optional: user-assigned MI
+    #   enabled: true
+    #   timeout: 30
+    #   retry_attempts: 3
+    
+    # Example 2: User Token Passthrough (User-Scoped Access)
+    # Use when: MCP server needs to act as the authenticated user
+    # Requires: User token in RequestContext.authentication['bearer_token']
+    # - name: "user-files-mcp"
+    #   description: "User files MCP requiring user identity"
+    #   transport: "http"
+    #   endpoint: "${MCP_USER_FILES_ENDPOINT:https://user-files-mcp.azurecontainer.io}"
+    #   use_user_token_passthrough: true
+    #   # Note: Token acquired per-request from RequestContext
+    #   # Works with: Azure Container Apps Easy Auth, Azure AD authentication
+    #   enabled: true
+    
+    # Example 3: Hybrid Authentication (Priority Fallback)
+    # Use when: Support both user-initiated requests and service automation
+    # - name: "hybrid-mcp"
+    #   description: "MCP with flexible authentication"
+    #   transport: "http"
+    #   endpoint: "${MCP_HYBRID_ENDPOINT:https://hybrid-mcp.azurecontainer.io}"
+    #   use_user_token_passthrough: true  # Priority 1: Try user token first
+    #   use_managed_identity: true        # Priority 2: Fallback to MI
+    #   audience: "api://hybrid-mcp"      # Required for MI fallback
+    #   # Behavior per request:
+    #   # - If user token in RequestContext → use user token
+    #   # - If no user token → acquire fresh MI token
+    #   # - Both tokens are fresh (acquired per request, no expiration)
+
+# ============================================================================
+# A2A PROTOCOL CONFIGURATION
+# ============================================================================
+
+a2a:
+  agent_card:
+    name: "LiscenceOptimizer"
+    description: "This agent creates executive summary or the results that are obtained by applying usecases on the data"
+    url: "${AGENT_URL}"
+  
+  skills:
+    - name: "analyze_data"
+      description: "Analyze data and generate insights"
+      output_type: "report"
+
+# ============================================================================
+# AUTHENTICATION CONFIGURATION
+# ============================================================================
+
+authentication:
+  enabled: false  # Set to true for production deployment
+  require_auth: false
+  
+  # Paths that don't require authentication
+  public_paths:
+    - "/.well-known/agent-card.json"
+    - "/.well-known/agent.json"
+    - "/health"
+    - "/metrics"
+    - "/docs"
+    - "/openapi.json"
+  
+  # User authentication via Azure Container Apps Easy Auth
+  user_auth:
+    enabled: true
+  
+  # Service authentication via Bearer tokens (for Web Jobs)
+  service_auth:
+    enabled: false  # Enable in production for service-to-service calls
+    tenant_id: "${AZURE_TENANT_ID:00000000-0000-0000-0000-000000000000}"
+    client_id: "${AZURE_CLIENT_ID:00000000-0000-0000-0000-000000000000}"
+    audience: "${AZURE_CLIENT_ID:00000000-0000-0000-0000-000000000000}"  # Defaults to client_id
+    
+    # Optional: Restrict to specific service principals (leave empty to allow all)
+    allowed_service_principals: []
+      # - "${WEB_JOB_MANAGED_IDENTITY_OID}"
+
+# ============================================================================
+# SERVER CONFIGURATION
+# ============================================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  log_level: "${LOG_LEVEL:info}"
