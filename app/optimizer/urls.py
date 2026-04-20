@@ -12,7 +12,6 @@ urlpatterns = [
     path("logout/", views.logout_view, name="logout"),
     path("profile/", views.profile_page, name="profile"),
     path("upload/", views.upload, name="upload"),
-<<<<<<< HEAD
     path("results/", views.results, name="results"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("analysis-logs/", views.analysis_logs, name="analysis_logs"),
@@ -20,11 +19,3 @@ urlpatterns = [
     path("report/download/<str:format_type>/", views.report_download, name="report_download"),
     path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
 ]
-=======
-    path("results/", views.results, name="results"),
-    path("dashboard/", views.dashboard, name="dashboard"),
-    path("report/", views.report_page, name="report"),
-    path("report/download/<str:format_type>/", views.report_download, name="report_download"),
-    path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
-]
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
