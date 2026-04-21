@@ -36,7 +36,6 @@ Usage:
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -62,8 +61,7 @@ INSTALL_PAGE_SIZE  = 35_000
 
 # Demand details: ~7.7 M records. 25 000 per page = ~309 pages.
 # Fetched in parallel using DEMAND_WORKERS threads to finish in minutes, not hours.
-DEMAND_PAGE_SIZE   = 25_000
-DEMAND_WORKERS     = 5        # concurrent HTTP workers for demand pages
+DEMAND_PAGE_SIZE   = 10_000
 
 # How many ORM objects to pass to bulk_create in a single DB call.
 # 500 rows × ~20 fields is safely under PostgreSQL's 65 535 parameter limit.
@@ -344,90 +342,53 @@ def fetch_installations(session: requests.Session, stdout) -> list[dict]:
     return all_records
 
 
-# ── Demand details: concurrent fetch ─────────────────────────────────────────
-
-def _fetch_demand_page_worker(
-    session: requests.Session, skip: int
-) -> tuple[int, list[dict]]:
-    """
-    Thread worker: fetch one demand-detail page at the given $skip offset.
-    Returns (skip, records) so the caller can sort results back into order.
-    """
-    params = {"product_family": PRODUCT_FAMILY, "$top": DEMAND_PAGE_SIZE, "$skip": skip}
-    data   = _fetch_page(session, BASE_URL + DEMAND_ENDPOINT, params)
-    return skip, data.get("data") or []
-
+# ── Demand details: sequential next_page_uri fetch ───────────────────────────
 
 def fetch_demand_details(
     session: requests.Session, total_count: int, stdout
 ) -> list[dict]:
     """
-    Fetch all demand-detail records using a thread pool for parallel HTTP requests.
+    Sequentially page through the demand-details endpoint using next_page_uri.
 
-    Why parallel?
-      309 pages × ~3 s/page = ~15 min sequentially.
-      With 5 concurrent workers it drops to ~3–4 min.
-
-    Strategy:
-      1. Pre-compute every $skip offset from 0 to total_count.
-      2. Submit all as futures to ThreadPoolExecutor.
-      3. Collect results as they complete (as_completed = whichever finishes first).
-      4. Sort by skip offset at the end to restore chronological order.
+    The API does not support arbitrary $skip offsets beyond the first page, so
+    pre-computed parallel offsets return empty results. Following next_page_uri
+    (same strategy as fetch_installations) is the only reliable approach.
     """
-    stdout.write("-- Fetching Demand Details (parallel) ------------------")
+    stdout.write("-- Fetching Demand Details (sequential) ----------------")
 
-    offsets      = list(range(0, total_count + DEMAND_PAGE_SIZE, DEMAND_PAGE_SIZE))
-    total_pages  = len(offsets)
-    page_results = {}   # skip → list[dict]
-    failed       = []
-    done         = 0
-    t_start      = time.time()
+    all_records = []
+    params      = {"product_family": PRODUCT_FAMILY, "$top": DEMAND_PAGE_SIZE, "$skip": 0}
+    url         = BASE_URL + DEMAND_ENDPOINT
+    page        = 1
+    t_start     = time.time()
 
-    stdout.write(
-        f"  {total_count:,} records | {DEMAND_PAGE_SIZE:,}/page "
-        f"| {total_pages} pages | {DEMAND_WORKERS} workers"
-    )
+    while url:
+        t0   = time.time()
+        data = _fetch_page(session, url, params)
 
-    with ThreadPoolExecutor(max_workers=DEMAND_WORKERS) as pool:
-        # Submit every page as an independent future
-        futures = {
-            pool.submit(_fetch_demand_page_worker, session, skip): skip
-            for skip in offsets
-        }
+        records       = data.get("data") or []
+        next_page_uri = data.get("metadata", {}).get("pagination", {}).get("next_page_uri")
 
-        for future in as_completed(futures):
-            skip = futures[future]
-            try:
-                skip_val, records = future.result()
-                page_results[skip_val] = records
-                done += 1
+        all_records.extend(records)
 
-                # Progress log every 10 completed pages to avoid console flood
-                if done % 10 == 0 or done == total_pages:
-                    elapsed  = time.time() - t_start
-                    fetched  = sum(len(v) for v in page_results.values())
-                    rate     = fetched / elapsed if elapsed else 0
-                    eta_sec  = (total_count - fetched) / rate if rate else 0
-                    stdout.write(
-                        f"  Page {done}/{total_pages} | "
-                        f"fetched {fetched:,} | "
-                        f"{rate:,.0f} rec/s | "
-                        f"ETA {int(eta_sec // 60)}m {int(eta_sec % 60)}s"
-                    )
-            except Exception as exc:
-                logger.error("Demand page skip=%d failed: %s", skip, exc)
-                failed.append(skip)
-
-    if failed:
+        elapsed = time.time() - t_start
+        rate    = len(all_records) / elapsed if elapsed else 0
+        eta_sec = (total_count - len(all_records)) / rate if rate else 0
         stdout.write(
-            f"  WARNING: {len(failed)} pages could not be fetched "
-            f"(offsets: {failed[:5]}{'...' if len(failed) > 5 else ''})"
+            f"  Page {page} | got {len(records):,} | "
+            f"total {len(all_records):,} | "
+            f"{rate:,.0f} rec/s | "
+            f"ETA {int(eta_sec // 60)}m {int(eta_sec % 60)}s | "
+            f"{time.time() - t0:.1f}s"
         )
 
-    # Merge pages in ascending skip order → preserves natural record order
-    all_records = []
-    for skip in sorted(page_results):
-        all_records.extend(page_results[skip])
+        if next_page_uri and len(records) == DEMAND_PAGE_SIZE:
+            url    = BASE_URL + next_page_uri
+            params = None
+            page  += 1
+            time.sleep(0.3)
+        else:
+            break
 
     elapsed = time.time() - t_start
     stdout.write(

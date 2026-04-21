@@ -1,14 +1,19 @@
 """
 Rule 2: Software installations on retired devices.
 
-Identifies devices marked as retired in CMDB but still reporting software
-installations. Expects normalized column names including install_status.
+Production results are driven from live database tables:
+- server
+- usu_installation
+
+The core filter remains dataframe-based so it can be reused safely, and this
+module also exposes a DB-backed helper for the live dashboard/results flow.
 
 Enterprise use case (UC 1.2):
 - Install_Status equals "retired"
 - No License Required (Product) equals 0
 """
 import logging
+from typing import Optional
 
 import pandas as pd
 
@@ -53,3 +58,25 @@ def find_retired_devices_with_installations(
 
     logger.info("Total retired devices with software installations: %s", len(retired))
     return retired
+
+
+def find_retired_devices_with_installations_from_db(
+    installation_df: Optional[pd.DataFrame] = None,
+    retired_status: str = RETIRED_STATUS,
+) -> pd.DataFrame:
+    """
+    DB-backed Rule 2 entrypoint used by the live dashboard/results flow.
+
+    When no dataframe is supplied, this pulls normalized installation data from
+    the current Server and USUInstallation tables through the shared DB adapter,
+    then applies the same Rule 2 filter logic.
+    """
+    if installation_df is None:
+        from optimizer.services.db_analysis_service import _build_installations_df
+
+        installation_df = _build_installations_df()
+
+    return find_retired_devices_with_installations(
+        installation_df,
+        retired_status=retired_status,
+    )
