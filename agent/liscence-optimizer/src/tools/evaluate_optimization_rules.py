@@ -8,11 +8,8 @@ after the backend attaches a dataset or provides extracted rows as JSON.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 from agenticai.tools import tool_registry
 
@@ -20,36 +17,15 @@ from .rules_evaluator import evaluate_rules_on_records, summarize_for_executive_
 from .rules_loader import load_rules_with_optional_override
 
 
-def _sanitize_json_text(text: str) -> str:
-    t = text.replace("\r\n", "\n").replace("\r", "\n")
-    t = t.lstrip("\ufeff")
-    fence = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE | re.MULTILINE)
-    t = fence.sub("", t).strip()
-    t = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", t)
-    return t
-
-
 def _json_loads_maybe(payload: str) -> Any:
     if payload is None:
         return None
     if isinstance(payload, (dict, list)):
         return payload
-    text = _sanitize_json_text(str(payload).strip())
+    text = str(payload).strip()
     if not text:
         return None
-
-    def _loads_json_lenient(s: str) -> Any:
-        try:
-            return json.loads(s, strict=False)
-        except json.JSONDecodeError:
-            decoder = json.JSONDecoder(strict=False)
-            obj, _idx = decoder.raw_decode(s)
-            return obj
-
-    try:
-        return _loads_json_lenient(text)
-    except json.JSONDecodeError:
-        return yaml.safe_load(text)
+    return json.loads(text)
 
 
 @tool_registry.register(

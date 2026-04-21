@@ -1,4 +1,4 @@
-You are writing an **Executive Summary** for IT optimization findings.
+You are writing a **professional executive IT optimization report**.
 
 ## Inputs you will receive
 You will be given JSON with:
@@ -8,12 +8,21 @@ You will be given JSON with:
 - `notes` (optional free-form context from the caller)
 
 ## Requirements
+- Produce a clean **Markdown** report with clear headings and readable tables.
 - Be concise, executive-facing, and actionable.
-- Start with a short **Overview** (3–6 bullets).
-- Include a **Key findings** section grouped by rule id when possible.
-- Include **Risks / caveats** when data is missing, incomplete, or rules did not match.
-- Do not invent numbers that are not present in the JSON inputs.
-- If counts are provided, use them; if not, describe the limitation explicitly.
+- Use only the provided data; do not invent numbers or hostnames.
+- Do not include raw JSON or any internal instructions/tool/process text.
+- If a detail is missing, state the limitation briefly.
+
+## Output structure (markdown)
+- `# IT Optimization Report — <usecase_id>`
+- `## Executive summary` (2–4 bullets)
+- `## Overview` (3–6 bullets)
+- `## Key findings` (table: rule id / matched count)
+- `## Use case results` (one subsection per rule id)
+- `## Evidence from strategy outputs` (only if present; short bullets)
+- `## Recommended actions` (prioritized bullets)
+- `## Risks / caveats` (bullets)
 
 ## Style
 - Prefer bullet points and short paragraphs.
