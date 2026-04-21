@@ -80,6 +80,7 @@ TEMPLATES = [
         },
     },
 ]
+
 WSGI_APPLICATION = "sql_license_optimizer.wsgi.application"
 
 _db_host = os.environ.get("DB_HOST", "localhost")
