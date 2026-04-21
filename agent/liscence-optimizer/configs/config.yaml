@@ -101,22 +101,18 @@ executor:
         [REASONING]: Your explanation here in 1-2 sentences about what you're about to do and why.
         
         Example:
-        [REASONING]: I need to check what files are available in this session before processing.
+        [REASONING]: I need to read any attached JSON payload and then call the rules evaluation tool.
         
         Then call the tool. This format is REQUIRED for every single tool call.
       
       tools:
-        # AgenticAI SDK built-in tools
-        - "list_available_files"
-        - "upload_dataframe"
-        - "describe_dataframe"
-        - "execute_sql_query"
-        - "get_table_columns"
-        - "get_table_count"
-        - "list_tables"
+        # AgenticAI SDK built-in tools (registry varies by SDK build/extras — keep this list aligned
+        # with what your environment actually registers, otherwise JSON-RPC calls fail at startup.)
         - "calculator"
         - "calculate_expression"
         - "calculate_statistics"
+        - "read_file"
+        - "read_file_content"
         # Local tools (this repo)
         - "evaluate_optimization_rules"
         - "report_generator"
@@ -134,9 +130,15 @@ executor:
         **Objective:** Normalize inputs and evaluate business rules from `configs/rules.base.yaml`.
 
         **Steps:**
-        1. If the backend attached a dataset, load it with `upload_dataframe` / `describe_dataframe` as needed.
-        2. Build a JSON list of normalized records (snake_case columns) for the VMs/rows you want evaluated.
-        3. Call `evaluate_optimization_rules(records_json=...)` and store the returned JSON using `store_phase_result()`.
+        1. Extract `records_json` (a JSON **array** of objects) from the user message:
+           - Preferred for API clients (Postman): the user message MUST include a fenced block between markers:
+             `RECORDS_JSON_START` and `RECORDS_JSON_END` containing ONLY valid JSON (the array).
+           - Alternative: user pastes a JSON array directly in the message (still must be valid JSON).
+           - Alternative: a JSON file is attached → read with `read_file_content(filename=...)` and parse it.
+           - Alternative: a raw file path is provided → read with `read_file(path=...)` and parse it.
+           - Do NOT assume access to JSON-RPC `params.metadata` fields; the model may not see them.
+        2. Call `evaluate_optimization_rules(records_json=...)` where `records_json` is a **string** whose content is the JSON array text.
+        3. Store the returned JSON using `store_phase_result(phase_number=1, phase_name="Analysis Phase", result_data=<parsed dict>)` so Phase 2 can load it without re-stringifying the tool output.
     
     - name: "Report Generation Phase"
       agent: "main_agent"
@@ -145,9 +147,15 @@ executor:
         **Objective:** Generate an executive summary scaffold from upstream strategy outputs + rule evaluation.
 
         **Steps:**
-        1. Retrieve analysis results using `get_phase_result("Analysis Phase")`.
+        1. Retrieve analysis results using `get_phase_result(phase_number=1)` (phase numbers are integers; there is no string name overload).
         2. Build `strategy_results_json` as a JSON object from the backend (counts, top examples, KPIs).
-        3. Call `report_generator(usecase_id=..., strategy_results_json=..., rules_evaluation_json=<Analysis Phase JSON>)`.
+           - Preferred for API clients (Postman): include markers in the original user message:
+             `STRATEGY_RESULTS_JSON_START` / `STRATEGY_RESULTS_JSON_END` wrapping ONLY valid JSON (an object).
+           - If markers are absent, construct a minimal object from the Analysis Phase output (matched counts / summaries).
+        3. Call `report_generator(usecase_id=..., strategy_results_json=...)`.
+           - `strategy_results_json` must be a JSON **string** (stringified JSON object), not a raw object.
+           - **Preferred:** omit `rules_evaluation_json` (or pass an empty string) so the tool loads Phase 1 rule evaluation from phase storage (`get_phase_result(1)`), avoiding huge pasted JSON that often breaks tool-call escaping.
+           - **Optional override:** pass `rules_evaluation_json` as a stringified JSON object only if it is small and guaranteed valid.
         4. Optionally call `export_report` to save the markdown to a `.md` file for download.
 
 # ============================================================================
