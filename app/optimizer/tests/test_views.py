@@ -1,4 +1,7 @@
 ﻿"""View tests: health, ready, auth redirect."""
+from io import BytesIO
+
+import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -25,6 +28,50 @@ def test_home_redirects_to_login_when_anonymous(client):
     response = client.get(reverse("optimizer:home"))
     assert response.status_code == 302
     assert reverse("optimizer:login") in response.url
+
+
+@pytest.mark.django_db
+def test_login_redirects_to_results_dashboard_by_default(client):
+    user = get_user_model().objects.create_user(username="redirector", password="secret123")
+
+    response = client.post(
+        reverse("optimizer:login"),
+        {"username": user.username, "password": "secret123"},
+    )
+
+    assert response.status_code == 302
+    assert response.url == (
+        f"{reverse('optimizer:results')}"
+        "?rs3_workload=ALL&rs3_filter=PROD_CPU_Optimization&rs3_page=1#dashboard"
+    )
+
+
+@pytest.mark.django_db
+def test_login_preserves_next_parameter(client):
+    user = get_user_model().objects.create_user(username="nextuser", password="secret123")
+    next_url = reverse("optimizer:alerts")
+
+    response = client.post(
+        reverse("optimizer:login"),
+        {"username": user.username, "password": "secret123", "next": next_url},
+    )
+
+    assert response.status_code == 302
+    assert response.url == next_url
+
+
+@pytest.mark.django_db
+def test_authenticated_login_page_redirects_to_results_dashboard_by_default(client):
+    user = get_user_model().objects.create_user(username="alreadyin", password="secret123")
+    client.force_login(user)
+
+    response = client.get(reverse("optimizer:login"))
+
+    assert response.status_code == 302
+    assert response.url == (
+        f"{reverse('optimizer:results')}"
+        "?rs3_workload=ALL&rs3_filter=PROD_CPU_Optimization&rs3_page=1#dashboard"
+    )
 
 
 @pytest.mark.django_db
@@ -82,6 +129,242 @@ def test_results_uses_persisted_analysis_data(client):
     assert response.context["rule2_keys"] == ["device_name", "inventory_status_standard"]
     assert response.context["azure_payg_page"] == [["vm-01", 8], ["vm-02", 16]]
     assert response.context["retired_devices_page"] == [["old-sql-01", "Retired"]]
+
+
+@pytest.mark.django_db
+def test_results_applies_rs3_workload_and_screen_selection(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="rightsizer", password="secret123")
+    client.force_login(user)
+
+    fake_context = {
+        "rule_results": {
+            "azure_payg_count": 0,
+            "azure_payg": [],
+            "retired_count": 0,
+            "retired_devices": [],
+        },
+        "license_metrics": {
+            "total_demand_quantity": 0,
+            "total_license_cost": 0,
+            "by_product": [],
+            "price_distribution": [],
+            "cost_reduction_tips": [],
+        },
+        "rightsizing": {
+            "cpu_optimizations": [
+                {
+                    "server_name": "prod-sql-01",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "Avg_CPU_12m": 8,
+                    "Peak_CPU_12m": 55,
+                    "Current_vCPU": 8,
+                    "Recommended_vCPU": 4,
+                    "Potential_vCPU_Reduction": 4,
+                    "CPU_Recommendation": "Reduce vCPU by ~50% -> 4",
+                    "Optimization_Type": "PROD_CPU_Optimization",
+                    "Recommendation_Type": "PROD_CPU_Recommendation",
+                }
+            ],
+            "ram_optimizations": [
+                {
+                    "server_name": "dev-sql-01",
+                    "Environment": "Development",
+                    "Env_Type": "NON-PROD",
+                    "Avg_FreeMem_12m": 55,
+                    "Min_FreeMem_12m": 25,
+                    "Current_RAM_GiB": 16,
+                    "Recommended_RAM_GiB": 8,
+                    "Potential_RAM_Reduction_GiB": 8,
+                    "RAM_Recommendation": "Reduce RAM by ~40-60% -> 8 GiB",
+                    "Optimization_Type": "NONPROD_RAM_Optimization",
+                    "Recommendation_Type": "NONPROD_RAM_Recommendation",
+                }
+            ],
+            "cpu_candidates": [],
+            "ram_candidates": [],
+            "cpu_filter_options": [
+                "PROD_CPU_Optimization",
+                "PROD_CPU_Recommendation",
+                "NONPROD_CPU_Optimization",
+                "NONPROD_CPU_Recommendation",
+            ],
+            "ram_filter_options": [
+                "PROD_RAM_Optimization",
+                "PROD_RAM_Recommendation",
+                "NONPROD_RAM_Optimization",
+                "NONPROD_RAM_Recommendation",
+            ],
+            "workload_options": ["CPU", "RAM"],
+            "default_workload": "CPU",
+            "default_filter_by_workload": {
+                "CPU": "PROD_CPU_Optimization",
+                "RAM": "PROD_RAM_Optimization",
+            },
+            "screen_filter_options": {
+                "CPU": [
+                    "PROD_CPU_Optimization",
+                    "PROD_CPU_Recommendation",
+                    "NONPROD_CPU_Optimization",
+                    "NONPROD_CPU_Recommendation",
+                ],
+                "RAM": [
+                    "PROD_RAM_Optimization",
+                    "PROD_RAM_Recommendation",
+                    "NONPROD_RAM_Optimization",
+                    "NONPROD_RAM_Recommendation",
+                ],
+            },
+            "screen_summaries": {
+                "CPU": {
+                    "PROD_CPU_Optimization": {
+                        "count": 1,
+                        "prod_count": 1,
+                        "nonprod_count": 0,
+                        "reduction_total": 4,
+                    }
+                },
+                "RAM": {
+                    "NONPROD_RAM_Recommendation": {
+                        "count": 1,
+                        "prod_count": 0,
+                        "nonprod_count": 1,
+                        "reduction_total": 8,
+                    }
+                },
+            },
+            "cpu_chart_data": [],
+            "ram_chart_data": [],
+            "cpu_count": 1,
+            "cpu_prod_count": 1,
+            "cpu_nonprod_count": 0,
+            "ram_count": 1,
+            "ram_prod_count": 0,
+            "ram_nonprod_count": 1,
+            "total_vcpu_reduction": 4,
+            "total_ram_reduction_gib": 8,
+            "error": None,
+        },
+    }
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.compute_live_db_metrics",
+        lambda: fake_context,
+    )
+
+    response = client.get(
+        reverse("optimizer:results"),
+        {
+            "rs3_workload": "RAM",
+            "rs3_filter": "NONPROD_RAM_Recommendation",
+            "rs3_page": "7",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.context["rs3_selected_workload"] == "RAM"
+    assert response.context["rs3_selected_filter"] == "NONPROD_RAM_Recommendation"
+    assert response.context["rs3_page"] == 1
+    assert response.context["rs3_filter_options"] == [
+        "PROD_RAM_Optimization",
+        "PROD_RAM_Recommendation",
+        "NONPROD_RAM_Optimization",
+        "NONPROD_RAM_Recommendation",
+    ]
+    assert response.context["rs3_keys"] == [
+        "server_name",
+        "Environment",
+        "Env_Type",
+        "Current_RAM_GiB",
+        "Recommended_RAM_GiB",
+        "RAM_Recommendation",
+    ]
+    assert response.context["rs3_selected_summary"] == {
+        "count": 1,
+        "prod_count": 0,
+        "nonprod_count": 1,
+        "reduction_total": 8,
+    }
+    assert response.context["rightsizing_selected_page"] == [
+        ["dev-sql-01", "Development", "NON-PROD", 16, 8, "Reduce RAM by ~40-60% -> 8 GiB"]
+    ]
+    assert [option["label"] for option in response.context["download_sheet_options"]] == [
+        "Prod Cpu Optimization",
+        "Prod Cpu Recommendation",
+        "Nonprod Cpu Optimization",
+        "Nonprod Cpu Recommendation",
+        "Prod Ram Optimization",
+        "Prod Ram Recommendation",
+        "Nonprod Ram Optimization",
+        "Nonprod Ram Recommendation",
+    ]
+
+
+@pytest.mark.django_db
+def test_download_rightsizing_sheet_exports_selected_screen(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="sheetdl", password="secret123")
+    client.force_login(user)
+
+    export_df = pd.DataFrame(
+        [
+            {
+                "Number": "123",
+                "Server name": "prod-sql-01",
+                "Environment": "Production",
+                "Avg_CPU_12m": 8,
+                "Peak_CPU_12m": 55,
+                "Current_vCPU": 8,
+                "Current_RAM_GiB": 32,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.build_rightsizing_sheet_export",
+        lambda sheet_key: export_df,
+    )
+
+    response = client.get(
+        reverse("optimizer:download_rightsizing_sheet", args=["PROD_CPU_Optimization"])
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "prod_cpu_optimization.xlsx" in response["Content-Disposition"]
+
+    df = pd.read_excel(BytesIO(response.content))
+    assert list(df.columns) == [
+        "Number",
+        "Server name",
+        "Environment",
+        "Avg_CPU_12m",
+        "Peak_CPU_12m",
+        "Current_vCPU",
+        "Current_RAM_GiB",
+    ]
+    assert df.to_dict("records") == [
+        {
+            "Number": 123,
+            "Server name": "prod-sql-01",
+            "Environment": "Production",
+            "Avg_CPU_12m": 8,
+            "Peak_CPU_12m": 55,
+            "Current_vCPU": 8,
+            "Current_RAM_GiB": 32,
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_download_rightsizing_sheet_rejects_invalid_sheet(client):
+    user = get_user_model().objects.create_user(username="bad-sheet", password="secret123")
+    client.force_login(user)
+
+    response = client.get(
+        reverse("optimizer:download_rightsizing_sheet", args=["UNKNOWN_SHEET"])
+    )
+
+    assert response.status_code == 400
 
 
 @pytest.mark.django_db

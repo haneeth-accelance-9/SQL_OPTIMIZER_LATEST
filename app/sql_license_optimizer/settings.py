@@ -75,6 +75,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "optimizer.context_processors.notification_context",
             ],
         },
     },
@@ -90,7 +91,8 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
         "HOST":     _db_host,
         "PORT":     os.environ.get("DB_PORT", "5432"),
-        "OPTIONS":  {"sslmode": "require"} if "azure.com" in _db_host else {},
+        "OPTIONS":  {"sslmode": "require", "connect_timeout": 10} if "azure.com" in _db_host else {},
+        "CONN_MAX_AGE": 60,
     }
 }
 AUTH_PASSWORD_VALIDATORS = [

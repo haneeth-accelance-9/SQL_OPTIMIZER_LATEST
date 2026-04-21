@@ -1,8 +1,12 @@
 """
-Rule 1: Azure BYOL → PAYG Optimization.
+Rule 1: Azure BYOL to PAYG Optimization.
 
-Identifies SQL Server installations in Azure environments eligible to switch
-from BYOL to PAYG. Expects normalized (snake_case) column names.
+Production results are driven from live database tables:
+- server
+- usu_installation
+
+The core filter remains dataframe-based so it can be reused safely, and this
+module also exposes a DB-backed helper for the live dashboard/results flow.
 
 Enterprise use case (UC 1.1):
 - u_hosting_zone is Public Cloud or Private Cloud AVS
@@ -21,7 +25,6 @@ logger = logging.getLogger(__name__)
 COL_HOSTING = "u_hosting_zone"
 COL_INVENTORY_STATUS = "inventory_status_standard"
 
-# UC 1.1: Public Cloud and Private Cloud AVS only
 DEFAULT_TARGET_ZONES = ["Public Cloud", "Private Cloud AVS"]
 EXCLUDED_INVENTORY_PHRASE = "license included"
 
@@ -32,7 +35,8 @@ def find_azure_payg_candidates(
     excluded_inventory_phrase: str = EXCLUDED_INVENTORY_PHRASE,
 ) -> pd.DataFrame:
     """
-    Identify Azure devices eligible for BYOL → PAYG migration (Installation sheet).
+    Identify Azure devices eligible for BYOL to PAYG migration from normalized
+    installation data.
 
     Conditions (UC 1.1):
     - u_hosting_zone in (Public Cloud, Private Cloud AVS) by default
@@ -62,5 +66,29 @@ def find_azure_payg_candidates(
     )
     filtered_df = installation_df.loc[mask].copy()
 
-    logger.info("Total BYOL → PAYG candidates found: %s", len(filtered_df))
+    logger.info("Total BYOL to PAYG candidates found: %s", len(filtered_df))
     return filtered_df
+
+
+def find_azure_payg_candidates_from_db(
+    installation_df: Optional[pd.DataFrame] = None,
+    target_zones: Optional[List[str]] = None,
+    excluded_inventory_phrase: str = EXCLUDED_INVENTORY_PHRASE,
+) -> pd.DataFrame:
+    """
+    DB-backed Rule 1 entrypoint used by the live dashboard/results flow.
+
+    When no dataframe is supplied, this pulls normalized installation data from
+    the current Server and USUInstallation tables through the shared DB adapter,
+    then applies the same Rule 1 filter logic.
+    """
+    if installation_df is None:
+        from optimizer.services.db_analysis_service import _build_installations_df
+
+        installation_df = _build_installations_df()
+
+    return find_azure_payg_candidates(
+        installation_df,
+        target_zones=target_zones,
+        excluded_inventory_phrase=excluded_inventory_phrase,
+    )

@@ -55,6 +55,11 @@ MONTH_ORDER: Dict[str, int] = {
     "Sept": 7, "Oct": 8, "Nov": 9, "Dec": 10, "Jan": 11, "Feb": 12,
 }
 
+WORKLOAD_CPU = "CPU"
+WORKLOAD_RAM = "RAM"
+DETAIL_OPTIMIZATION = "Optimization"
+DETAIL_RECOMMENDATION = "Recommendation"
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,6 +92,11 @@ def _round_ram(value: float, min_gib: float) -> float:
         if size >= min_gib and size <= value:
             result = size
     return result
+
+
+def _build_raw_detail_type(env_type: str, workload: str, detail_kind: str) -> str:
+    normalized_env = str(env_type or "").upper().replace("-", "").replace(" ", "")
+    return f"{normalized_env}_{workload}_{detail_kind}"
 
 
 # ── Metric computation ────────────────────────────────────────────────────────
@@ -124,7 +134,7 @@ def compute_utilisation_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── UC 3.1 – CPU eligibility ──────────────────────────────────────────────────
 
-def find_cpu_rightsizing_candidates(
+def find_cpu_rightsizing_optimizations(
     df: pd.DataFrame,
     non_prod_envs: List[str] = NON_PROD_ENVS,
 ) -> pd.DataFrame:
@@ -132,7 +142,7 @@ def find_cpu_rightsizing_candidates(
     Identify VMs eligible for CPU right-sizing (UC 3.1) across PROD and NON-PROD.
 
     Returns a single DataFrame with an added 'Env_Type' column
-    ('PROD' or 'NON-PROD') and CPU recommendation columns.
+    ('PROD' or 'NON-PROD') plus raw-detail type labels used by the UI filters.
     """
     prod_eligible    = _cpu_prod_eligible(df, non_prod_envs)
     nonprod_eligible = _cpu_nonprod_eligible(df, non_prod_envs)
@@ -142,13 +152,24 @@ def find_cpu_rightsizing_candidates(
 
     prod_rec["Env_Type"]    = "PROD"
     nonprod_rec["Env_Type"] = "NON-PROD"
+    prod_rec["Optimization_Type"] = _build_raw_detail_type("PROD", WORKLOAD_CPU, DETAIL_OPTIMIZATION)
+    prod_rec["Recommendation_Type"] = _build_raw_detail_type("PROD", WORKLOAD_CPU, DETAIL_RECOMMENDATION)
+    nonprod_rec["Optimization_Type"] = _build_raw_detail_type("NONPROD", WORKLOAD_CPU, DETAIL_OPTIMIZATION)
+    nonprod_rec["Recommendation_Type"] = _build_raw_detail_type("NONPROD", WORKLOAD_CPU, DETAIL_RECOMMENDATION)
 
     result = pd.concat([prod_rec, nonprod_rec], ignore_index=True)
     logger.info(
-        "CPU right-sizing candidates – PROD: %d, NON-PROD: %d, TOTAL: %d",
+        "CPU right-sizing optimizations - PROD: %d, NON-PROD: %d, TOTAL: %d",
         len(prod_rec), len(nonprod_rec), len(result),
     )
     return result
+
+def find_cpu_rightsizing_candidates(
+    df: pd.DataFrame,
+    non_prod_envs: List[str] = NON_PROD_ENVS,
+) -> pd.DataFrame:
+    """Backward-compatible alias for CPU right-sizing optimizations."""
+    return find_cpu_rightsizing_optimizations(df, non_prod_envs=non_prod_envs)
 
 
 def _cpu_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
@@ -177,6 +198,10 @@ def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
       Peak > 70%                       → no reduction (peak protection)
     """
     df = eligible_df.copy()
+    if df.empty:
+        df["CPU_Recommendation"] = pd.Series(dtype="object")
+        df["Recommended_vCPU"] = pd.Series(dtype="float")
+        return df
 
     def _rec(row):
         avg, peak, vcpu = row["Avg_CPU_12m"], row["Peak_CPU_12m"], row["Current_vCPU"]
@@ -207,6 +232,10 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
       Peak > 80%                        → no reduction
     """
     df = eligible_df.copy()
+    if df.empty:
+        df["CPU_Recommendation"] = pd.Series(dtype="object")
+        df["Recommended_vCPU"] = pd.Series(dtype="float")
+        return df
 
     def _rec(row):
         avg, peak, vcpu = row["Avg_CPU_12m"], row["Peak_CPU_12m"], row["Current_vCPU"]
@@ -231,7 +260,7 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
 
 # ── UC 3.2 – RAM eligibility ──────────────────────────────────────────────────
 
-def find_ram_rightsizing_candidates(
+def find_ram_rightsizing_optimizations(
     df: pd.DataFrame,
     non_prod_envs: List[str] = NON_PROD_ENVS,
 ) -> pd.DataFrame:
@@ -239,7 +268,7 @@ def find_ram_rightsizing_candidates(
     Identify VMs eligible for RAM right-sizing (UC 3.2) across PROD and NON-PROD.
 
     Returns a single DataFrame with an added 'Env_Type' column
-    ('PROD' or 'NON-PROD') and RAM recommendation columns.
+    ('PROD' or 'NON-PROD') plus raw-detail type labels used by the UI filters.
     """
     prod_eligible    = _ram_prod_eligible(df, non_prod_envs)
     nonprod_eligible = _ram_nonprod_eligible(df, non_prod_envs)
@@ -249,13 +278,24 @@ def find_ram_rightsizing_candidates(
 
     prod_rec["Env_Type"]    = "PROD"
     nonprod_rec["Env_Type"] = "NON-PROD"
+    prod_rec["Optimization_Type"] = _build_raw_detail_type("PROD", WORKLOAD_RAM, DETAIL_OPTIMIZATION)
+    prod_rec["Recommendation_Type"] = _build_raw_detail_type("PROD", WORKLOAD_RAM, DETAIL_RECOMMENDATION)
+    nonprod_rec["Optimization_Type"] = _build_raw_detail_type("NONPROD", WORKLOAD_RAM, DETAIL_OPTIMIZATION)
+    nonprod_rec["Recommendation_Type"] = _build_raw_detail_type("NONPROD", WORKLOAD_RAM, DETAIL_RECOMMENDATION)
 
     result = pd.concat([prod_rec, nonprod_rec], ignore_index=True)
     logger.info(
-        "RAM right-sizing candidates – PROD: %d, NON-PROD: %d, TOTAL: %d",
+        "RAM right-sizing optimizations - PROD: %d, NON-PROD: %d, TOTAL: %d",
         len(prod_rec), len(nonprod_rec), len(result),
     )
     return result
+
+def find_ram_rightsizing_candidates(
+    df: pd.DataFrame,
+    non_prod_envs: List[str] = NON_PROD_ENVS,
+) -> pd.DataFrame:
+    """Backward-compatible alias for RAM right-sizing optimizations."""
+    return find_ram_rightsizing_optimizations(df, non_prod_envs=non_prod_envs)
 
 
 def _ram_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
@@ -283,6 +323,10 @@ def _ram_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
       Avg_FreeMem > 50% AND Min >= 30%      → reduce by ~40–50%, rounded, min 8 GiB
     """
     df = eligible_df.copy()
+    if df.empty:
+        df["RAM_Recommendation"] = pd.Series(dtype="object")
+        df["Recommended_RAM_GiB"] = pd.Series(dtype="float")
+        return df
 
     def _rec(row):
         avg_mem, min_mem, ram = row["Avg_FreeMem_12m"], row["Min_FreeMem_12m"], row["Current_RAM_GiB"]
@@ -309,6 +353,10 @@ def _ram_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
       Avg_FreeMem > 50% AND Min >= 25%      → reduce by ~40–60%, rounded, min 4 GiB
     """
     df = eligible_df.copy()
+    if df.empty:
+        df["RAM_Recommendation"] = pd.Series(dtype="object")
+        df["Recommended_RAM_GiB"] = pd.Series(dtype="float")
+        return df
 
     def _rec(row):
         avg_mem, min_mem, ram = row["Avg_FreeMem_12m"], row["Min_FreeMem_12m"], row["Current_RAM_GiB"]
