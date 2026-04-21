@@ -257,7 +257,7 @@ authentication:
   
   # User authentication via Azure Container Apps Easy Auth
   user_auth:
-    enabled: true
+    enabled: false
   
   # Service authentication via Bearer tokens (for Web Jobs)
   service_auth:
