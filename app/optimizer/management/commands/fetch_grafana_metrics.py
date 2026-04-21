@@ -4,18 +4,16 @@ Management command: fetch_grafana_metrics
 Queries the Grafana-managed Mimir (Prometheus) cluster directly via the
 Prometheus HTTP API and saves raw metric readings into grafana_metric_snapshot.
 
-Architecture — Grafana Mimir (NOT the Grafana frontend proxy):
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  This command talks directly to the Mimir Prometheus endpoint:  │
-  │  {GRAFANA_BASE_URL}/api/prom/api/v1/query_range                 │
-  │                                                                  │
-  │  Auth  : HTTP Basic Auth                                         │
-  │          username = GRAFANA_USER  (e.g. 2834315)                │
-  │          password = GRAFANA_TOKEN (glc_eyJ…)                    │
-  │                                                                  │
-  │  Header: X-Scope-OrgID = GRAFANA_TENANT_ID                      │
-  │          (Mimir multi-tenancy — required for every request)      │
-  └─────────────────────────────────────────────────────────────────┘
+Architecture -- Grafana Mimir (NOT the Grafana frontend proxy):
+  This command talks directly to the Mimir Prometheus endpoint:
+    {GRAFANA_BASE_URL}/api/prom/api/v1/query_range
+
+  Auth  : HTTP Basic Auth
+          username = GRAFANA_USER  (e.g. 2834315)
+          password = GRAFANA_TOKEN (glc_eyJ...)
+
+  Header: X-Scope-OrgID = GRAFANA_TENANT_ID
+          (Mimir multi-tenancy -- required for every request)
 
 Prometheus range_query response:
   {
@@ -33,14 +31,22 @@ Prometheus range_query response:
 
 Each series in "result" = one server/instance.
 Each [timestamp, value] pair = one GrafanaMetricSnapshot row.
+Duplicate rows are silently ignored (ignore_conflicts=True) so overlapping
+fetch windows never cause constraint errors.
 
-Cron schedule (settings.py CRONJOBS): daily at 01:00.
-Register: python manage.py crontab add
+Cron schedule (settings.py CRONJOBS): every hour at minute 0.
+  Range  : now-2h   (2-hour overlap window prevents data gaps on delayed runs)
+  Step   : 5m       (12 data points per hour per metric per server)
+
+Register : python manage.py crontab add
+Remove   : python manage.py crontab remove
+Show     : python manage.py crontab show
 
 Usage:
   python manage.py fetch_grafana_metrics
   python manage.py fetch_grafana_metrics --dry-run
-  python manage.py fetch_grafana_metrics --range now-6h --step 30m
+  python manage.py fetch_grafana_metrics --range now-6h --step 1m
+  python manage.py fetch_grafana_metrics --range now-24h --step 1h
 """
 
 import logging
@@ -61,8 +67,8 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_BASE_URL   = "https://prometheus-dedicated-64-prod-eu-west-5.grafana.net"
 _DEFAULT_DASHBOARD  = "primary"
-_DEFAULT_RANGE      = "now-24h"   # fetch previous 24 h on each daily run
-_DEFAULT_STEP       = "1h"        # one data point per hour = 24 rows/metric/server/day
+_DEFAULT_RANGE      = "now-2h"    # 2h overlap window covers any run delay up to 1h
+_DEFAULT_STEP       = "5m"        # 5-min resolution = 12 data points per hour per metric
 _DEFAULT_TENANT     = "default"   # Django Tenant name (not Grafana tenant)
 _DEFAULT_TIMEOUT    = 30
 DB_BATCH_SIZE       = 500
@@ -286,8 +292,9 @@ def _to_decimal(value) -> Decimal | None:
 
 class Command(BaseCommand):
     help = (
-        "Daily Grafana/Mimir sync: query Prometheus metrics via the remote-read API "
-        "and save raw readings into grafana_metric_snapshot."
+        "Hourly Grafana/Mimir sync: query Prometheus metrics for the last 2 hours "
+        "(5-min step) and save raw readings into grafana_metric_snapshot. "
+        "Duplicate rows are silently ignored so overlapping windows are safe."
     )
 
     def add_arguments(self, parser):

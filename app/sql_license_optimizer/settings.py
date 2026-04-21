@@ -237,14 +237,16 @@ GRAFANA_TIMEOUT = int(os.environ.get("GRAFANA_TIMEOUT", "30"))
 # 'primary' = production dashboard; change to 'testing' for staging.
 GRAFANA_DASHBOARD = os.environ.get("GRAFANA_DASHBOARD", "primary")
 
-# How far back each daily fetch looks. 'now-24h' means the last 24 hours.
-# Increase (e.g. 'now-48h') only for catch-up runs after a missed day.
-GRAFANA_FETCH_RANGE = os.environ.get("GRAFANA_FETCH_RANGE", "now-24h")
+# How far back each hourly fetch looks.
+# 'now-2h' = a 2-hour overlap window so a delayed run never misses data.
+# Duplicate snapshots are silently ignored (ignore_conflicts=True in bulk_create).
+# Override via env var for one-off catch-up runs, e.g. GRAFANA_FETCH_RANGE=now-48h.
+GRAFANA_FETCH_RANGE = os.environ.get("GRAFANA_FETCH_RANGE", "now-2h")
 
 # Prometheus query resolution step.
-# '1h' = one data point per hour = 24 snapshot rows per metric per server per day.
-# Use '30m' for finer granularity (doubles row count).
-GRAFANA_STEP = os.environ.get("GRAFANA_STEP", "1h")
+# '5m' = one data point per 5 minutes = 12 snapshot rows per metric per server per hour.
+# Use '1m' for near-real-time granularity (5x more rows); use '1h' to reduce volume.
+GRAFANA_STEP = os.environ.get("GRAFANA_STEP", "5m")
 
 # How many days to keep raw GrafanaMetricSnapshot rows before the monthly
 # rollup job (rollup_grafana_metrics) purges them to save DB space.
@@ -267,10 +269,13 @@ CRONJOBS = [
         {},
         ">> " + str(BASE_DIR / "logs" / "usu_sync.log") + " 2>&1",
     ),
-    # ── Grafana metrics fetch — every day at 01:00 ────────────────────────────
-    # Pulls the last 24 h of Prometheus metrics and saves raw snapshots to DB.
+    # ── Grafana metrics fetch — every hour at minute 0 ───────────────────────
+    # Pulls the last 2 h of Prometheus metrics (5-min step) each run.
+    # 2-hour overlap window means a delayed/missed run never loses data.
+    # Duplicate snapshot rows are silently ignored by bulk_create.
+    # Row volume: 8 metrics x ~N servers x 12 pts/hr x 24 hrs = ~2,300 rows/day per server.
     (
-        "0 1 * * *",
+        "0 * * * *",
         "django.core.management.call_command",
         ["fetch_grafana_metrics"],
         {},
