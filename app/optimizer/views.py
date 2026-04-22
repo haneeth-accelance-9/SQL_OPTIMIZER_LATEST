@@ -20,13 +20,11 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib import messages
 from django.utils import timezone
 
-<<<<<<< HEAD
 import pandas as pd
 from optimizer.models import AnalysisSession, UserProfile
 from optimizer.forms import SignUpForm, UserProfileForm
-from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
+from optimizer.services.analysis_service import run_analysis, build_dashboard_context
 from optimizer.services.analysis_logs import build_analysis_summary_metrics, get_user_analysis_logs
-from optimizer.services.excel_processor import ExcelProcessor
 from optimizer.services.report_export import (
     export_pdf,
     export_docx,
@@ -34,15 +32,6 @@ from optimizer.services.report_export import (
     normalize_report_content_text,
     build_report_markdown,
 )
-=======
-import pandas as pd
-from optimizer.models import AnalysisSession
-from optimizer.forms import SignUpForm, UserProfileForm
-from optimizer.models import UserProfile
-from optimizer.services.analysis_service import run_analysis, get_sheet_config, build_dashboard_context, _build_payg_zone_breakdown
-from optimizer.services.excel_processor import ExcelProcessor
-from optimizer.services.report_export import export_pdf, export_docx, normalize_report_title_text
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 
 try:
     from optimizer.services.plotly_charts import get_all_plotly_specs
@@ -81,13 +70,14 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-<<<<<<< HEAD
 REPORT_FORMAT_ALIASES = {
     "excel": "xlsx",
 }
 ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx", "xlsx", *REPORT_FORMAT_ALIASES.keys()})
 ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
 PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
+POST_LOGIN_RESULTS_QUERY = "rs3_workload=ALL&rs3_filter=PROD_CPU_Optimization&rs3_page=1"
+POST_LOGIN_RESULTS_FRAGMENT = "dashboard"
 
 
 def _build_profile_initials(user) -> str:
@@ -121,103 +111,17 @@ def _build_profile_context(user, profile, form=None):
     }
 
 
-=======
-ALLOWED_REPORT_FORMATS = frozenset({"pdf", "docx"})
-ALLOWED_RULE_IDS = frozenset({"rule1", "rule2"})
-PAYG_ZONE_BREAKDOWN_LABELS = ["Public Cloud", "Private Cloud AVS"]
-
-
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
 def _get_or_create_user_profile(user):
     """Return the persisted profile row for the authenticated user."""
     profile, _ = UserProfile.objects.get_or_create(user=user)
     return profile
 
-<<<<<<< HEAD
-=======
 
-def _build_profile_context(user, profile, form=None):
-    """Shared template context for the profile page."""
-    full_name = f"{user.first_name} {user.last_name}".strip()
-    display_name = full_name or user.username
-    initials = (
-        "".join(
-            part[0].upper()
-            for part in [user.first_name.strip(), user.last_name.strip()]
-            if part
-        )[:2]
-        or user.username[:1].upper()
-        or "U"
-    )
-    return {
-        "title": "Profile",
-        "profile_form": form or UserProfileForm(instance=profile, user=user),
-        "profile_image_url": profile.image_url,
-        "profile_team_name": profile.team_name or "Not set yet",
-        "profile_display_name": display_name,
-        "profile_initials": initials,
-        "profile_email": user.email or "Not set yet",
-        "profile_first_name": user.first_name or "Not set yet",
-        "profile_last_name": user.last_name or "Not set yet",
-        "profile_username": user.username,
-    }
+def _build_post_login_redirect_url() -> str:
+    """Return the default authenticated landing page for login flows."""
+    return f"{reverse('optimizer:results')}?{POST_LOGIN_RESULTS_QUERY}#{POST_LOGIN_RESULTS_FRAGMENT}"
 
 
-def _normalize_analysis_context(analysis):
-    """Return a predictable render context from a persisted analysis record."""
-    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
-    context = dict(raw_context)
-    context["rule_results"] = context.get("rule_results") or {}
-    context["license_metrics"] = context.get("license_metrics") or {}
-    context["sheet_names_used"] = context.get("sheet_names_used") or {}
-    context["file_name"] = context.get("file_name") or analysis.file_name or ""
-    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
-    return context
-
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
-
-def _get_analysis_file_path(analysis):
-    """Resolve the persisted upload path for an analysis record when it still exists on disk."""
-    if not analysis or not analysis.file_path:
-        return None
-    upload_dir = getattr(settings, "MEDIA_ROOT", None) or os.path.join(settings.BASE_DIR, "uploads")
-    candidate = os.path.join(upload_dir, analysis.file_path)
-    return candidate if os.path.exists(candidate) else None
-
-
-def _ensure_payg_zone_breakdown(analysis, context):
-    """Backfill payg zone breakdown from the stored upload when older analyses do not have it yet."""
-    rule_results = context.get("rule_results") or {}
-    payg_zone_breakdown = rule_results.get("payg_zone_breakdown") or {}
-    existing_labels = list(payg_zone_breakdown.get("labels") or [])
-    has_current = isinstance(payg_zone_breakdown.get("current"), list) and len(payg_zone_breakdown.get("current")) == len(PAYG_ZONE_BREAKDOWN_LABELS)
-    has_estimated = isinstance(payg_zone_breakdown.get("estimated"), list) and len(payg_zone_breakdown.get("estimated")) == len(PAYG_ZONE_BREAKDOWN_LABELS)
-    if existing_labels == PAYG_ZONE_BREAKDOWN_LABELS and has_current and has_estimated:
-        return context
-
-    file_path = _get_analysis_file_path(analysis)
-    if not file_path:
-        return context
-
-    try:
-        sheets = get_sheet_config()
-        data = ExcelProcessor(
-            sheet_installations=sheets["installations"],
-            sheet_demand=sheets["demand"],
-            sheet_prices=sheets["prices"],
-            sheet_optimization=sheets["optimization"],
-            sheet_helpful_reports=sheets.get("helpful_reports"),
-        ).load_file(file_path)
-        installations_df = data.get("installations")
-        if isinstance(installations_df, pd.DataFrame):
-            rule_results["payg_zone_breakdown"] = _build_payg_zone_breakdown(
-                installations_df,
-                rule_results.get("azure_payg") or [],
-            )
-            context["rule_results"] = rule_results
-    except Exception as e:
-        logger.warning("PAYG zone breakdown backfill failed for analysis_id=%s: %s", getattr(analysis, "id", None), e)
-    return context
 
 
 def _get_analysis_record(request):
@@ -289,12 +193,245 @@ def _build_report_render_context(context):
     }
 
 
+def _get_db_context_for_report():
+    """
+    Build a fully-populated report context from live DB data.
+    Generates report text (AI if enabled, fallback otherwise) and flattens
+    savings keys so _build_report_render_context works correctly.
+    """
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+    from optimizer.services.ai_report_generator import generate_report_text, get_fallback_report
+
+    context = compute_live_db_metrics()
+
+    # Flatten savings so _build_report_render_context can read them
+    dash = build_dashboard_context(context)
+    context["azure_payg_savings"] = dash.get("azure_payg_savings", 0)
+    context["retired_devices_savings"] = dash.get("retired_devices_savings", 0)
+
+    rr = context.get("rule_results", {})
+    lm = context.get("license_metrics", {})
+    report_context = {
+        "azure_payg_count": rr.get("azure_payg_count", 0),
+        "retired_count": rr.get("retired_count", 0),
+        "total_demand_quantity": lm.get("total_demand_quantity", 0),
+        "total_license_cost": lm.get("total_license_cost", 0),
+        "by_product": lm.get("by_product", []),
+        "demand_row_count": lm.get("demand_row_count", 0),
+    }
+
+    report_text = None
+    if getattr(settings, "OPTIMIZER_AI_REPORT_ENABLED", True):
+        try:
+            report_text = generate_report_text(report_context)
+        except Exception as e:
+            logger.warning("AI report generation failed: %s", e)
+
+    used_fallback = not bool(report_text)
+    if not report_text:
+        report_text = get_fallback_report(report_context)
+
+    context["report_text"] = report_text or ""
+    context["report_used_fallback"] = used_fallback
+    context["title"] = "IT License and Cost Optimization Report"
+    context["data_source"] = "database"
+    return context
+
+
 def _get_page_number(request, param_name, default=1):
     """Parse a positive integer query param with a safe fallback."""
     try:
         return max(1, int(request.GET.get(param_name, default)))
     except (TypeError, ValueError):
         return default
+
+
+RS3_CPU_OPTIMIZATION_COLUMNS = [
+    "server_name",
+    "is_virtual",
+    "Environment",
+    "Env_Type",
+    "Avg_CPU_12m",
+    "Peak_CPU_12m",
+    "Current_vCPU",
+    "Potential_vCPU_Reduction",
+]
+
+RS3_RAM_OPTIMIZATION_COLUMNS = [
+    "server_name",
+    "is_virtual",
+    "Environment",
+    "Env_Type",
+    "Avg_FreeMem_12m",
+    "Min_FreeMem_12m",
+    "Current_RAM_GiB",
+    "Potential_RAM_Reduction_GiB",
+]
+
+RS3_CPU_RECOMMENDATION_COLUMNS = [
+    "server_name",
+    "is_virtual",
+    "Environment",
+    "Env_Type",
+    "Current_vCPU",
+    "Recommended_vCPU",
+    "CPU_Recommendation",
+]
+
+RS3_RAM_RECOMMENDATION_COLUMNS = [
+    "server_name",
+    "is_virtual",
+    "Environment",
+    "Env_Type",
+    "Current_RAM_GiB",
+    "Recommended_RAM_GiB",
+    "RAM_Recommendation",
+]
+
+RS3_WORKLOAD_DEFAULT = "ALL"
+RS3_DEFAULT_FILTER_BY_WORKLOAD = {
+    "CPU": "PROD_CPU_Optimization",
+    "RAM": "PROD_RAM_Optimization",
+}
+RS3_SCREEN_FILTER_OPTIONS = {
+    "CPU": [
+        "PROD_CPU_Optimization",
+        "PROD_CPU_Recommendation",
+        "NONPROD_CPU_Optimization",
+        "NONPROD_CPU_Recommendation",
+    ],
+    "RAM": [
+        "PROD_RAM_Optimization",
+        "PROD_RAM_Recommendation",
+        "NONPROD_RAM_Optimization",
+        "NONPROD_RAM_Recommendation",
+    ],
+}
+RS3_DOWNLOAD_SHEET_KEYS = tuple(
+    RS3_SCREEN_FILTER_OPTIONS["CPU"] + RS3_SCREEN_FILTER_OPTIONS["RAM"]
+)
+
+
+def _is_rs3_recommendation_filter(filter_value):
+    return str(filter_value or "").endswith("_Recommendation")
+
+
+def _get_rs3_filter_field(filter_value):
+    return "Recommendation_Type" if _is_rs3_recommendation_filter(filter_value) else "Optimization_Type"
+
+
+def _filter_rs3_records(records, filter_value):
+    if not filter_value:
+        return list(records or [])
+    filter_field = _get_rs3_filter_field(filter_value)
+    return [
+        record
+        for record in (records or [])
+        if str(record.get(filter_field) or "") == str(filter_value)
+    ]
+
+
+def _get_rs3_columns(workload, filter_value):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    if normalized_workload == "RAM":
+        return (
+            RS3_RAM_RECOMMENDATION_COLUMNS
+            if _is_rs3_recommendation_filter(filter_value)
+            else RS3_RAM_OPTIMIZATION_COLUMNS
+        )
+    return (
+        RS3_CPU_RECOMMENDATION_COLUMNS
+        if _is_rs3_recommendation_filter(filter_value)
+        else RS3_CPU_OPTIMIZATION_COLUMNS
+    )
+
+
+def _get_rs3_filter_options(rs, workload):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    generic_options = (rs.get("screen_filter_options") or {}).get(normalized_workload)
+    if generic_options:
+        return list(generic_options)
+    if normalized_workload == "RAM":
+        return list(rs.get("ram_filter_options") or RS3_SCREEN_FILTER_OPTIONS["RAM"])
+    return list(rs.get("cpu_filter_options") or RS3_SCREEN_FILTER_OPTIONS["CPU"])
+
+
+def _get_rs3_default_filter(rs, workload):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    defaults = rs.get("default_filter_by_workload") or RS3_DEFAULT_FILTER_BY_WORKLOAD
+    fallback = defaults.get(normalized_workload) or RS3_DEFAULT_FILTER_BY_WORKLOAD.get(normalized_workload, "")
+    options = _get_rs3_filter_options(rs, normalized_workload)
+    if fallback in options:
+        return fallback
+    return options[0] if options else fallback
+
+
+def _get_rs3_summary(rs, workload, filter_value, records):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    summaries = ((rs.get("screen_summaries") or {}).get(normalized_workload) or {})
+    summary = summaries.get(filter_value)
+    if summary:
+        return summary
+
+    selected = _filter_rs3_records(records, filter_value)
+    reduction_key = "Potential_RAM_Reduction_GiB" if normalized_workload == "RAM" else "Potential_vCPU_Reduction"
+    reduction_total = 0.0
+    for record in selected:
+        try:
+            reduction_total += float(record.get(reduction_key) or 0)
+        except (TypeError, ValueError):
+            continue
+    return {
+        "count": len(selected),
+        "prod_count": sum(str(record.get("Env_Type") or "") == "PROD" for record in selected),
+        "nonprod_count": sum(str(record.get("Env_Type") or "") == "NON-PROD" for record in selected),
+        "reduction_total": round(reduction_total, 1),
+    }
+
+
+def _get_rs3_workload_for_filter(filter_value):
+    normalized = str(filter_value or "").upper()
+    return "RAM" if "_RAM_" in normalized else "CPU"
+
+
+def _format_rs3_sheet_label(filter_value):
+    parts = [segment.capitalize() for segment in str(filter_value or "").split("_") if segment]
+    return " ".join(parts)
+
+
+def _build_rs3_download_sheet_options(rs):
+    screen_options = (rs.get("screen_filter_options") or {}) if isinstance(rs, dict) else {}
+    options = []
+    for workload in ("CPU", "RAM"):
+        filter_values = screen_options.get(workload) or RS3_SCREEN_FILTER_OPTIONS[workload]
+        for filter_value in filter_values:
+            options.append({
+                "value": filter_value,
+                "label": _format_rs3_sheet_label(filter_value),
+                "workload": workload,
+            })
+    return options
+
+
+def _build_rs3_download_dataframe(rightsizing, filter_value):
+    workload = _get_rs3_workload_for_filter(filter_value)
+    if workload == "RAM":
+        source_records = (rightsizing.get("ram_optimizations") or rightsizing.get("ram_candidates") or [])
+    else:
+        source_records = (rightsizing.get("cpu_optimizations") or rightsizing.get("cpu_candidates") or [])
+
+    columns = _get_rs3_columns(workload, filter_value)
+    filtered_records = _filter_rs3_records(source_records, filter_value)
+    rows = [
+        {column: record.get(column) for column in columns}
+        for record in filtered_records
+    ]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _build_table_rows(records, columns):
+    """Project record dicts into table row arrays using the requested column order."""
+    return [[record.get(column) for column in columns] for record in records]
 
 
 def _validate_excel_upload(file_path, original_filename):
@@ -338,6 +475,9 @@ class OptimizerLoginView(LoginView):
     """Enterprise login: unified auth page (Sign in | Create account)."""
     template_name = "optimizer/auth.html"
     redirect_authenticated_user = True
+
+    def get_default_redirect_url(self):
+        return _build_post_login_redirect_url()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -521,23 +661,22 @@ def upload(request):
 @require_GET
 @login_required
 def results(request):
-    """Unified results/dashboard: tabs (Rule 1, Rule 2, Combined), single screen."""
-    analysis, redir = _get_analysis_record(request)
-    if redir is not None:
-        return redir
-    context = _normalize_analysis_context(analysis)
-    context = _ensure_payg_zone_breakdown(analysis, context)
+    """Unified results/dashboard: reads live data from Server, CPUUtilisation, USU tables."""
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+
+    context = compute_live_db_metrics()
 
     render_context = build_dashboard_context(context, getattr(request, "request_id", None))
     render_context["rule_results"] = context["rule_results"]
     render_context["license_metrics"] = context["license_metrics"]
-    render_context["file_name"] = context["file_name"]
-    render_context["sheet_names_used"] = context["sheet_names_used"]
-    render_context["analysis_id"] = analysis.id
-    render_context["analysis_status"] = analysis.status
-    render_context["analysis_source_file_name"] = context["file_name"]
-    render_context["analysis_sheet_names"] = context["sheet_names_used"]
-    render_context["analysis_created_at"] = timezone.localtime(analysis.created_at) if analysis.created_at else None
+    render_context["file_name"] = ""
+    render_context["sheet_names_used"] = {}
+    render_context["analysis_id"] = None
+    render_context["analysis_status"] = "completed"
+    render_context["analysis_source_file_name"] = ""
+    render_context["analysis_sheet_names"] = {}
+    render_context["analysis_created_at"] = context.get("data_refreshed_at")
+    render_context["data_source"] = "database"
 
     # Pagination for Rule 1 and Rule 2 raw data (6 rows per page, no scrolling)
     per_page = 6
@@ -573,6 +712,304 @@ def results(request):
     render_context["rule2_data_json"] = [
         [r.get(k) for k in rule2_keys] for r in retired_full
     ]
+
+    # ── Strategy 3: CPU & RAM Right-Sizing pagination ─────────────────────────
+    rs = context.get("rightsizing") or {}
+    cpu_full = rs.get("cpu_optimizations") or rs.get("cpu_candidates") or []
+    ram_full = rs.get("ram_optimizations") or rs.get("ram_candidates") or []
+
+    rs3_workload_options = ["ALL"] + [str(option).upper() for option in (rs.get("workload_options") or ["CPU", "RAM"])]
+    rs3_workload = str(
+        request.GET.get("rs3_workload")
+        or rs.get("default_workload")
+        or RS3_WORKLOAD_DEFAULT
+    ).upper()
+    if rs3_workload not in rs3_workload_options:
+        rs3_workload = rs3_workload_options[0] if rs3_workload_options else RS3_WORKLOAD_DEFAULT
+
+    rs3_filter_options = _get_rs3_filter_options(rs, rs3_workload)
+    rs3_default_filter = _get_rs3_default_filter(rs, rs3_workload)
+    rs3_filter = request.GET.get("rs3_filter") or rs3_default_filter
+    if rs3_filter not in rs3_filter_options:
+        rs3_filter = rs3_default_filter
+
+    rs3_source_records = ram_full if rs3_workload == "RAM" else cpu_full
+    rs3_filtered_records = _filter_rs3_records(rs3_source_records, rs3_filter)
+    rs3_page = _get_page_number(request, "rs3_page")
+    total_rs3_pages = max(1, (len(rs3_filtered_records) + per_page - 1) // per_page)
+    rs3_page = min(rs3_page, total_rs3_pages)
+
+    rs3_columns = _get_rs3_columns(rs3_workload, rs3_filter)
+    rs3_keys = [key for key in rs3_columns if any(key in row for row in rs3_filtered_records)]
+    rs3_slice = rs3_filtered_records[(rs3_page - 1) * per_page : rs3_page * per_page]
+    rs3_summary = _get_rs3_summary(rs, rs3_workload, rs3_filter, rs3_source_records)
+
+    rs_cpu_page = _get_page_number(request, "rs3_cpu_page")
+    rs_ram_page = _get_page_number(request, "rs3_ram_page")
+    total_rs_cpu_pages = max(1, (len(cpu_full) + per_page - 1) // per_page)
+    total_rs_ram_pages = max(1, (len(ram_full) + per_page - 1) // per_page)
+    rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
+    rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
+
+    cpu_keys = [key for key in RS3_CPU_OPTIMIZATION_COLUMNS if any(key in row for row in cpu_full)]
+    ram_keys = [key for key in RS3_RAM_OPTIMIZATION_COLUMNS if any(key in row for row in ram_full)]
+    cpu_slice = cpu_full[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
+    ram_slice = ram_full[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
+
+    render_context.update({
+        "rightsizing": rs,
+        "rightsizing_cpu_page": _build_table_rows(cpu_slice, cpu_keys),
+        "rightsizing_ram_page": _build_table_rows(ram_slice, ram_keys),
+        "cpu_keys": cpu_keys,
+        "ram_keys": ram_keys,
+        "rs3_cpu_page": rs_cpu_page,
+        "rs3_ram_page": rs_ram_page,
+        "total_rs3_cpu_pages": total_rs_cpu_pages,
+        "total_rs3_ram_pages": total_rs_ram_pages,
+        "rs3_cpu_prev": max(1, rs_cpu_page - 1),
+        "rs3_cpu_next": min(total_rs_cpu_pages, rs_cpu_page + 1),
+        "rs3_ram_prev": max(1, rs_ram_page - 1),
+        "rs3_ram_next": min(total_rs_ram_pages, rs_ram_page + 1),
+        "rightsizing_selected_page": _build_table_rows(rs3_slice, rs3_keys),
+        "rs3_keys": rs3_keys,
+        "rs3_page": rs3_page,
+        "total_rs3_pages": total_rs3_pages,
+        "rs3_prev": max(1, rs3_page - 1),
+        "rs3_next": min(total_rs3_pages, rs3_page + 1),
+        "rs3_workload_options": rs3_workload_options,
+        "rs3_selected_workload": rs3_workload,
+        "rs3_filter_options": rs3_filter_options,
+        "rs3_selected_filter": rs3_filter,
+        "rs3_selected_summary": rs3_summary,
+        "rightsizing_cpu_data_json": cpu_full,
+        "rightsizing_ram_data_json": ram_full,
+        "download_sheet_options": _build_rs3_download_sheet_options(rs),
+    })
+    # ── Data Quality: USU, Grafana, Flat Files ────────────────────────────────
+    try:
+        from optimizer.models import USUInstallation, GrafanaMetricSnapshot, GrafanaMetricMonthlyRollup, CPUUtilisation
+        usu_qs = (
+            USUInstallation.objects
+            .select_related("server")
+            .order_by("-fetched_at")[:300]
+        )
+        dq_usu_rows = [
+            {
+                "Server": i.server.server_name if i.server else "",
+                "Product": i.product_description or "",
+                "Edition": i.product_edition or "",
+                "Device Status": i.device_status or "",
+                "Inv. Status": i.inv_status_std_name or "",
+                "CPU Cores": str(i.cpu_core_count) if i.cpu_core_count is not None else "",
+                "License Metric": i.license_metric or "",
+                "Fetched At": i.fetched_at.strftime("%Y-%m-%d") if i.fetched_at else "",
+            }
+            for i in usu_qs
+        ]
+
+        from django.db.models import Avg, Max, Min, Count
+
+        grafana_qs = (
+            GrafanaMetricSnapshot.objects
+            .select_related("server")
+            .order_by("-metric_ts")[:500]
+        )
+        grafana_snap_list = list(grafana_qs)
+        dq_grafana_is_snapshot = bool(grafana_snap_list)
+
+        if dq_grafana_is_snapshot:
+            dq_grafana_rows = [
+                {
+                    "Server": g.server.server_name if g.server else "",
+                    "Dashboard": g.dashboard or "",
+                    "Metric": g.metric_name or "",
+                    "Value": str(round(float(g.metric_value), 4)) if g.metric_value is not None else "",
+                    "Unit": g.metric_unit or "",
+                    "Timestamp": g.metric_ts.strftime("%Y-%m-%d %H:%M") if g.metric_ts else "",
+                    "Fetched At": g.fetched_at.strftime("%Y-%m-%d") if g.fetched_at else "",
+                }
+                for g in grafana_snap_list
+            ]
+
+            # ── Chart 1: avg value per metric type ────────────────────────────
+            metric_avg_map = {}
+            metric_unit_map = {}
+            for g in grafana_snap_list:
+                if g.metric_value is None:
+                    continue
+                mn = g.metric_name or "unknown"
+                metric_avg_map.setdefault(mn, []).append(float(g.metric_value))
+                if g.metric_unit:
+                    metric_unit_map[mn] = g.metric_unit
+            dq_grafana_metric_avg = [
+                {"metric": mn, "avg": round(sum(vals) / len(vals), 4), "unit": metric_unit_map.get(mn, "")}
+                for mn, vals in sorted(metric_avg_map.items())
+            ]
+
+            # ── Chart 2: timeline (avg per metric per timestamp bucket) ────────
+            from collections import defaultdict
+            timeline_map = defaultdict(lambda: defaultdict(list))
+            for g in grafana_snap_list:
+                if g.metric_value is None or not g.metric_ts:
+                    continue
+                ts_label = g.metric_ts.strftime("%Y-%m-%d %H:%M")
+                timeline_map[g.metric_name or "unknown"][ts_label].append(float(g.metric_value))
+            dq_grafana_timeline = {}
+            for mn, ts_dict in timeline_map.items():
+                pts = sorted(ts_dict.items())
+                dq_grafana_timeline[mn] = {
+                    "x": [p[0] for p in pts],
+                    "y": [round(sum(v) / len(v), 4) for _, v in pts],
+                }
+
+            # ── Chart 3: top 10 servers by avg value (per metric) ─────────────
+            server_metric_map = defaultdict(lambda: defaultdict(list))
+            for g in grafana_snap_list:
+                if g.metric_value is None:
+                    continue
+                sn = g.server.server_name if g.server else "Unknown"
+                server_metric_map[g.metric_name or "unknown"][sn].append(float(g.metric_value))
+            dq_grafana_top_servers = {}
+            for mn, srv_dict in server_metric_map.items():
+                ranked = sorted(
+                    [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in srv_dict.items()],
+                    key=lambda r: r["avg"], reverse=True
+                )[:10]
+                dq_grafana_top_servers[mn] = ranked
+
+            # ── Chart 4: KPI summary ───────────────────────────────────────────
+            dq_grafana_kpis = {
+                "total_records": len(grafana_snap_list),
+                "unique_metrics": len(metric_avg_map),
+                "unique_servers": len({(g.server.server_name if g.server else "") for g in grafana_snap_list}),
+                "unique_dashboards": len({g.dashboard for g in grafana_snap_list if g.dashboard}),
+            }
+
+            dq_grafana_rollup_summary = []
+
+        else:
+            rollup_qs = (
+                GrafanaMetricMonthlyRollup.objects
+                .select_related("server")
+                .order_by("-period_month")[:500]
+            )
+            rollup_list = list(rollup_qs)
+            dq_grafana_rows = [
+                {
+                    "Server": r.server.server_name if r.server else "",
+                    "Metric": r.metric_name or "",
+                    "Unit": r.metric_unit or "",
+                    "Period": str(r.period_month) if r.period_month else "",
+                    "Avg": str(round(float(r.avg_value), 4)) if r.avg_value is not None else "",
+                    "Max": str(round(float(r.max_value), 4)) if r.max_value is not None else "",
+                    "Min": str(round(float(r.min_value), 4)) if r.min_value is not None else "",
+                    "Samples": str(r.sample_count) if r.sample_count is not None else "",
+                }
+                for r in rollup_list
+            ]
+
+            # ── Chart 1: avg/max/min per metric (rollup) ──────────────────────
+            rollup_metric_map = {}
+            for r in rollup_list:
+                mn = r.metric_name or "unknown"
+                rollup_metric_map.setdefault(mn, {"avg": [], "max": [], "min": [], "unit": r.metric_unit or ""})
+                if r.avg_value is not None:
+                    rollup_metric_map[mn]["avg"].append(float(r.avg_value))
+                if r.max_value is not None:
+                    rollup_metric_map[mn]["max"].append(float(r.max_value))
+                if r.min_value is not None:
+                    rollup_metric_map[mn]["min"].append(float(r.min_value))
+            dq_grafana_rollup_summary = [
+                {
+                    "metric": mn,
+                    "avg": round(sum(d["avg"]) / len(d["avg"]), 4) if d["avg"] else 0,
+                    "max": round(max(d["max"]), 4) if d["max"] else 0,
+                    "min": round(min(d["min"]), 4) if d["min"] else 0,
+                    "unit": d["unit"],
+                }
+                for mn, d in sorted(rollup_metric_map.items())
+            ]
+
+            # ── Chart 2: timeline (avg per metric per period) ─────────────────
+            from collections import defaultdict
+            period_map = defaultdict(lambda: defaultdict(list))
+            for r in rollup_list:
+                if r.avg_value is None or not r.period_month:
+                    continue
+                period_map[r.metric_name or "unknown"][str(r.period_month)].append(float(r.avg_value))
+            dq_grafana_timeline = {}
+            for mn, pd_dict in period_map.items():
+                pts = sorted(pd_dict.items())
+                dq_grafana_timeline[mn] = {
+                    "x": [p[0] for p in pts],
+                    "y": [round(sum(v) / len(v), 4) for _, v in pts],
+                }
+
+            # ── Chart 3: top servers per metric ───────────────────────────────
+            srv_map = defaultdict(lambda: defaultdict(list))
+            for r in rollup_list:
+                if r.avg_value is None:
+                    continue
+                sn = r.server.server_name if r.server else "Unknown"
+                srv_map[r.metric_name or "unknown"][sn].append(float(r.avg_value))
+            dq_grafana_top_servers = {}
+            for mn, sd in srv_map.items():
+                ranked = sorted(
+                    [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in sd.items()],
+                    key=lambda r: r["avg"], reverse=True
+                )[:10]
+                dq_grafana_top_servers[mn] = ranked
+
+            dq_grafana_metric_avg = dq_grafana_rollup_summary
+
+            dq_grafana_kpis = {
+                "total_records": len(rollup_list),
+                "unique_metrics": len(rollup_metric_map),
+                "unique_servers": len({(r.server.server_name if r.server else "") for r in rollup_list}),
+                "unique_dashboards": 0,
+            }
+
+        flatfile_qs = (
+            CPUUtilisation.objects
+            .select_related("server")
+            .filter(source__in=["boones_public", "boones_private"])
+            .order_by("-period_month")[:300]
+        )
+        dq_flatfile_rows = [
+            {
+                "Server": f.server.server_name if f.server else "",
+                "Source": f.get_source_display(),
+                "Period": str(f.period_month) if f.period_month else "",
+                "Avg CPU%": str(round(float(f.avg_cpu_pct), 2)) if f.avg_cpu_pct is not None else "",
+                "Max CPU%": str(round(float(f.max_cpu_pct), 2)) if f.max_cpu_pct is not None else "",
+                "Min CPU%": str(round(float(f.min_cpu_pct), 2)) if f.min_cpu_pct is not None else "",
+                "Logical CPUs": str(f.logical_cpu_count) if f.logical_cpu_count is not None else "",
+                "RAM (GiB)": str(round(float(f.physical_ram_gib), 2)) if f.physical_ram_gib is not None else "",
+                "Avg Free Mem%": str(round(float(f.avg_free_memory_pct), 2)) if f.avg_free_memory_pct is not None else "",
+            }
+            for f in flatfile_qs
+        ]
+    except Exception as _dq_exc:
+        logger.warning("Data Quality fetch failed: %s", _dq_exc)
+        dq_usu_rows, dq_grafana_rows, dq_flatfile_rows = [], [], []
+        dq_grafana_metric_avg, dq_grafana_timeline, dq_grafana_top_servers = [], {}, {}
+        dq_grafana_rollup_summary, dq_grafana_kpis = [], {"total_records": 0, "unique_metrics": 0, "unique_servers": 0, "unique_dashboards": 0}
+        dq_grafana_is_snapshot = False
+
+    render_context["dq_usu_rows"] = dq_usu_rows
+    render_context["dq_usu_keys"] = list(dq_usu_rows[0].keys()) if dq_usu_rows else []
+    render_context["dq_grafana_rows"] = dq_grafana_rows
+    render_context["dq_grafana_keys"] = list(dq_grafana_rows[0].keys()) if dq_grafana_rows else []
+    render_context["dq_flatfile_rows"] = dq_flatfile_rows
+    render_context["dq_flatfile_keys"] = list(dq_flatfile_rows[0].keys()) if dq_flatfile_rows else []
+    render_context["dq_grafana_metric_avg"] = dq_grafana_metric_avg
+    render_context["dq_grafana_timeline"] = dq_grafana_timeline
+    render_context["dq_grafana_top_servers"] = dq_grafana_top_servers
+    render_context["dq_grafana_rollup_summary"] = dq_grafana_rollup_summary
+    render_context["dq_grafana_kpis"] = dq_grafana_kpis
+    render_context["dq_grafana_is_snapshot"] = dq_grafana_is_snapshot
+    render_context["dq_grafana_metric_names"] = list(dq_grafana_top_servers.keys())
+
     # Interactive Plotly charts (hover tooltips, responsive)
     if get_all_plotly_specs is not None:
         try:
@@ -607,7 +1044,6 @@ def results(request):
 
 @require_GET
 @login_required
-<<<<<<< HEAD
 def dashboard(request):
     """Same as results: unified tabbed view."""
     return results(request)
@@ -633,40 +1069,17 @@ def profile_page(request):
 
 @require_GET
 @login_required
-def report_page(request):
-=======
-def dashboard(request):
-    """Same as results: unified tabbed view."""
-    return results(request)
-
-
-@require_http_methods(["GET", "POST"])
-@csrf_protect
-@login_required
-def profile_page(request):
-    """Display and update the logged-in user's profile details."""
-    profile = _get_or_create_user_profile(request.user)
-    if request.method == "POST":
-        form = UserProfileForm(request.POST, instance=profile, user=request.user)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Profile updated successfully.")
-            return redirect("optimizer:profile")
-    else:
-        form = UserProfileForm(instance=profile, user=request.user)
-    context = _build_profile_context(request.user, profile, form=form)
-    return render(request, "optimizer/profile.html", context)
+def alerts(request):
+    from optimizer.services.alerts import build_alert_page_context
+    context = build_alert_page_context(request.GET)
+    return render(request, "optimizer/alerts.html", context)
 
 
 @require_GET
 @login_required
 def report_page(request):
->>>>>>> 0b2248414cebac88ae5b45c7b2fdc4ce7c96eba3
-    """Report page with AI-generated text and download links."""
-    context, redir = _get_analysis_context(request)
-    if redir is not None:
-        return redir
-    context.setdefault("title", "IT License and Cost Optimization Report")
+    """Report page: live data from DB, rendered as structured markdown."""
+    context = _get_db_context_for_report()
     if context.get("report_text"):
         context["report_text"] = build_report_markdown(
             context["report_text"],
@@ -678,26 +1091,15 @@ def report_page(request):
 @require_GET
 @login_required
 def report_download(request, format_type):
-    """Download report as PDF, Word, or Excel."""
+    """Download report as PDF, Word, or Excel — data from live DB."""
     normalized_format = REPORT_FORMAT_ALIASES.get(format_type, format_type)
     if normalized_format not in ALLOWED_REPORT_FORMATS:
         return HttpResponse("Invalid format.", status=400)
-    context, redir = _get_analysis_context(request)
-    if redir is not None:
-        return redir
-    from optimizer.services.ai_report_generator import get_fallback_report
-    report_text = context.get("report_text") or get_fallback_report({
-        "azure_payg_count": context.get("rule_results", {}).get("azure_payg_count", 0),
-        "retired_count": context.get("rule_results", {}).get("retired_count", 0),
-        "total_demand_quantity": context.get("license_metrics", {}).get("total_demand_quantity", 0),
-        "total_license_cost": context.get("license_metrics", {}).get("total_license_cost", 0),
-        "demand_row_count": 0,
-    })
-    report_text = normalize_report_content_text(report_text)
+    context = _get_db_context_for_report()
+    report_text = normalize_report_content_text(context.get("report_text") or "")
     report_export_context = _build_report_render_context(context)
     generated_at = timezone.localtime()
-    analysis_id = request.session.get("optimizer_analysis_id")
-    base_name = f"sql_license_optimization_report_{analysis_id or 'report'}"
+    base_name = "sql_license_optimization_report_db"
     if normalized_format == "pdf":
         content = export_pdf(report_text, generated_at=generated_at, report_context=report_export_context)
         if content is None:
@@ -738,9 +1140,8 @@ def download_rule_data(request, rule_id):
     """Download Rule 1 or Rule 2 data as Excel. rule_id whitelisted to rule1, rule2."""
     if rule_id not in ALLOWED_RULE_IDS:
         return HttpResponse("Invalid rule.", status=400)
-    context, redir = _get_analysis_context(request)
-    if redir is not None:
-        return redir
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+    context = compute_live_db_metrics()
     rr = context.get("rule_results", {})
     if rule_id == "rule1":
         data = rr.get("azure_payg", [])
@@ -750,15 +1151,39 @@ def download_rule_data(request, rule_id):
         filename = "retired_devices_with_installations.xlsx"
     if not data:
         return HttpResponse("No data to download.", status=404)
-    df = pd.DataFrame(data)
     from io import BytesIO
+    df = pd.DataFrame(data)
     buf = BytesIO()
     df.to_excel(buf, index=False, engine="openpyxl")
     buf.seek(0)
-    aid = request.session.get("optimizer_analysis_id")
-    if aid:
-        base, ext = filename.rsplit(".", 1)
-        filename = f"{base}_{aid}.{ext}"
     response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = _safe_content_disposition(filename)
+    return response
+
+
+@require_GET
+@login_required
+def download_rightsizing_sheet(request, sheet_key):
+    """Download a specific Strategy 3 sheet as a single-sheet Excel workbook."""
+    normalized_sheet_key = str(sheet_key or "").strip()
+    if normalized_sheet_key not in RS3_DOWNLOAD_SHEET_KEYS:
+        return HttpResponse("Invalid sheet.", status=400)
+
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import build_rightsizing_sheet_export
+
+    df = build_rightsizing_sheet_export(normalized_sheet_key)
+    workbook_name = f"{normalized_sheet_key.lower()}.xlsx"
+    sheet_name = normalized_sheet_key[:31] or "Sheet1"
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = _safe_content_disposition(workbook_name)
     return response

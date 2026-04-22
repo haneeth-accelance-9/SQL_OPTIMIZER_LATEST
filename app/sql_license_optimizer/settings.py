@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name, "").strip().lower()
@@ -46,6 +48,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.postgres",
+    "django_crontab",
     "optimizer",
 ]
 
@@ -71,13 +75,27 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "optimizer.context_processors.notification_context",
             ],
         },
     },
 ]
+
 WSGI_APPLICATION = "sql_license_optimizer.wsgi.application"
 
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+_db_host = os.environ.get("DB_HOST", "localhost")
+DATABASES = {
+    "default": {
+        "ENGINE":   "django.db.backends.postgresql",
+        "NAME":     os.environ.get("DB_NAME", "mvp6"),
+        "USER":     os.environ.get("DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST":     _db_host,
+        "PORT":     os.environ.get("DB_PORT", "5432"),
+        "OPTIONS":  {"sslmode": "require", "connect_timeout": 10} if "azure.com" in _db_host else {},
+        "CONN_MAX_AGE": 60,
+    }
+}
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -144,6 +162,25 @@ EXCEL_SHEET_PRICES = os.environ.get("EXCEL_SHEET_PRICES", "MVP - Data 3 - Prices
 EXCEL_SHEET_OPTIMIZATION = os.environ.get("EXCEL_SHEET_OPTIMIZATION", "MVP - Data 4 - Optimization potential")
 EXCEL_SHEET_HELPFUL_REPORTS = os.environ.get("EXCEL_SHEET_HELPFUL_REPORTS", "MVP - Data 5 - Helpful Reports")
 
+# Demand API (USU) — fetched by `python manage.py fetch_demand_data`
+# Override via environment variables or set directly here.
+DEMAND_API_BASE_URL = os.environ.get("DEMAND_API_BASE_URL", "https://lima.bayer.cloud.usu.com")
+DEMAND_API_START_URI = os.environ.get(
+    "DEMAND_API_START_URI",
+    "/prod/index.php/api/customization/v1.0/demanddetails?$skip=0&$top=10000",
+)
+DEMAND_API_AUTH_HEADER = os.environ.get(
+    "DEMAND_API_AUTH_HEADER",
+    "Basic dXN1ZGF0YXVzZXI6QlVFUFdFZkw2JCM5eVEh",
+)
+
+# USU API — used by fetch_usu_data management command (weekly sync)
+USU_API_BASE_URL  = os.environ.get("USU_API_BASE_URL",  "https://lima.bayer.cloud.usu.com")
+USU_API_USERNAME  = os.environ.get("USU_API_USERNAME",  "myusudata")
+USU_API_PASSWORD  = os.environ.get("USU_API_PASSWORD",  "test123Usu")
+# Output file path — defaults to BASE_DIR/response_full.json
+DEMAND_API_OUTPUT_FILE = os.environ.get("DEMAND_API_OUTPUT_FILE", str(BASE_DIR / "response_full.json"))
+
 OPTIMIZER_AI_REPORT_ENABLED = _env_bool("OPTIMIZER_AI_REPORT_ENABLED", True)
 OPTIMIZER_CHARTS_ENABLED = _env_bool("OPTIMIZER_CHARTS_ENABLED", True)
 OPTIMIZER_ANALYSIS_TTL_SECONDS = int(os.environ.get("OPTIMIZER_ANALYSIS_TTL_SECONDS", "86400"))
@@ -155,3 +192,107 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {"optimizer": {"handlers": ["console"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False}},
 }
+
+# ── Grafana / Mimir (Prometheus remote-read) ──────────────────────────────────
+#
+# What is Mimir?
+#   Grafana Mimir is a horizontally scalable, multi-tenant Prometheus backend.
+#   Instead of querying the Grafana UI (frontend proxy), we talk directly to the
+#   Mimir Prometheus HTTP API — faster and doesn't need a datasource UID.
+#
+# How authentication works:
+#   Step 1 — HTTP Basic Auth:
+#     username = GRAFANA_USER  (numeric ID, e.g. 2834315)
+#     password = GRAFANA_TOKEN (glc_eyJ… service account token)
+#
+#   Step 2 — Tenant routing header:
+#     X-Scope-OrgID = GRAFANA_TENANT_ID
+#     Mimir uses this header to route the query to the correct tenant's data.
+#     Without it the request is rejected or returns data from the wrong tenant.
+#
+# Query endpoint used by fetch_grafana_metrics:
+#   GET {GRAFANA_BASE_URL}/api/prom/api/v1/query_range
+#       ?query=<PromQL>  &start=<RFC3339>  &end=<RFC3339>  &step=<duration>
+
+# The Mimir cluster URL for this environment (prod-eu-west-5 region)
+GRAFANA_BASE_URL = os.environ.get(
+    "GRAFANA_BASE_URL",
+    "https://prometheus-dedicated-64-prod-eu-west-5.grafana.net",
+)
+
+# Mimir tenant ID — sent as X-Scope-OrgID header on every request.
+# Without this header Mimir returns 401 or empty results.
+GRAFANA_TENANT_ID = os.environ.get("GRAFANA_TENANT_ID", "")
+
+# Numeric Grafana user ID — used as the Basic Auth username
+GRAFANA_USER = os.environ.get("GRAFANA_USER", "")
+
+# Grafana service account token (glc_eyJ…) — used as the Basic Auth password
+GRAFANA_TOKEN = os.environ.get("GRAFANA_TOKEN", "")
+
+# HTTP request timeout in seconds — Mimir queries can be slow for large ranges
+GRAFANA_TIMEOUT = int(os.environ.get("GRAFANA_TIMEOUT", "30"))
+
+# Label stored on each GrafanaMetricSnapshot.dashboard field.
+# 'primary' = production dashboard; change to 'testing' for staging.
+GRAFANA_DASHBOARD = os.environ.get("GRAFANA_DASHBOARD", "primary")
+
+# How far back each hourly fetch looks.
+# 'now-2h' = a 2-hour overlap window so a delayed run never misses data.
+# Duplicate snapshots are silently ignored (ignore_conflicts=True in bulk_create).
+# Override via env var for one-off catch-up runs, e.g. GRAFANA_FETCH_RANGE=now-48h.
+GRAFANA_FETCH_RANGE = os.environ.get("GRAFANA_FETCH_RANGE", "now-2h")
+
+# Prometheus query resolution step.
+# '5m' = one data point per 5 minutes = 12 snapshot rows per metric per server per hour.
+# Use '1m' for near-real-time granularity (5x more rows); use '1h' to reduce volume.
+GRAFANA_STEP = os.environ.get("GRAFANA_STEP", "5m")
+
+# How many days to keep raw GrafanaMetricSnapshot rows before the monthly
+# rollup job (rollup_grafana_metrics) purges them to save DB space.
+GRAFANA_SNAPSHOT_RETENTION_DAYS = int(
+    os.environ.get("GRAFANA_SNAPSHOT_RETENTION_DAYS", "90")
+)
+
+# ── Weekly USU data sync via django-crontab ───────────────────────────────────
+# Runs every Monday at 02:00 AM.
+# Cron syntax: minute hour day-of-month month day-of-week
+# Register  : python manage.py crontab add
+# Remove    : python manage.py crontab remove
+# Show      : python manage.py crontab show
+CRONJOBS = [
+    # ── USU data sync — every Monday at 02:00 ─────────────────────────────────
+    (
+        "0 2 * * 1",
+        "django.core.management.call_command",
+        ["fetch_usu_data"],
+        {},
+        ">> " + str(BASE_DIR / "logs" / "usu_sync.log") + " 2>&1",
+    ),
+    # ── Grafana metrics fetch — every hour at minute 0 ───────────────────────
+    # Pulls the last 2 h of Prometheus metrics (5-min step) each run.
+    # 2-hour overlap window means a delayed/missed run never loses data.
+    # Duplicate snapshot rows are silently ignored by bulk_create.
+    # Row volume: 8 metrics x ~N servers x 12 pts/hr x 24 hrs = ~2,300 rows/day per server.
+    (
+        "0 * * * *",
+        "django.core.management.call_command",
+        ["fetch_grafana_metrics"],
+        {},
+        ">> " + str(BASE_DIR / "logs" / "grafana_fetch.log") + " 2>&1",
+    ),
+    # ── Grafana rollup + purge — 1st of every month at 03:00 ─────────────────
+    # Aggregates previous month's snapshots into monthly rollups, deletes
+    # raw rows older than GRAFANA_SNAPSHOT_RETENTION_DAYS (90 days).
+    (
+        "0 3 1 * *",
+        "django.core.management.call_command",
+        ["rollup_grafana_metrics"],
+        {},
+        ">> " + str(BASE_DIR / "logs" / "grafana_rollup.log") + " 2>&1",
+    ),
+]
+
+# Ensure the logs directory exists so the cron log file can be written
+import pathlib
+pathlib.Path(BASE_DIR / "logs").mkdir(exist_ok=True)
