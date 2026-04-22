@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 RIGHTSIZING_REPORT_METADATA_HEADERS = [
     "Number",
     "Server name",
-    "Is Virtual?",
+    "is_virtual",
     "Cluster name",
     "Criticality",
     "Environment",
@@ -538,7 +538,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
             record.update({
                 "Number": server.boones_number or "",
                 "Server name": server.server_name or "",
-                "Is Virtual?": server.is_virtual if server.is_virtual is not None else None,
+                "is_virtual": server.is_virtual,
                 "Cluster name": server.cluster_name or "",
                 "Criticality": server.criticality or "",
                 "Environment": server.environment or "",
@@ -663,6 +663,7 @@ def compute_rightsizing_metrics() -> dict:
     # ── Column subsets for display ─────────────────────────────────────────────
     _CPU_COLS = [
         "server_name",
+        "is_virtual",
         "Environment",
         "Env_Type",
         "Avg_CPU_12m",
@@ -676,6 +677,7 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _RAM_COLS = [
         "server_name",
+        "is_virtual",
         "Environment",
         "Env_Type",
         "Avg_FreeMem_12m",

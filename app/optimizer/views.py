@@ -257,6 +257,7 @@ def _format_metric_label(metric_name):
 
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
+    "is_virtual",
     "Environment",
     "Env_Type",
     "Avg_CPU_12m",
@@ -267,6 +268,7 @@ RS3_CPU_OPTIMIZATION_COLUMNS = [
 
 RS3_RAM_OPTIMIZATION_COLUMNS = [
     "server_name",
+    "is_virtual",
     "Environment",
     "Env_Type",
     "Avg_FreeMem_12m",
@@ -277,6 +279,7 @@ RS3_RAM_OPTIMIZATION_COLUMNS = [
 
 RS3_CPU_RECOMMENDATION_COLUMNS = [
     "server_name",
+    "is_virtual",
     "Environment",
     "Env_Type",
     "Current_vCPU",
@@ -286,6 +289,7 @@ RS3_CPU_RECOMMENDATION_COLUMNS = [
 
 RS3_RAM_RECOMMENDATION_COLUMNS = [
     "server_name",
+    "is_virtual",
     "Environment",
     "Env_Type",
     "Current_RAM_GiB",

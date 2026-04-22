@@ -132,7 +132,7 @@
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
-                            <p>Data for this logic is sourced from USU.</p>
+                            <p>Data for this Strategy is sourced from USU.</p>
                         </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
@@ -358,7 +358,7 @@
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
-                            <p>Data for this logic is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
+                            <p>Data for this Strategy is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
                         </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
@@ -651,16 +651,44 @@
                         </div>
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
-                                <span class="dashboard-section-label">CPU</span>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}</p>
-                                <p class="mt-1 text-sm font-semibold text-slate-600">vCPUs</p>
-                                <p class="mt-3 text-sm text-slate-500">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
+                                <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-start">
+                                    <div class="min-w-0">
+                                        <span class="dashboard-section-label">CPU</span>
+                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}</p>
+                                        <p class="mt-1 text-sm font-semibold text-slate-600">vCPUs</p>
+                                    </div>
+                                    <div class="grid w-full min-w-0 grid-cols-2 gap-3 lg:w-[180px] lg:pt-1">
+                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
+                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">PROD</p>
+                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.cpu_prod_count|default:0 }}</p>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
+                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">NON-PROD</p>
+                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.cpu_nonprod_count|default:0 }}</p>
+                                        </div>
+                                    </div>
+                                    <p class="whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
+                                </div>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
-                                <span class="dashboard-section-label">RAM</span>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}</p>
-                                <p class="mt-1 text-sm font-semibold text-slate-600">GiB RAM</p>
-                                <p class="mt-3 text-sm text-slate-500">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
+                                <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-start">
+                                    <div class="min-w-0">
+                                        <span class="dashboard-section-label">RAM</span>
+                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}</p>
+                                        <p class="mt-1 text-sm font-semibold text-slate-600">GiB RAM</p>
+                                    </div>
+                                    <div class="grid w-full min-w-0 grid-cols-2 gap-3 lg:w-[180px] lg:pt-1">
+                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
+                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">PROD</p>
+                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.ram_prod_count|default:0 }}</p>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
+                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">NON-PROD</p>
+                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.ram_nonprod_count|default:0 }}</p>
+                                        </div>
+                                    </div>
+                                    <p class="whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -683,7 +711,7 @@
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
                                 <span class="dashboard-section-label">Strategy 3</span>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">TBD</p>
                                 <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
                             </div>
                         </div>
@@ -737,9 +765,18 @@
             <section class="flex-shrink-0 mb-6">
                 <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
                     <div class="xl:col-span-6 dashboard-panel-card">
-                        <div class="mb-4">
-                            <span class="dashboard-section-label">Right Sizing CPU</span>
-                            <p class="mt-1 text-sm text-slate-500">Average vs peak CPU utilisation across right-sizing candidates.</p>
+                        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <span class="dashboard-section-label">Right Sizing CPU</span>
+                                <p class="mt-1 text-sm text-slate-500">Average vs peak CPU utilisation with CPU filter selection.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label for="dash-rs3-cpu-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
+                                <select id="dash-rs3-cpu-filter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
+                                    <option value="PROD_CPU_Optimization">PROD CPU Optimization</option>
+                                    <option value="NONPROD_CPU_Optimization">NON-PROD CPU Optimization</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="h-[360px]">
                             <div id="chart-dash-rs3-cpu" class="plotly-chart h-full w-full"></div>
@@ -922,7 +959,7 @@
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
-                            <p>Data for this logic is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
+                            <p>Data for this Strategy is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
                         </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
@@ -945,9 +982,9 @@
                             <span id="rs3-cpu-uc-badge" class="inline-flex items-center rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-700">UC 3.1</span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-4xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-lg font-semibold text-slate-500">vCPUs</span></p>
+                            <p class="text-4xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-lg font-semibold text-slate-500">CPUs</span></p>
                         </div>
-                        <p id="rs3-cpu-metric-description" class="mt-1 text-xs text-slate-500">Potential vCPU reduction across all optimizations</p>
+                        <p id="rs3-cpu-metric-description" class="mt-1 text-xs text-slate-500">Potential CPU reduction across all optimizations</p>
                         <div class="mt-6 space-y-3 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
@@ -965,7 +1002,7 @@
                                     <p id="rs3-cpu-total-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.cpu_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">vCPU Reduction</p>
+                                    <p class="uppercase tracking-wide text-slate-400">CPU Reduction</p>
                                     <p class="mt-1 text-sm font-bold text-emerald-700">-<span id="rs3-cpu-reduction-value">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
                                 </div>
                             </div>
@@ -993,9 +1030,8 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <label for="rs3-cpu-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                             <select id="rs3-cpu-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                                {% for option in rs.cpu_filter_options %}
-                                <option value="{{ option }}" {% if rs3_selected_workload == "CPU" and option == rs3_selected_filter %}selected{% endif %}>{{ option }}</option>
-                                {% endfor %}
+                                <option value="PROD_CPU_Optimization" {% if rs3_selected_workload == "CPU" and rs3_selected_filter == "PROD_CPU_Optimization" %}selected{% endif %}>PROD CPU Optimization</option>
+                                <option value="NONPROD_CPU_Optimization" {% if rs3_selected_workload == "CPU" and rs3_selected_filter == "NONPROD_CPU_Optimization" %}selected{% endif %}>NON-PROD CPU Optimization</option>
                             </select>
                             <span id="rs3-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.cpu_count|default:0 }}</span>
                             {% if total_rs3_cpu_pages > 1 and rs.cpu_optimizations %}
@@ -1116,9 +1152,8 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <label for="rs3-ram-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                             <select id="rs3-ram-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                                {% for option in rs.ram_filter_options %}
-                                <option value="{{ option }}" {% if rs3_selected_workload == "RAM" and option == rs3_selected_filter %}selected{% endif %}>{{ option }}</option>
-                                {% endfor %}
+                                <option value="PROD_RAM_Optimization" {% if rs3_selected_workload == "RAM" and rs3_selected_filter == "PROD_RAM_Optimization" %}selected{% endif %}>PROD RAM Optimization</option>
+                                <option value="NONPROD_RAM_Optimization" {% if rs3_selected_workload == "RAM" and rs3_selected_filter == "NONPROD_RAM_Optimization" %}selected{% endif %}>NON-PROD RAM Optimization</option>
                             </select>
                             <span id="rs3-ram-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.ram_count|default:0 }}</span>
                             {% if total_rs3_ram_pages > 1 and rs.ram_optimizations %}
@@ -1248,8 +1283,8 @@
                         <div id="dq-grafana-chart-avg" class="w-full" style="height:280px;"></div>
                     </div>
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
-                        <h3 class="text-sm font-bold text-slate-800 mb-1">Metric Trend Over Time</h3>
-                        <p class="text-xs text-slate-500 mb-2">Select a metric to plot its value over time.</p>
+                        <h3 class="text-sm font-bold text-slate-800 mb-1">Trend Analysis Over Time</h3>
+                        <p class="text-xs text-slate-500 mb-2">Select any metric to plot its value over time.</p>
                         <div class="mb-3">
                             <select id="dq-grafana-timeline-select" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
                                 {% for option in dq_grafana_metric_options %}
@@ -1261,7 +1296,8 @@
                     </div>
                 </div>
 
-                <!-- Charts row 2: Metric by server -->
+                <!--
+                Charts row 2: Metric by server
                 <div class="grid grid-cols-1 gap-4">
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
                         <h3 class="text-sm font-bold text-slate-800 mb-1">Trend Analysis by Metric</h3>
@@ -1276,6 +1312,7 @@
                         <div id="dq-grafana-chart-servers" class="w-full" style="height:340px;"></div>
                     </div>
                 </div>
+                -->
                 {% endif %}
 
                 <!-- Tabular view -->
@@ -1916,6 +1953,7 @@
             var ramChartData = parseJsonScript('rs3-ram-chart');
             var dashCpuEl = document.getElementById('chart-dash-rs3-cpu');
             var dashRamEl = document.getElementById('chart-dash-rs3-ram');
+            var dashCpuFilterEl = document.getElementById('dash-rs3-cpu-filter');
             var dashRamFilterEl = document.getElementById('dash-rs3-ram-filter');
 
             function buildRs3Layout(titleText, yAxisTitle) {
@@ -1932,23 +1970,43 @@
                 };
             }
 
-            if (dashCpuEl && cpuChartData.length) {
+            function renderDashCpuChart(filterValue) {
+                if (!dashCpuEl) return;
+                var filtered = cpuChartData.filter(function(row) {
+                    return String(row.optimization_type || '') === String(filterValue || '');
+                });
+
+                if (!filtered.length) {
+                    Plotly.newPlot(dashCpuEl, [], buildRs3Layout('Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
+                    return;
+                }
+
                 Plotly.newPlot(dashCpuEl, [
                     {
-                        x: cpuChartData.map(function(d) { return d.name; }),
-                        y: cpuChartData.map(function(d) { return d.avg; }),
+                        x: filtered.map(function(d) { return d.name; }),
+                        y: filtered.map(function(d) { return d.avg; }),
                         type: 'bar',
                         name: 'Avg CPU %',
                         marker: { color: '#1ea7e1' }
                     },
                     {
-                        x: cpuChartData.map(function(d) { return d.name; }),
-                        y: cpuChartData.map(function(d) { return d.peak; }),
+                        x: filtered.map(function(d) { return d.name; }),
+                        y: filtered.map(function(d) { return d.peak; }),
                         type: 'bar',
                         name: 'Peak CPU %',
                         marker: { color: '#84cc16' }
                     }
                 ], buildRs3Layout('Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
+            }
+
+            if (dashCpuEl) {
+                var defaultCpuFilter = dashCpuFilterEl ? dashCpuFilterEl.value : 'PROD_CPU_Optimization';
+                renderDashCpuChart(defaultCpuFilter);
+                if (dashCpuFilterEl) {
+                    dashCpuFilterEl.addEventListener('change', function () {
+                        renderDashCpuChart(this.value);
+                    });
+                }
             }
 
             function renderDashRamChart(filterValue) {
@@ -2191,11 +2249,29 @@
             }
         };
 
+        function formatRs3Display(value) {
+            var text = String(value || '')
+                .replace(/_/g, ' ')
+                .toLowerCase()
+                .replace(/\b\w/g, function(c) { return c.toUpperCase(); })
+                .trim();
+
+            text = text.replace(/\bCpu\b/g, 'CPU');
+            text = text.replace(/\bRam\b/g, 'RAM');
+            text = text.replace(/\bVcpu\b/g, 'VCPU');
+            text = text.replace(/\bProd\b/g, 'PROD');
+            text = text.replace(/\bNon Prod\b/g, 'NON-PROD');
+            text = text.replace(/\bAvg Free Mem\b/g, 'Avg Free Mem');
+            text = text.replace(/\bMin Free Mem\b/g, 'Min Free Mem');
+
+            return text;
+        }
+
         ['rs3-cpu-filter', 'rs3-ram-filter'].forEach(function(id) {
             var sel = document.getElementById(id);
             if (!sel) return;
             Array.from(sel.options).forEach(function(opt) {
-                opt.text = opt.value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                opt.text = formatRs3Display(opt.value);
             });
         });
 
@@ -2204,7 +2280,7 @@
             if (!table) return;
             table.querySelectorAll('thead th').forEach(function(th) {
                 th.style.textTransform = 'none';
-                th.textContent = th.textContent.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); }).trim();
+                th.textContent = formatRs3Display(th.textContent);
             });
         });
 
@@ -2223,11 +2299,17 @@
         });
 
         function humanizeRs3Filter(value) {
-            return String(value || '')
-                .replace(/_/g, ' ')
-                .toLowerCase()
-                .replace(/\b\w/g, function(c) { return c.toUpperCase(); })
-                .trim();
+            return formatRs3Display(value);
+        }
+
+        function normalizeRs3CpuFilter(value) {
+            var allowed = ['PROD_CPU_Optimization', 'NONPROD_CPU_Optimization'];
+            return allowed.indexOf(String(value || '')) !== -1 ? String(value) : 'PROD_CPU_Optimization';
+        }
+
+        function normalizeRs3RamFilter(value) {
+            var allowed = ['PROD_RAM_Optimization', 'NONPROD_RAM_Optimization'];
+            return allowed.indexOf(String(value || '')) !== -1 ? String(value) : 'PROD_RAM_Optimization';
         }
 
         function setText(id, value) {
@@ -2284,7 +2366,7 @@
             if (!headRow) return;
             var html = '';
             for (var i = 0; i < columns.length; i++) {
-                var label = columns[i].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                var label = formatRs3Display(columns[i]);
                 html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
             }
             headRow.innerHTML = html;
@@ -2479,18 +2561,18 @@
         if (r3RamPrev) r3RamPrev.addEventListener('click', function(e) { onRs3Prev('ram', e); });
         if (r3RamNext) r3RamNext.addEventListener('click', function(e) { onRs3Next('ram', e); });
         if (r3CpuFilter) {
-            rs3State.cpu.filter = r3CpuFilter.value || rs3DefaultFilters.CPU || rs3FilterConfig.cpu.defaultFilter;
+            rs3State.cpu.filter = normalizeRs3CpuFilter(r3CpuFilter.value || rs3DefaultFilters.CPU || rs3FilterConfig.cpu.defaultFilter);
             r3CpuFilter.value = rs3State.cpu.filter;
-            r3CpuFilter.addEventListener('change', function(e) { onRs3FilterChange('cpu', e.target.value); });
+            r3CpuFilter.addEventListener('change', function(e) { onRs3FilterChange('cpu', normalizeRs3CpuFilter(e.target.value)); });
         } else {
-            rs3State.cpu.filter = rs3DefaultFilters.CPU || rs3FilterConfig.cpu.defaultFilter;
+            rs3State.cpu.filter = normalizeRs3CpuFilter(rs3DefaultFilters.CPU || rs3FilterConfig.cpu.defaultFilter);
         }
         if (r3RamFilter) {
-            rs3State.ram.filter = r3RamFilter.value || rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter;
+            rs3State.ram.filter = normalizeRs3RamFilter(r3RamFilter.value || rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter);
             r3RamFilter.value = rs3State.ram.filter;
-            r3RamFilter.addEventListener('change', function(e) { onRs3FilterChange('ram', e.target.value); });
+            r3RamFilter.addEventListener('change', function(e) { onRs3FilterChange('ram', normalizeRs3RamFilter(e.target.value)); });
         } else {
-            rs3State.ram.filter = rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter;
+            rs3State.ram.filter = normalizeRs3RamFilter(rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter);
         }
         if (rs3WorkloadFilter) {
             rs3WorkloadFilter.addEventListener('change', function(e) {
