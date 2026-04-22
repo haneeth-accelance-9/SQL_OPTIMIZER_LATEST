@@ -16,6 +16,19 @@ import logging
 from typing import Optional
 
 import pandas as pd
+"""
+Rule 2: Software installations on retired devices.
+
+Identifies devices marked as retired in CMDB but still reporting software
+installations. Expects normalized column names including install_status.
+
+Enterprise use case (UC 1.2):
+- Install_Status equals "retired"
+- No License Required (Product) equals 0
+"""
+import logging
+
+import pandas as pd
 
 from optimizer.rules.column_utils import find_no_license_required_column, no_license_required_is_zero
 
@@ -25,10 +38,17 @@ COL_INSTALL_STATUS = "install_status"
 RETIRED_STATUS = "retired"
 
 
+<<<<<<< HEAD
 def find_retired_devices_with_installations(
     installation_df: pd.DataFrame,
     retired_status: str = RETIRED_STATUS,
 ) -> pd.DataFrame:
+=======
+def find_retired_devices_with_installations(
+    installation_df: pd.DataFrame,
+    retired_status: str = RETIRED_STATUS,
+) -> pd.DataFrame:
+>>>>>>> a038b3153068c976df21949f0a62c1a54a2cc25b
     """
     Identify installations on devices marked as retired (UC 1.2).
 
@@ -55,6 +75,7 @@ def find_retired_devices_with_installations(
     ) & no_license_required_is_zero(installation_df[no_lic_col])
 
     retired = installation_df.loc[retired_mask].copy()
+<<<<<<< HEAD
 
     logger.info("Total retired devices with software installations: %s", len(retired))
     return retired
@@ -80,3 +101,8 @@ def find_retired_devices_with_installations_from_db(
         installation_df,
         retired_status=retired_status,
     )
+=======
+
+    logger.info("Total retired devices with software installations: %s", len(retired))
+    return retired
+>>>>>>> a038b3153068c976df21949f0a62c1a54a2cc25b

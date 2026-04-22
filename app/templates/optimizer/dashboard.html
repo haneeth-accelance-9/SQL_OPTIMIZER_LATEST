@@ -15,6 +15,7 @@
                     {% if data_source == "database" %}
                     Live data from the database.{% if analysis_created_at %} Last refreshed {{ analysis_created_at|date:"M d, Y H:i" }}.{% endif %}
                     {% elif analysis_source_file_name %}
+                    {% if analysis_source_file_name %}
                     Insights generated from the analyzed file <span class="font-semibold text-slate-700">{{ analysis_source_file_name }}</span>{% if analysis_created_at %} on {{ analysis_created_at|date:"M d, Y H:i" }}{% endif %}.
                     {% else %}
                     Comprehensive insights into your SQL server licensing landscape.
@@ -63,6 +64,19 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+            <div class="flex flex-wrap items-center gap-3 lg:pt-1">
+                <a href="{% url 'optimizer:home' %}"
+                    class="inline-flex items-center gap-2 rounded-md bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Run New Batch
+                </a>
+                <a href="{% url 'optimizer:report' %}"
+                    class="inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-semibold text-sky-600 transition hover:bg-sky-100">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
                         </path>
                     </svg>
                     Download Report
@@ -92,6 +106,7 @@
         </div>
         <div class="border-b border-slate-200 bg-white px-8 py-2 lg:px-12">
             <div class="flex items-center gap-2 w-full">
+            <div class="flex flex-wrap items-center gap-2">
                 <button onclick="setOptimizerTab('dashboard');" id="tablink-dashboard"
                     class="optimizer-tab-link tab-active rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
                     Dashboard
@@ -112,6 +127,11 @@
                 <button onclick="setOptimizerTab('dataquality');" id="tablink-dataquality"
                     class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
                     Data Quality
+                    PAYG Recommendation
+                </button>
+                <button onclick="setOptimizerTab('rule2');" id="tablink-rule2"
+                    class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
+                    Retired Devices
                 </button>
             </div>
         </div>
@@ -1302,6 +1322,7 @@
 {{ dq_grafana_metric_names|json_script:"dq-grafana-metric-names" }}
 {{ dq_flatfile_rows|json_script:"dq-flatfile-data" }}
 {{ dq_flatfile_keys|json_script:"dq-flatfile-keys" }}
+{{ chart_specs|json_script:"chart-specs-data" }}
 
 <style>
     .tab-content-panel {
@@ -1433,6 +1454,9 @@
 
     .download-sheets-menu {
         min-width: 18rem;
+    }
+    .dashboard-summary-savings {
+        background: #ffffff;
     }
 
     .payg-hero-card,
@@ -1832,6 +1856,7 @@
         };
 
         var validTabs = ['rule1', 'rule2', 'rule3', 'combined', 'dashboard', 'dataquality'];
+        var validTabs = ['rule1', 'rule2', 'combined', 'dashboard'];
         window.setOptimizerTab = function (tabId) {
             validTabs.forEach(function (id) {
                 var linkEl = document.getElementById('tablink-' + id);
@@ -2531,5 +2556,6 @@
             };
         })();
     })();
+    });
 </script>
 {% endblock %}

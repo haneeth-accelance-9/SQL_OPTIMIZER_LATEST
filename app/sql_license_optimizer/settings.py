@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name, "").strip().lower()
     if not raw:
@@ -96,6 +98,9 @@ DATABASES = {
         "CONN_MAX_AGE": 60,
     }
 }
+WSGI_APPLICATION = "sql_license_optimizer.wsgi.application"
+
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
