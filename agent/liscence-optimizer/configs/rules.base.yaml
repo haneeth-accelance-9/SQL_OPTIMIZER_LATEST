@@ -13,6 +13,9 @@ defaults:
     avg_free_mem_12m: avg_free_mem_12m
     min_free_mem_12m: min_free_mem_12m
     current_ram_gib: current_ram_gib
+    # optional CMDB fields used for criticality-aware logic / human review
+    criticality: criticality      # may also appear as "Critically" / "Criticality" upstream
+    is_virtual: is_virtual        # CMDB label is often "IsVirtual"; blanks are treated as virtual
 rules:
   - id: uc_1_1_azure_byol_to_payg
     type: filter
@@ -34,7 +37,7 @@ rules:
     description: "CPU rightsizing (PROD vs non-PROD)"
     applies_when:
       all:
-        - { op: gt, col: current_vcpu, value: 2 }
+        - { op: gte, col: current_vcpu, value: 4 }
     branches:
       - id: prod
         when: { op: eq_ci, col: env, value: "PROD" }
@@ -42,17 +45,20 @@ rules:
           all:
             - { op: lt, col: avg_cpu_12m, value: 0.15 }     # store as fraction 0.15, not "15%"
             - { op: lte, col: peak_cpu_12m, value: 0.70 }
+            - { op: gte, col: current_vcpu, value: 4 }
         recommend:
           # implement these as explicit decision tables in code (see below)
-          engine: cpu_rightsizing_prod_v1
+          engine: cpu_rightsizing_prod_v2
       - id: nonprod
         when: { op: not_eq_ci, col: env, value: "PROD" }
         candidate_when:
           all:
-            - { op: lt, col: avg_cpu_12m, value: 0.15 }
+            # Note: allow 15–25% band for non-PROD recommendations
+            - { op: lt, col: avg_cpu_12m, value: 0.25 }
             - { op: lte, col: peak_cpu_12m, value: 0.80 }
+            - { op: gte, col: current_vcpu, value: 4 }
         recommend:
-          engine: cpu_rightsizing_nonprod_v1
+          engine: cpu_rightsizing_nonprod_v2
   - id: uc_3_2_ram_rightsizing
     type: recommendation
     description: "RAM reduction (PROD vs non-PROD)"
@@ -65,13 +71,15 @@ rules:
           all:
             - { op: gte, col: avg_free_mem_12m, value: 0.35 }
             - { op: gte, col: min_free_mem_12m, value: 0.20 }
+            - { op: gt, col: current_ram_gib, value: 8 }
         recommend:
-          engine: ram_rightsizing_prod_v1
+          engine: ram_rightsizing_prod_v2
       - id: nonprod
         when: { op: not_eq_ci, col: env, value: "PROD" }
         candidate_when:
           all:
             - { op: gte, col: avg_free_mem_12m, value: 0.30 }
             - { op: gte, col: min_free_mem_12m, value: 0.15 }
+            - { op: gt, col: current_ram_gib, value: 4 }
         recommend:
-          engine: ram_rightsizing_nonprod_v1
+          engine: ram_rightsizing_nonprod_v2
