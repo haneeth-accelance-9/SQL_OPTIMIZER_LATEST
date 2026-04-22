@@ -301,6 +301,64 @@ def test_results_applies_rs3_workload_and_screen_selection(client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_results_defaults_rs3_workload_to_all_without_query_param(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="all-default", password="secret123")
+    client.force_login(user)
+
+    fake_context = {
+        "rule_results": {
+            "azure_payg_count": 0,
+            "azure_payg": [],
+            "retired_count": 0,
+            "retired_devices": [],
+        },
+        "license_metrics": {
+            "total_demand_quantity": 0,
+            "total_license_cost": 0,
+            "by_product": [],
+            "price_distribution": [],
+            "cost_reduction_tips": [],
+        },
+        "rightsizing": {
+            "cpu_optimizations": [],
+            "ram_optimizations": [],
+            "cpu_candidates": [],
+            "ram_candidates": [],
+            "workload_options": ["CPU", "RAM"],
+            "default_workload": "CPU",
+            "default_filter_by_workload": {
+                "CPU": "PROD_CPU_Optimization",
+                "RAM": "PROD_RAM_Optimization",
+            },
+            "screen_filter_options": {
+                "CPU": [
+                    "PROD_CPU_Optimization",
+                    "PROD_CPU_Recommendation",
+                    "NONPROD_CPU_Optimization",
+                    "NONPROD_CPU_Recommendation",
+                ],
+                "RAM": [
+                    "PROD_RAM_Optimization",
+                    "PROD_RAM_Recommendation",
+                    "NONPROD_RAM_Optimization",
+                    "NONPROD_RAM_Recommendation",
+                ],
+            },
+        },
+    }
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.compute_live_db_metrics",
+        lambda: fake_context,
+    )
+
+    response = client.get(reverse("optimizer:results"))
+
+    assert response.status_code == 200
+    assert response.context["rs3_selected_workload"] == "ALL"
+
+
+@pytest.mark.django_db
 def test_download_rightsizing_sheet_exports_selected_screen(client, monkeypatch):
     user = get_user_model().objects.create_user(username="sheetdl", password="secret123")
     client.force_login(user)

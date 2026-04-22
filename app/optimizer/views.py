@@ -246,6 +246,15 @@ def _get_page_number(request, param_name, default=1):
         return default
 
 
+def _format_metric_label(metric_name):
+    metric_name = str(metric_name or "").strip()
+    if not metric_name:
+        return ""
+    if metric_name == "database_size_mib":
+        return "Database Size Mmib"
+    return " ".join(part.capitalize() for part in metric_name.split("_") if part)
+
+
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
     "Environment",
@@ -717,7 +726,6 @@ def results(request):
     rs3_workload_options = ["ALL"] + [str(option).upper() for option in (rs.get("workload_options") or ["CPU", "RAM"])]
     rs3_workload = str(
         request.GET.get("rs3_workload")
-        or rs.get("default_workload")
         or RS3_WORKLOAD_DEFAULT
     ).upper()
     if rs3_workload not in rs3_workload_options:
@@ -805,6 +813,8 @@ def results(request):
 
         from django.db.models import Avg, Max, Min, Count
 
+        dq_grafana_connections_by_server = []
+
         grafana_qs = (
             GrafanaMetricSnapshot.objects
             .select_related("server")
@@ -858,7 +868,7 @@ def results(request):
                     "y": [round(sum(v) / len(v), 4) for _, v in pts],
                 }
 
-            # ── Chart 3: top 10 servers by avg value (per metric) ─────────────
+            # ── Chart 3: servers by avg value (per metric) ────────────────────
             server_metric_map = defaultdict(lambda: defaultdict(list))
             for g in grafana_snap_list:
                 if g.metric_value is None:
@@ -870,8 +880,29 @@ def results(request):
                 ranked = sorted(
                     [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in srv_dict.items()],
                     key=lambda r: r["avg"], reverse=True
-                )[:10]
+                )
                 dq_grafana_top_servers[mn] = ranked
+
+            connection_snapshots = (
+                GrafanaMetricSnapshot.objects
+                .select_related("server")
+                .filter(metric_name="connections")
+                .order_by("-metric_ts")
+            )
+            connection_server_map = defaultdict(list)
+            for row in connection_snapshots:
+                if row.metric_value is None:
+                    continue
+                server_name = row.server.server_name if row.server else "Unknown"
+                connection_server_map[server_name].append(float(row.metric_value))
+            dq_grafana_connections_by_server = sorted(
+                [
+                    {"server": server_name, "avg": round(sum(values) / len(values), 4)}
+                    for server_name, values in connection_server_map.items()
+                ],
+                key=lambda r: r["avg"],
+                reverse=True,
+            )
 
             # ── Chart 4: KPI summary ───────────────────────────────────────────
             dq_grafana_kpis = {
@@ -941,7 +972,7 @@ def results(request):
                     "y": [round(sum(v) / len(v), 4) for _, v in pts],
                 }
 
-            # ── Chart 3: top servers per metric ───────────────────────────────
+            # ── Chart 3: servers per metric ───────────────────────────────────
             srv_map = defaultdict(lambda: defaultdict(list))
             for r in rollup_list:
                 if r.avg_value is None:
@@ -953,8 +984,29 @@ def results(request):
                 ranked = sorted(
                     [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in sd.items()],
                     key=lambda r: r["avg"], reverse=True
-                )[:10]
+                )
                 dq_grafana_top_servers[mn] = ranked
+
+            connection_rollups = (
+                GrafanaMetricMonthlyRollup.objects
+                .select_related("server")
+                .filter(metric_name="connections")
+                .order_by("-period_month")
+            )
+            connection_server_map = defaultdict(list)
+            for row in connection_rollups:
+                if row.avg_value is None:
+                    continue
+                server_name = row.server.server_name if row.server else "Unknown"
+                connection_server_map[server_name].append(float(row.avg_value))
+            dq_grafana_connections_by_server = sorted(
+                [
+                    {"server": server_name, "avg": round(sum(values) / len(values), 4)}
+                    for server_name, values in connection_server_map.items()
+                ],
+                key=lambda r: r["avg"],
+                reverse=True,
+            )
 
             dq_grafana_metric_avg = dq_grafana_rollup_summary
 
@@ -989,6 +1041,7 @@ def results(request):
         logger.warning("Data Quality fetch failed: %s", _dq_exc)
         dq_usu_rows, dq_grafana_rows, dq_flatfile_rows = [], [], []
         dq_grafana_metric_avg, dq_grafana_timeline, dq_grafana_top_servers = [], {}, {}
+        dq_grafana_connections_by_server = []
         dq_grafana_rollup_summary, dq_grafana_kpis = [], {"total_records": 0, "unique_metrics": 0, "unique_servers": 0, "unique_dashboards": 0}
         dq_grafana_is_snapshot = False
 
@@ -1001,10 +1054,15 @@ def results(request):
     render_context["dq_grafana_metric_avg"] = dq_grafana_metric_avg
     render_context["dq_grafana_timeline"] = dq_grafana_timeline
     render_context["dq_grafana_top_servers"] = dq_grafana_top_servers
+    render_context["dq_grafana_connections_by_server"] = dq_grafana_connections_by_server
     render_context["dq_grafana_rollup_summary"] = dq_grafana_rollup_summary
     render_context["dq_grafana_kpis"] = dq_grafana_kpis
     render_context["dq_grafana_is_snapshot"] = dq_grafana_is_snapshot
     render_context["dq_grafana_metric_names"] = list(dq_grafana_top_servers.keys())
+    render_context["dq_grafana_metric_options"] = [
+        {"value": metric_name, "label": _format_metric_label(metric_name)}
+        for metric_name in render_context["dq_grafana_metric_names"]
+    ]
 
     # Interactive Plotly charts (hover tooltips, responsive)
     if get_all_plotly_specs is not None:

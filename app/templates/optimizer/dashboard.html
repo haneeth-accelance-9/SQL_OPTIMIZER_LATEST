@@ -22,13 +22,13 @@
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-3 lg:pt-1">
-                <a href="{% url 'optimizer:home' %}"
+                <!-- <a href="{% url 'optimizer:home' %}"
                     class="inline-flex items-center gap-2 rounded-md bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                     Run New Batch
-                </a>
+                </a> -->
                 <div class="relative">
                     <details class="download-sheets-dropdown">
                         <summary
@@ -128,6 +128,12 @@
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">PAYG Recommendations</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify Azure SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
+                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                            </svg>
+                            <p>Data for this logic is sourced from USU.</p>
+                        </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
                         <div>
@@ -298,11 +304,11 @@
                             <tr>
                                 {% for key in rule1_keys %}
                                 <th
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    {{ key }}</th>
+                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    {{ key|title }}</th>
                                 {% endfor %}
                                 <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
                                     Actions</th>
                             </tr>
                         </thead>
@@ -348,6 +354,12 @@
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">Retired Devices</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Retired devices still reporting install. Reconcile CMDB and confirm decommissioning.</p>
+                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                            </svg>
+                            <p>Data for this logic is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
+                        </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
                         <div>
@@ -443,11 +455,11 @@
                             <tr>
                                 {% for key in rule2_keys %}
                                 <th
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    {{ key }}</th>
+                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    {{ key|title }}</th>
                                 {% endfor %}
                                 <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
                                     Actions</th>
                             </tr>
                         </thead>
@@ -632,6 +644,55 @@
 
             <section class="flex-shrink-0 mb-6">
                 <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                    <div class="xl:col-span-6 dashboard-panel-card">
+                        <div class="mb-4">
+                            <h3 class="text-base font-bold text-slate-900">Right sizing</h3>
+                            <p class="mt-1 text-sm text-slate-500">Current optimization signals for CPU and RAM from the right-sizing engine.</p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
+                                <span class="dashboard-section-label">CPU</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}</p>
+                                <p class="mt-1 text-sm font-semibold text-slate-600">vCPUs</p>
+                                <p class="mt-3 text-sm text-slate-500">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
+                            </div>
+                            <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
+                                <span class="dashboard-section-label">RAM</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}</p>
+                                <p class="mt-1 text-sm font-semibold text-slate-600">GiB RAM</p>
+                                <p class="mt-3 text-sm text-slate-500">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-6 dashboard-panel-card">
+                        <div class="mb-4">
+                            <h3 class="text-base font-bold text-slate-900">Enterprise SQL Optimizer Accuracy</h3>
+                            <p class="mt-1 text-sm text-slate-500">Confidence snapshot for the three optimization strategies based on internal validation.</p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
+                                <span class="dashboard-section-label">Strategy 1</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
+                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                            </div>
+                            <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
+                                <span class="dashboard-section-label">Strategy 2</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
+                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                            </div>
+                            <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
+                                <span class="dashboard-section-label">Strategy 3</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
+                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
                     <div class="xl:col-span-7 dashboard-panel-card">
                         <div>
                             <span class="dashboard-section-label">Price Distribution by License Type</span>
@@ -668,6 +729,39 @@
                             {% else %}
                             <div class="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">No chart data</div>
                             {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="flex-shrink-0 mb-6">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                    <div class="xl:col-span-6 dashboard-panel-card">
+                        <div class="mb-4">
+                            <span class="dashboard-section-label">Right Sizing CPU</span>
+                            <p class="mt-1 text-sm text-slate-500">Average vs peak CPU utilisation across right-sizing candidates.</p>
+                        </div>
+                        <div class="h-[360px]">
+                            <div id="chart-dash-rs3-cpu" class="plotly-chart h-full w-full"></div>
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-6 dashboard-panel-card">
+                        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <span class="dashboard-section-label">Right Sizing RAM</span>
+                                <p class="mt-1 text-sm text-slate-500">Average vs min free memory with RAM filter selection.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label for="dash-rs3-ram-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
+                                <select id="dash-rs3-ram-filter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
+                                    <option value="PROD_RAM_Optimization">PROD RAM Optimization</option>
+                                    <option value="NONPROD_RAM_Optimization">NON-PROD RAM Optimization</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="h-[360px]">
+                            <div id="chart-dash-rs3-ram" class="plotly-chart h-full w-full"></div>
                         </div>
                     </div>
                 </div>
@@ -823,7 +917,13 @@
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
                         <h2 id="rs3-cpu-title" class="text-[2rem] leading-tight font-extrabold text-slate-900">CPU Right-Sizing</h2>
-                        <p class="mt-2 max-w-3xl text-sm text-slate-500">VMs with average CPU &lt; 15% and peak ≤ 70% (PROD) or ≤ 80% (NON-PROD) that have more than 2 vCPUs allocated.</p>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Identifying underutilized CPUs within MS SQL databases for downsizing and performance optimization.</p>
+                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                            </svg>
+                            <p>Data for this logic is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
+                        </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
                         <div>
@@ -913,7 +1013,7 @@
                             <thead class="bg-slate-50 sticky top-0 z-10">
                                 <tr id="rs3-cpu-head-row">
                                     {% for key in cpu_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
                                     {% endfor %}
                                 </tr>
                             </thead>
@@ -1036,7 +1136,7 @@
                             <thead class="bg-slate-50 sticky top-0 z-10">
                                 <tr id="rs3-ram-head-row">
                                     {% for key in ram_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
+                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
                                     {% endfor %}
                                 </tr>
                             </thead>
@@ -1071,7 +1171,12 @@
         <div id="panel-dataquality" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto" data-tab="dataquality">
             <div class="flex-shrink-0 mb-6">
                 <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">Data Quality</h2>
-                <!-- <p class="mt-2 max-w-3xl text-sm text-slate-500">Inspect raw source data ingested from USU, Grafana, and flat files to verify data quality and completeness.</p> -->
+                <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                    </svg>
+                    <p>Pre-processed data displayed to indicate successful integration of USU, Grafana, and flat file sources.</p>
+                </div>
             </div>
 
             <!-- Sub-tab nav -->
@@ -1135,26 +1240,6 @@
             <div id="dq-panel-grafana" class="dq-sub-panel flex flex-col gap-4 hidden">
 
                 {% if dq_grafana_kpis.total_records %}
-                <!-- KPI strip -->
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-[18px] border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Total Records</p>
-                        <p class="text-3xl font-extrabold text-slate-900">{{ dq_grafana_kpis.total_records }}</p>
-                    </div>
-                    <div class="bg-white rounded-[18px] border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Unique Metrics</p>
-                        <p class="text-3xl font-extrabold text-emerald-600">{{ dq_grafana_kpis.unique_metrics }}</p>
-                    </div>
-                    <div class="bg-white rounded-[18px] border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Unique Servers</p>
-                        <p class="text-3xl font-extrabold text-sky-600">{{ dq_grafana_kpis.unique_servers }}</p>
-                    </div>
-                    <div class="bg-white rounded-[18px] border border-slate-200 shadow-sm px-5 py-4 flex flex-col gap-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{% if dq_grafana_is_snapshot %}Dashboards{% else %}Data Type{% endif %}</p>
-                        <p class="text-3xl font-extrabold text-violet-600">{% if dq_grafana_is_snapshot %}{{ dq_grafana_kpis.unique_dashboards }}{% else %}Rollup{% endif %}</p>
-                    </div>
-                </div>
-
                 <!-- Charts row 1: Avg by Metric  +  Timeline -->
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
@@ -1167,8 +1252,8 @@
                         <p class="text-xs text-slate-500 mb-2">Select a metric to plot its value over time.</p>
                         <div class="mb-3">
                             <select id="dq-grafana-timeline-select" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
-                                {% for mn in dq_grafana_metric_names %}
-                                <option value="{{ mn }}">{{ mn }}</option>
+                                {% for option in dq_grafana_metric_options %}
+                                <option value="{{ option.value }}">{{ option.label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -1176,24 +1261,19 @@
                     </div>
                 </div>
 
-                <!-- Charts row 2: Top servers  +  Avg/Max/Min grouped -->
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <!-- Charts row 2: Metric by server -->
+                <div class="grid grid-cols-1 gap-4">
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
-                        <h3 class="text-sm font-bold text-slate-800 mb-1">Top 10 Servers by Metric</h3>
-                        <p class="text-xs text-slate-500 mb-2">Select a metric to rank the top 10 servers by average value.</p>
+                        <h3 class="text-sm font-bold text-slate-800 mb-1">Trend Analysis by Metric</h3>
+                        <p class="text-xs text-slate-500 mb-2">Select a metric to view the graph across all available servers.</p>
                         <div class="mb-3">
                             <select id="dq-grafana-server-select" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
-                                {% for mn in dq_grafana_metric_names %}
-                                <option value="{{ mn }}">{{ mn }}</option>
+                                {% for option in dq_grafana_metric_options %}
+                                <option value="{{ option.value }}" {% if option.value == 'connections' %}selected{% endif %}>{{ option.label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div id="dq-grafana-chart-servers" class="w-full" style="height:240px;"></div>
-                    </div>
-                    <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
-                        <h3 class="text-sm font-bold text-slate-800 mb-1">{% if dq_grafana_is_snapshot %}Metric Reading Distribution{% else %}Avg / Max / Min per Metric{% endif %}</h3>
-                        <p class="text-xs text-slate-500 mb-4">{% if dq_grafana_is_snapshot %}Value distribution across all snapshots per metric (grouped).{% else %}Monthly rollup summary: avg, max and min values per metric.{% endif %}</p>
-                        <div id="dq-grafana-chart-amm" class="w-full" style="height:280px;"></div>
+                        <div id="dq-grafana-chart-servers" class="w-full" style="height:340px;"></div>
                     </div>
                 </div>
                 {% endif %}
@@ -1241,7 +1321,7 @@
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
                     <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
                         <div>
-                            <h3 class="text-sm font-bold text-slate-800">Flat File Ingestion (Boone's)</h3>
+                            <h3 class="text-sm font-bold text-slate-800">Flat File Ingestion</h3>
                             <!-- <p class="text-xs text-slate-500 mt-0.5">Latest {{ dq_flatfile_rows|length }} CPU utilisation records ingested from Boone's public/private cloud flat files.</p> -->
                         </div>
                         <div class="flex items-center gap-2">
@@ -1298,6 +1378,7 @@
 {{ dq_grafana_metric_avg|json_script:"dq-grafana-metric-avg" }}
 {{ dq_grafana_timeline|json_script:"dq-grafana-timeline" }}
 {{ dq_grafana_top_servers|json_script:"dq-grafana-top-servers" }}
+{{ dq_grafana_connections_by_server|json_script:"dq-grafana-connections-by-server" }}
 {{ dq_grafana_rollup_summary|json_script:"dq-grafana-rollup-summary" }}
 {{ dq_grafana_metric_names|json_script:"dq-grafana-metric-names" }}
 {{ dq_flatfile_rows|json_script:"dq-flatfile-data" }}
@@ -1509,7 +1590,7 @@
     }
 
     .dashboard-license-developer {
-        border-top: 4px solid #22c55e;
+        border-top: 4px solid #84CC16;
     }
 
     .dashboard-license-enterprise {
@@ -1821,6 +1902,96 @@
             } catch (e) { console.warn('RS3 RAM chart:', e); }
         })();
 
+        (function initDashboardRs3Charts() {
+            if (typeof Plotly === 'undefined') return;
+            var dashPlotlyConfig = { responsive: true, displayModeBar: false, displaylogo: false };
+
+            function parseJsonScript(id) {
+                var el = document.getElementById(id);
+                if (!el) return [];
+                try { return JSON.parse(el.textContent || '[]'); } catch (e) { return []; }
+            }
+
+            var cpuChartData = parseJsonScript('rs3-cpu-chart');
+            var ramChartData = parseJsonScript('rs3-ram-chart');
+            var dashCpuEl = document.getElementById('chart-dash-rs3-cpu');
+            var dashRamEl = document.getElementById('chart-dash-rs3-ram');
+            var dashRamFilterEl = document.getElementById('dash-rs3-ram-filter');
+
+            function buildRs3Layout(titleText, yAxisTitle) {
+                return {
+                    margin: { l: 52, r: 24, t: 70, b: 92 },
+                    font: { family: "'Segoe UI', system-ui, sans-serif", size: 11, color: '#334155' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    legend: { orientation: 'h', yanchor: 'bottom', y: 1.08, xanchor: 'right', x: 1, font: { size: 11 }, bgcolor: 'rgba(255,255,255,0)', borderwidth: 0 },
+                    xaxis: { automargin: true, tickfont: { size: 10, color: '#64748b' }, gridcolor: '#eef4f8', linecolor: '#d9e3ec', zeroline: false, tickangle: -35 },
+                    yaxis: { automargin: true, tickfont: { size: 10, color: '#64748b' }, gridcolor: '#eef4f8', linecolor: '#d9e3ec', zeroline: false, title: { text: yAxisTitle, font: { size: 11 } } },
+                    title: { text: titleText, font: { size: 13, color: '#0f172a' } },
+                    barmode: 'group',
+                };
+            }
+
+            if (dashCpuEl && cpuChartData.length) {
+                Plotly.newPlot(dashCpuEl, [
+                    {
+                        x: cpuChartData.map(function(d) { return d.name; }),
+                        y: cpuChartData.map(function(d) { return d.avg; }),
+                        type: 'bar',
+                        name: 'Avg CPU %',
+                        marker: { color: '#1ea7e1' }
+                    },
+                    {
+                        x: cpuChartData.map(function(d) { return d.name; }),
+                        y: cpuChartData.map(function(d) { return d.peak; }),
+                        type: 'bar',
+                        name: 'Peak CPU %',
+                        marker: { color: '#84cc16' }
+                    }
+                ], buildRs3Layout('Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
+            }
+
+            function renderDashRamChart(filterValue) {
+                if (!dashRamEl) return;
+                var filterField = /_Recommendation$/.test(filterValue || '') ? 'recommendation_type' : 'optimization_type';
+                var filtered = ramChartData.filter(function(row) {
+                    return String(row[filterField] || '') === String(filterValue || '');
+                });
+
+                if (!filtered.length) {
+                    Plotly.newPlot(dashRamEl, [], buildRs3Layout('Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
+                    return;
+                }
+
+                Plotly.newPlot(dashRamEl, [
+                    {
+                        x: filtered.map(function(d) { return d.name; }),
+                        y: filtered.map(function(d) { return d.avg_free; }),
+                        type: 'bar',
+                        name: 'Avg Free Mem %',
+                        marker: { color: '#84cc16' }
+                    },
+                    {
+                        x: filtered.map(function(d) { return d.name; }),
+                        y: filtered.map(function(d) { return d.min_free; }),
+                        type: 'bar',
+                        name: 'Min Free Mem %',
+                        marker: { color: '#f59e0b' }
+                    }
+                ], buildRs3Layout('Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
+            }
+
+            if (dashRamEl) {
+                var defaultRamFilter = dashRamFilterEl ? dashRamFilterEl.value : 'PROD_RAM_Optimization';
+                renderDashRamChart(defaultRamFilter);
+                if (dashRamFilterEl) {
+                    dashRamFilterEl.addEventListener('change', function () {
+                        renderDashRamChart(this.value);
+                    });
+                }
+            }
+        })();
+
         var rs3PlotlyConfig = { responsive: true, displayModeBar: false, displaylogo: false };
         var rs3LayoutBase = {
             margin: { l: 52, r: 24, t: 70, b: 80 },
@@ -2020,10 +2191,42 @@
             }
         };
 
+        ['rs3-cpu-filter', 'rs3-ram-filter'].forEach(function(id) {
+            var sel = document.getElementById(id);
+            if (!sel) return;
+            Array.from(sel.options).forEach(function(opt) {
+                opt.text = opt.value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+            });
+        });
+
+        ['rs3-cpu-table', 'rs3-ram-table'].forEach(function(id) {
+            var table = document.getElementById(id);
+            if (!table) return;
+            table.querySelectorAll('thead th').forEach(function(th) {
+                th.style.textTransform = 'none';
+                th.textContent = th.textContent.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); }).trim();
+            });
+        });
+
+        ['rule1-tbody', 'rule2-tbody'].forEach(function(id) {
+            var tbody = document.getElementById(id);
+            if (!tbody) return;
+            var table = tbody.closest('table');
+            if (!table) return;
+            table.querySelectorAll('thead th').forEach(function(th) {
+                var text = th.textContent.trim();
+                if (text.toLowerCase() !== 'actions') {
+                    th.textContent = text.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); }).trim();
+                }
+                th.style.textTransform = 'none';
+            });
+        });
+
         function humanizeRs3Filter(value) {
             return String(value || '')
                 .replace(/_/g, ' ')
-                .replace(/NONPROD/g, 'NON-PROD')
+                .toLowerCase()
+                .replace(/\b\w/g, function(c) { return c.toUpperCase(); })
                 .trim();
         }
 
@@ -2081,7 +2284,8 @@
             if (!headRow) return;
             var html = '';
             for (var i = 0; i < columns.length; i++) {
-                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(columns[i]) + '</th>';
+                var label = columns[i].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
             }
             headRow.innerHTML = html;
         }
@@ -2394,9 +2598,22 @@
                 return el ? JSON.parse(el.textContent || 'null') : null;
             }
 
+            function formatMetricLabel(metric) {
+                if (!metric) return '';
+                if (metric === 'database_size_mib') return 'Database Size Mmib';
+                return String(metric)
+                    .split('_')
+                    .filter(Boolean)
+                    .map(function(part) {
+                        return part.charAt(0).toUpperCase() + part.slice(1);
+                    })
+                    .join(' ');
+            }
+
             var metricAvg    = parseEl('dq-grafana-metric-avg')    || [];
             var timeline     = parseEl('dq-grafana-timeline')       || {};
             var topServers   = parseEl('dq-grafana-top-servers')    || {};
+            var connectionsByServer = parseEl('dq-grafana-connections-by-server') || [];
             var rollupSumm   = parseEl('dq-grafana-rollup-summary') || [];
             var metricNames  = parseEl('dq-grafana-metric-names')   || [];
 
@@ -2433,7 +2650,7 @@
                 var d = timeline[metric];
                 if (!d || !d.x || !d.x.length) {
                     Plotly.newPlot(timelineEl, [], Object.assign({}, baseLayout, {
-                        title: { text: 'No data for: ' + metric, font: { size: 12, color: '#64748b' } },
+                        title: { text: 'No data for: ' + formatMetricLabel(metric), font: { size: 12, color: '#64748b' } },
                         margin: { l: 52, r: 20, t: 36, b: 60 },
                     }), cfg);
                     return;
@@ -2444,7 +2661,7 @@
                     marker: { size: 5, color: '#0ea5e9' },
                     hovertemplate: '<b>%{x}</b><br>Value: %{y:.4f}<extra></extra>',
                 }], Object.assign({}, baseLayout, {
-                    title: { text: metric + ' — Over Time', font: { size: 12, color: '#0f172a' } },
+                    title: { text: formatMetricLabel(metric) + ' - Over Time', font: { size: 12, color: '#0f172a' } },
                     margin: { l: 52, r: 20, t: 36, b: 60 },
                     showlegend: false,
                 }), cfg);
@@ -2458,63 +2675,64 @@
             }
 
             // Chart 3 — Top servers horizontal bar
+
             var serverChartEl = document.getElementById('dq-grafana-chart-servers');
             var serverSel = document.getElementById('dq-grafana-server-select');
 
-            function renderTopServers(metric) {
+            function renderServersByMetric(metric) {
                 if (!serverChartEl) return;
                 var rows = topServers[metric] || [];
                 if (!rows.length) {
                     Plotly.newPlot(serverChartEl, [], Object.assign({}, baseLayout, {
-                        title: { text: 'No server data for: ' + metric, font: { size: 12, color: '#64748b' } },
+                        title: { text: 'No server data available for ' + formatMetricLabel(metric), font: { size: 12, color: '#64748b' } },
                         margin: { l: 140, r: 20, t: 36, b: 40 },
                     }), cfg);
                     return;
                 }
-                var servers = rows.map(function(r){ return r.server; }).reverse();
-                var avgs    = rows.map(function(r){ return r.avg; }).reverse();
+                var servers = rows.map(function(r){ return r.server || 'Unknown'; });
+                var avgs = rows.map(function(r){
+                    var value = Number(r.avg);
+                    return isNaN(value) ? 0 : value;
+                });
+                var barColors = ['#0ea5e9','#14b8a6','#84CC16','#38bdf8','#34d399','#10b981','#06b6d4','#4ade80','#0284c7','#16a34a'];
                 Plotly.newPlot(serverChartEl, [{
-                    y: servers, x: avgs, type: 'bar', orientation: 'h', name: 'Avg',
-                    marker: { color: '#10b981' },
-                    hovertemplate: '<b>%{y}</b><br>Avg: %{x:.4f}<extra></extra>',
+                    x: servers, y: avgs, type: 'bar', name: 'Avg',
+                    marker: {
+                        color: servers.map(function(_, i){ return barColors[i % barColors.length]; }),
+                        line: { color: '#ffffff', width: 1.2 }
+                    },
+                    text: avgs.map(function(v){ return v.toFixed(4); }),
+                    textposition: 'outside',
+                    cliponaxis: false,
+                    hovertemplate: '<b>%{x}</b><br>Avg: %{y:.4f}<extra></extra>',
                 }], Object.assign({}, baseLayout, {
-                    title: { text: 'Top Servers — ' + metric, font: { size: 12, color: '#0f172a' } },
-                    margin: { l: 140, r: 20, t: 36, b: 40 },
-                    xaxis: Object.assign({}, baseLayout.xaxis, { tickangle: 0, title: { text: 'Avg Value' } }),
-                    yaxis: Object.assign({}, baseLayout.yaxis, { automargin: true }),
+                    title: { text: 'Trend Analysis - ' + formatMetricLabel(metric) + ' by Server', font: { size: 12, color: '#0f172a' } },
+                    margin: { l: 60, r: 20, t: 44, b: 110 },
+                    xaxis: Object.assign({}, baseLayout.xaxis, {
+                        type: 'category',
+                        tickangle: -25,
+                        title: { text: 'Server' },
+                        categoryorder: 'array',
+                        categoryarray: servers
+                    }),
+                    yaxis: Object.assign({}, baseLayout.yaxis, {
+                        automargin: true,
+                        title: { text: metric === 'connections' ? 'Connections Count' : 'Avg Value' }
+                    }),
                     showlegend: false,
                 }), cfg);
             }
 
-            if (metricNames.length) {
-                renderTopServers(metricNames[0]);
+            var defaultServerMetric = topServers.connections ? 'connections' : (metricNames[0] || null);
+            if (defaultServerMetric) {
+                renderServersByMetric(defaultServerMetric);
                 if (serverSel) {
-                    serverSel.addEventListener('change', function () { renderTopServers(this.value); });
+                    serverSel.value = defaultServerMetric;
+                    serverSel.addEventListener('change', function () { renderServersByMetric(this.value); });
                 }
             }
 
             // Chart 4 — Avg/Max/Min grouped bar (rollup) or value spread (snapshot)
-            var ammEl = document.getElementById('dq-grafana-chart-amm');
-            if (ammEl) {
-                var ammData = rollupSumm.length ? rollupSumm : metricAvg;
-                if (ammData.length) {
-                    var ammLabels = ammData.map(function(d){ return d.metric; });
-                    var traces = [];
-                    if (rollupSumm.length) {
-                        traces = [
-                            { x: ammLabels, y: ammData.map(function(d){ return d.avg || 0; }), name: 'Avg', type: 'bar', marker: { color: '#0ea5e9' }, hovertemplate: '<b>%{x}</b><br>Avg: %{y:.4f}<extra></extra>' },
-                            { x: ammLabels, y: ammData.map(function(d){ return d.max || 0; }), name: 'Max', type: 'bar', marker: { color: '#f59e0b' }, hovertemplate: '<b>%{x}</b><br>Max: %{y:.4f}<extra></extra>' },
-                            { x: ammLabels, y: ammData.map(function(d){ return d.min || 0; }), name: 'Min', type: 'bar', marker: { color: '#10b981' }, hovertemplate: '<b>%{x}</b><br>Min: %{y:.4f}<extra></extra>' },
-                        ];
-                    } else {
-                        traces = [{ x: ammLabels, y: ammData.map(function(d){ return d.avg || 0; }), name: 'Avg Value', type: 'bar', marker: { color: '#8b5cf6' }, hovertemplate: '<b>%{x}</b><br>Value: %{y:.4f}<extra></extra>' }];
-                    }
-                    Plotly.newPlot(ammEl, traces, Object.assign({}, baseLayout, {
-                        title: { text: rollupSumm.length ? 'Avg / Max / Min per Metric' : 'Metric Value Overview', font: { size: 12, color: '#0f172a' } },
-                        barmode: rollupSumm.length ? 'group' : 'stack',
-                    }), cfg);
-                }
-            }
 
             // Re-render charts when the dataquality tab becomes active
             var origSetTab = window.setOptimizerTab;
@@ -2522,7 +2740,7 @@
                 origSetTab(tabId);
                 if (tabId === 'dataquality') {
                     setTimeout(function() {
-                        ['dq-grafana-chart-avg','dq-grafana-chart-timeline','dq-grafana-chart-servers','dq-grafana-chart-amm'].forEach(function(id) {
+                        ['dq-grafana-chart-avg','dq-grafana-chart-timeline','dq-grafana-chart-servers'].forEach(function(id) {
                             var el = document.getElementById(id);
                             if (el && el.data) Plotly.Plots.resize(el);
                         });
