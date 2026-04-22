@@ -1,0 +1,85 @@
+version: 1
+defaults:
+  column_names:
+    # map logical fields -> actual normalized snake_case columns in your dataframe
+    hosting_zone: u_hosting_zone
+    inventory_status_standard: inventory_status_standard
+    no_license_required_product: no_license_required_product
+    install_status: install_status
+    env: environment            # example: PROD / DEV / TEST ...
+    avg_cpu_12m: avg_cpu_12m
+    peak_cpu_12m: peak_cpu_12m
+    current_vcpu: current_vcpu
+    avg_free_mem_12m: avg_free_mem_12m
+    min_free_mem_12m: min_free_mem_12m
+    current_ram_gib: current_ram_gib
+    # optional CMDB fields used for criticality-aware logic / human review
+    criticality: criticality      # may also appear as "Critically" / "Criticality" upstream
+    is_virtual: is_virtual        # CMDB label is often "IsVirtual"; blanks are treated as virtual
+rules:
+  - id: uc_1_1_azure_byol_to_payg
+    type: filter
+    description: "Azure BYOL → PAYG optimization eligibility"
+    when:
+      all:
+        - { op: in_ci, col: hosting_zone, values: ["Public Cloud", "Private Cloud AVS"] }
+        - { op: ne_ci, col: inventory_status_standard, value: "License Included" }
+        - { op: eq, col: no_license_required_product, value: 0 }
+  - id: uc_1_2_retired_device_installs
+    type: filter
+    description: "Software on retired devices"
+    when:
+      all:
+        - { op: eq_ci, col: install_status, value: "retired" }
+        - { op: eq, col: no_license_required_product, value: 0 }
+  - id: uc_3_1_cpu_rightsizing
+    type: recommendation
+    description: "CPU rightsizing (PROD vs non-PROD)"
+    applies_when:
+      all:
+        - { op: gte, col: current_vcpu, value: 4 }
+    branches:
+      - id: prod
+        when: { op: eq_ci, col: env, value: "PROD" }
+        candidate_when:
+          all:
+            - { op: lt, col: avg_cpu_12m, value: 0.15 }     # store as fraction 0.15, not "15%"
+            - { op: lte, col: peak_cpu_12m, value: 0.70 }
+            - { op: gte, col: current_vcpu, value: 4 }
+        recommend:
+          # implement these as explicit decision tables in code (see below)
+          engine: cpu_rightsizing_prod_v2
+      - id: nonprod
+        when: { op: not_eq_ci, col: env, value: "PROD" }
+        candidate_when:
+          all:
+            # Note: allow 15–25% band for non-PROD recommendations
+            - { op: lt, col: avg_cpu_12m, value: 0.25 }
+            - { op: lte, col: peak_cpu_12m, value: 0.80 }
+            - { op: gte, col: current_vcpu, value: 4 }
+        recommend:
+          engine: cpu_rightsizing_nonprod_v2
+  - id: uc_3_2_ram_rightsizing
+    type: recommendation
+    description: "RAM reduction (PROD vs non-PROD)"
+    applies_when:
+      all: []
+    branches:
+      - id: prod
+        when: { op: eq_ci, col: env, value: "PROD" }
+        candidate_when:
+          all:
+            - { op: gte, col: avg_free_mem_12m, value: 0.35 }
+            - { op: gte, col: min_free_mem_12m, value: 0.20 }
+            - { op: gt, col: current_ram_gib, value: 8 }
+        recommend:
+          engine: ram_rightsizing_prod_v2
+      - id: nonprod
+        when: { op: not_eq_ci, col: env, value: "PROD" }
+        candidate_when:
+          all:
+            - { op: gte, col: avg_free_mem_12m, value: 0.30 }
+            - { op: gte, col: min_free_mem_12m, value: 0.15 }
+            - { op: gt, col: current_ram_gib, value: 4 }
+        recommend:
+          engine: ram_rightsizing_nonprod_v2
