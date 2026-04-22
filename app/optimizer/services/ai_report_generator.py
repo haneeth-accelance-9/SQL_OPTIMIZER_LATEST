@@ -4,6 +4,7 @@ Produces a professional optimization report from rule results and license metric
 """
 import json
 import logging
+import os
 from typing import Any, Dict, Optional
 
 from optimizer.services.report_export import format_currency, normalize_report_content_text
@@ -155,6 +156,473 @@ Use only the numbers provided. Be specific and practical. Keep each section to a
     except Exception as e:
         logger.exception("Azure OpenAI cost reduction recommendations failed: %s", e)
         return None
+
+
+def _build_local_rule_rows(
+    *,
+    rule_id: str,
+    source_rows: list,
+    default_reasons: list[str],
+    default_recommendation: str,
+    recommendation_field: Optional[str] = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Build a compact rules-evaluation entry compatible with AgentRun storage."""
+    rows: list[dict[str, Any]] = []
+    examples: list[dict[str, Any]] = []
+
+    for item in source_rows or []:
+        if not isinstance(item, dict):
+            continue
+
+        record = dict(item)
+        host = str(
+            record.get("hostname")
+            or record.get("server_name")
+            or record.get("Server name")
+            or record.get("name")
+            or ""
+        ).strip()
+        if host:
+            record.setdefault("hostname", host)
+            record.setdefault("server_name", host)
+
+        recommendation_text = ""
+        if recommendation_field:
+            recommendation_text = str(record.get(recommendation_field) or "").strip()
+        if not recommendation_text:
+            recommendation_text = default_recommendation
+
+        reasons = [reason for reason in default_reasons if reason]
+        if recommendation_text and recommendation_text not in reasons:
+            reasons.append(recommendation_text)
+
+        rows.append(
+            {
+                "record": record,
+                "result": {
+                    "matched": True,
+                    "reasons": reasons,
+                    "details": {
+                        "engine_result": {
+                            "recommendation": {
+                                "action": recommendation_text or f"{rule_id} matched",
+                                "rationale": recommendation_text or f"{rule_id} matched",
+                            }
+                        }
+                    },
+                },
+            }
+        )
+
+        if host and len(examples) < 3:
+            examples.append({"record": {"hostname": host}})
+
+    return rows, {"id": rule_id, "matched_count": len(rows), "examples": examples}
+
+
+def _build_local_rules_evaluation(
+    *,
+    rule_results: Dict[str, Any],
+    rightsizing: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Build a lightweight rules-evaluation payload when the external A2A server is
+    unavailable. This keeps AgentRun persistence and candidate creation working.
+    """
+    per_rule: dict[str, list[dict[str, Any]]] = {}
+    summary_rules: list[dict[str, Any]] = []
+
+    rule_specs = [
+        {
+            "rule_id": "uc_1_1",
+            "source_rows": rule_results.get("azure_payg") or [],
+            "default_reasons": [
+                "Hosted in an Azure-compatible zone and not marked as License Included.",
+            ],
+            "default_recommendation": "Review Azure BYOL to PAYG migration eligibility.",
+            "recommendation_field": None,
+        },
+        {
+            "rule_id": "uc_1_2",
+            "source_rows": rule_results.get("retired_devices") or [],
+            "default_reasons": [
+                "Device appears retired but still reports SQL-related installation data.",
+            ],
+            "default_recommendation": "Validate retirement status and decommission or reconcile the installation record.",
+            "recommendation_field": None,
+        },
+        {
+            "rule_id": "uc_3_1",
+            "source_rows": rightsizing.get("cpu_candidates") or [],
+            "default_reasons": [
+                "CPU utilisation is below the configured rightsizing threshold.",
+            ],
+            "default_recommendation": "Review CPU rightsizing recommendation.",
+            "recommendation_field": "CPU_Recommendation",
+        },
+        {
+            "rule_id": "uc_3_2",
+            "source_rows": rightsizing.get("ram_candidates") or [],
+            "default_reasons": [
+                "Memory headroom is above the configured rightsizing threshold.",
+            ],
+            "default_recommendation": "Review RAM rightsizing recommendation.",
+            "recommendation_field": "RAM_Recommendation",
+        },
+        {
+            "rule_id": "uc_3_3",
+            "source_rows": rightsizing.get("crit_cpu_optimizations") or [],
+            "default_reasons": [
+                "Criticality-aware CPU optimization requires human review before change.",
+            ],
+            "default_recommendation": "Review criticality-aware CPU recommendation.",
+            "recommendation_field": "CPU_Recommendation",
+        },
+        {
+            "rule_id": "uc_3_4",
+            "source_rows": rightsizing.get("crit_ram_optimizations") or [],
+            "default_reasons": [
+                "Criticality-aware RAM optimization requires human review before change.",
+            ],
+            "default_recommendation": "Review criticality-aware RAM recommendation.",
+            "recommendation_field": "RAM_Recommendation",
+        },
+    ]
+
+    for spec in rule_specs:
+        rows, summary = _build_local_rule_rows(**spec)
+        per_rule[spec["rule_id"]] = rows
+        summary_rules.append(summary)
+
+    matched_counts = {rule_id: len(rows) for rule_id, rows in per_rule.items()}
+
+    return {
+        "success": True,
+        "evaluation": {
+            "matched_counts": matched_counts,
+            "per_rule": per_rule,
+        },
+        "summary": {
+            "rules": summary_rules,
+        },
+    }
+
+
+def _build_local_agent_report_response(
+    *,
+    records: list,
+    usecase_id: str,
+    strategy_results: Optional[Dict[str, Any]] = None,
+    notes: Optional[str] = None,
+    llm_first: bool = True,
+) -> Dict[str, Any]:
+    """
+    In-process fallback used when the external A2A server is unavailable or
+    clearly points back at the local Django dev server.
+    """
+    from optimizer.services.db_analysis_service import compute_db_metrics
+
+    native_context = compute_db_metrics()
+    rule_results = native_context.get("rule_results") or {}
+    license_metrics = native_context.get("license_metrics") or {}
+
+    rightsizing = dict(native_context.get("rightsizing") or {})
+    if isinstance(strategy_results, dict):
+        rs_override = strategy_results.get("strategy_3_rightsizing")
+        if isinstance(rs_override, dict):
+            rightsizing.update(rs_override)
+
+    report_context = {
+        "azure_payg_count": rule_results.get("azure_payg_count", 0),
+        "retired_count": rule_results.get("retired_count", 0),
+        "total_demand_quantity": license_metrics.get("total_demand_quantity", 0),
+        "total_license_cost": license_metrics.get("total_license_cost", 0),
+        "by_product": license_metrics.get("by_product", []),
+        "demand_row_count": license_metrics.get("demand_row_count", 0),
+    }
+
+    deterministic_md = get_fallback_report(report_context)
+    final_md = deterministic_md
+    llm_used = False
+    llm_error = None
+
+    if llm_first:
+        llm_md = generate_report_text(report_context)
+        if llm_md:
+            final_md = llm_md
+            llm_used = True
+        else:
+            llm_error = "Local fallback used deterministic report because Azure OpenAI report generation was unavailable."
+
+    rules_evaluation = _build_local_rules_evaluation(
+        rule_results=rule_results,
+        rightsizing=rightsizing,
+    )
+
+    return {
+        "success": True,
+        "usecase_id": usecase_id,
+        "rules_evaluation": rules_evaluation,
+        "report_markdown": final_md,
+        "llm_used": llm_used,
+        "llm_error": llm_error,
+        "llm_meta": None,
+        "deterministic_report_markdown": deterministic_md,
+        "agent_endpoint_used": "django-native-fallback",
+        "notes": notes,
+        "records_evaluated": len(records or []),
+    }
+
+
+def call_agent_generate_report(
+    records: list,
+    usecase_id: str,
+    strategy_results: Optional[Dict[str, Any]] = None,
+    notes: Optional[str] = None,
+    llm_first: bool = True,
+) -> Dict[str, Any]:
+    """
+    Call the liscence-optimizer A2A agent's /generate-report endpoint.
+
+    When the endpoint is left at the local Django dev default (localhost:8000)
+    or the A2A server is unavailable, this falls back to an in-process Django
+    implementation so `/api/agent-runs/trigger/` still succeeds.
+
+    Returns the full JSON response dict on success, or raises on connection error.
+    The response shape mirrors the agent's GenerateReportRequest/response:
+      {
+        "success": bool,
+        "usecase_id": str,
+        "rules_evaluation": {...},
+        "report_markdown": str,
+        "llm_used": bool,
+        "llm_error": str | None,
+        "llm_meta": {...} | None,
+        "deterministic_report_markdown": str,
+      }
+    """
+    import json as _json
+    import urllib.request
+    from django.conf import settings as _s
+
+    endpoint = getattr(_s, "AGENT_A2A_ENDPOINT", "http://localhost:8000").rstrip("/")
+    timeout = getattr(_s, "AGENT_A2A_TIMEOUT", 120)
+    url = f"{endpoint}/generate-report"
+
+    default_local_endpoints = {"http://localhost:8000", "http://127.0.0.1:8000"}
+    endpoint_explicitly_configured = bool(os.environ.get("AGENT_A2A_ENDPOINT", "").strip())
+    if not endpoint_explicitly_configured and endpoint in default_local_endpoints:
+        logger.info(
+            "AGENT_A2A_ENDPOINT is using the local Django default (%s); using in-process fallback instead of HTTP.",
+            endpoint,
+        )
+        return _build_local_agent_report_response(
+            records=records,
+            usecase_id=usecase_id,
+            strategy_results=strategy_results,
+            notes=notes,
+            llm_first=llm_first,
+        )
+
+    payload = {
+        "usecase_id": usecase_id,
+        "records": records,
+        "strategy_results": strategy_results or {},
+        "notes": notes,
+        "llm_first": llm_first,
+        "llm_max_retries": getattr(_s, "AGENT_A2A_MAX_RETRIES", 2),
+        "llm_timeout_seconds": min(timeout, 90),
+    }
+    body = _json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+        return _json.loads(raw)
+    except Exception as exc:
+        logger.warning(
+            "A2A agent HTTP call failed for %s (%s). Falling back to in-process report generation.",
+            url,
+            exc,
+        )
+        try:
+            return _build_local_agent_report_response(
+                records=records,
+                usecase_id=usecase_id,
+                strategy_results=strategy_results,
+                notes=notes,
+                llm_first=llm_first,
+            )
+        except Exception:
+            logger.exception("In-process report fallback failed after A2A agent error.")
+            raise
+
+
+def generate_and_store_agentic_report(
+    records: list,
+    usecase_id: str,
+    strategy_results: Optional[Dict[str, Any]] = None,
+    triggered_by: str = "system",
+    tenant=None,
+) -> Dict[str, Any]:
+    """
+    Full pipeline:
+      1. Call A2A agent /generate-report
+      2. Store results in AgentRun + OptimizationCandidate tables
+      3. Return a summary dict
+
+    Falls back gracefully: if the agent is unreachable, an AgentRun row with
+    status='failed' is written and the error is returned without raising.
+    """
+    import time
+    import uuid as _uuid
+    from django.utils import timezone
+    from django.conf import settings as _s
+
+    from optimizer.models import AgentRun, OptimizationCandidate, LicenseRule, Server
+
+    endpoint = getattr(_s, "AGENT_A2A_ENDPOINT", "http://localhost:8000")
+
+    # Resolve tenant — required for TenantAwareModel rows.
+    # Callers can pass a Tenant instance; otherwise try the first active tenant.
+    if tenant is None:
+        from optimizer.models import Tenant
+        tenant = Tenant.objects.filter(is_active=True).order_by("created_at").first()
+
+    if tenant is None:
+        return {"success": False, "error": "No active tenant found — cannot store AgentRun."}
+
+    run = AgentRun.objects.create(
+        tenant=tenant,
+        run_label=f"agentic-{usecase_id}-{timezone.now().strftime('%Y%m%d-%H%M%S')}",
+        triggered_by=triggered_by,
+        status=AgentRun.STATUS_RUNNING,
+        agent_endpoint=endpoint,
+    )
+
+    started = time.time()
+    try:
+        result = call_agent_generate_report(
+            records=records,
+            usecase_id=usecase_id,
+            strategy_results=strategy_results,
+        )
+    except Exception as exc:
+        elapsed = time.time() - started
+        run.status = AgentRun.STATUS_FAILED
+        run.error_detail = str(exc)
+        run.run_duration_sec = round(elapsed, 2)
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error_detail", "run_duration_sec", "finished_at"])
+        logger.exception("A2A agent call failed: %s", exc)
+        return {"success": False, "error": str(exc), "agent_run_id": str(run.id)}
+
+    elapsed = time.time() - started
+
+    if not result.get("success"):
+        run.status = AgentRun.STATUS_FAILED
+        run.error_detail = result.get("error") or "Agent returned success=false"
+        run.run_duration_sec = round(elapsed, 2)
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error_detail", "run_duration_sec", "finished_at"])
+        return {"success": False, "error": run.error_detail, "agent_run_id": str(run.id)}
+
+    # Extract report + metadata
+    report_md = result.get("report_markdown") or result.get("deterministic_report_markdown") or ""
+    rules_eval = result.get("rules_evaluation") or {}
+    llm_meta = result.get("llm_meta") or {}
+    llm_used = bool(result.get("llm_used"))
+    llm_model = (llm_meta.get("model") if isinstance(llm_meta, dict) else "") or (
+        getattr(_s, "AZURE_OPENAI_DEPLOYMENT", "") if llm_used else ""
+    )
+    llm_tokens = llm_meta.get("tokens_used")
+    run.agent_endpoint = result.get("agent_endpoint_used") or endpoint
+
+    # Build OptimizationCandidate rows from rules_evaluation.per_rule
+    per_rule = (rules_eval.get("evaluation") or rules_eval).get("per_rule") or {}
+    candidate_rows_created = 0
+    rule_cache: Dict[str, Any] = {}
+
+    for rule_code, row_list in per_rule.items():
+        if not isinstance(row_list, list):
+            continue
+        # Lazy-load the LicenseRule row (may not exist for every rule id)
+        if rule_code not in rule_cache:
+            rule_cache[rule_code] = LicenseRule.objects.filter(
+                tenant=tenant, rule_code=rule_code
+            ).first()
+        rule_obj = rule_cache[rule_code]
+
+        for row in row_list:
+            if not isinstance(row, dict):
+                continue
+            res = row.get("result") or {}
+            if not res.get("matched"):
+                continue
+            record = row.get("record") or {}
+            server_name = record.get("server_name") or record.get("hostname") or ""
+            server_obj = None
+            if server_name:
+                server_obj = Server.objects.filter(
+                    tenant=tenant, server_name=server_name
+                ).first()
+
+            if rule_obj and server_obj:
+                try:
+                    details = res.get("details") or {}
+                    engine_result = (details.get("engine_result") or {}) if isinstance(details, dict) else {}
+                    recommendation_text = ""
+                    rec = engine_result.get("recommendation") if isinstance(engine_result, dict) else None
+                    if isinstance(rec, dict):
+                        recommendation_text = rec.get("rationale") or rec.get("action") or ""
+                    rationale = res.get("reasons") or []
+                    rationale_text = "; ".join(str(r) for r in rationale) if rationale else recommendation_text
+
+                    OptimizationCandidate.objects.get_or_create(
+                        tenant=tenant,
+                        agent_run=run,
+                        server=server_obj,
+                        rule=rule_obj,
+                        defaults={
+                            "use_case": rule_obj.use_case,
+                            "recommendation": recommendation_text[:255] or f"{rule_code} matched",
+                            "rationale": rationale_text,
+                            "estimated_saving_eur": rule_obj.cost_per_core_pair_eur,
+                        },
+                    )
+                    candidate_rows_created += 1
+                except Exception as exc_inner:
+                    logger.warning("Failed to create OptimizationCandidate for %s/%s: %s", rule_code, server_name, exc_inner)
+
+    run.status = AgentRun.STATUS_COMPLETED
+    run.report_markdown = report_md
+    run.llm_model = llm_model
+    run.llm_used = llm_used
+    run.llm_tokens_used = llm_tokens
+    run.run_duration_sec = round(elapsed, 2)
+    run.servers_evaluated = len(records)
+    run.candidates_found = candidate_rows_created
+    run.rules_evaluation = rules_eval
+    run.finished_at = timezone.now()
+    run.save(update_fields=[
+        "status", "report_markdown", "llm_model", "llm_used", "llm_tokens_used",
+        "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",
+        "rules_evaluation", "finished_at",
+    ])
+
+    return {
+        "success": True,
+        "agent_run_id": str(run.id),
+        "report_markdown": report_md,
+        "llm_used": llm_used,
+        "candidates_created": candidate_rows_created,
+        "rules_evaluation": rules_eval,
+    }
 
 
 def get_fallback_report(context: Dict[str, Any]) -> str:

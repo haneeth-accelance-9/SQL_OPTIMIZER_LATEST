@@ -387,6 +387,11 @@ class AgentRun(TenantAwareModel):
     run_duration_sec    = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     input_file_versions = models.JSONField(null=True, blank=True)
     error_detail        = models.TextField(blank=True)
+    # Agent-generated executive summary report stored after each run
+    report_markdown     = models.TextField(blank=True)
+    agent_endpoint      = models.CharField(max_length=255, blank=True)
+    llm_used            = models.BooleanField(null=True)
+    rules_evaluation    = models.JSONField(null=True, blank=True)
     started_at          = models.DateTimeField(auto_now_add=True)
     finished_at         = models.DateTimeField(null=True, blank=True)
 

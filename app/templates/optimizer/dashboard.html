@@ -1064,6 +1064,211 @@
                 </div>
             </div>
 
+            <!-- ── UC 3.3: CRITICALITY-AWARE CPU OPTIMIZATION ─────────────────── -->
+            <div class="mb-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <h2 class="text-xl font-extrabold text-slate-900">Criticality-Aware CPU Optimization</h2>
+                    <span class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">UC 3.3</span>
+                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
+                </div>
+                <p class="text-sm text-slate-500 mb-4">Applies to all environments and criticality levels. Flags under-utilised (&lt;10% avg CPU), over-utilised (&gt;80%), or high-peak (&gt;95%) critical systems.</p>
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                    {% if rs.crit_cpu_optimizations %}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg CPU%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Peak CPU%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Current vCPU</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommended vCPU</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommendation</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Lifecycle Flag</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for row in rs.crit_cpu_optimizations|slice:":50" %}
+                                <tr class="hover:bg-orange-50/40 transition-colors">
+                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Avg_CPU_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Peak_CPU_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 font-semibold text-slate-900">{{ row.Current_vCPU|default:"—" }}</td>
+                                    <td class="px-4 py-3 font-semibold text-emerald-700">{{ row.Recommended_vCPU|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.CPU_Recommendation|default:"—" }}</td>
+                                    <td class="px-4 py-3">
+                                        {% if row.Lifecycle_Flag %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Lifecycle_Flag }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-400">
+                        <p class="font-semibold text-slate-500">No criticality-aware CPU candidates found.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ── UC 3.4: CRITICALITY-AWARE RAM OPTIMIZATION ─────────────────── -->
+            <div class="mb-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <h2 class="text-xl font-extrabold text-slate-900">Criticality-Aware RAM Optimization</h2>
+                    <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-[10px] font-bold text-purple-700">UC 3.4</span>
+                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_ram_count|default:0 }} systems</span>
+                </div>
+                <p class="text-sm text-slate-500 mb-4">Flags systems with very high free memory (&gt;80%) for cautious downsize, low free memory (&lt;20%) for upsize review, or critically low minimum memory (&lt;5%).</p>
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                    {% if rs.crit_ram_optimizations %}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg Free Mem%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Min Free Mem%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Current RAM (GiB)</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommended RAM (GiB)</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommendation</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Lifecycle Flag</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for row in rs.crit_ram_optimizations|slice:":50" %}
+                                <tr class="hover:bg-purple-50/40 transition-colors">
+                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Avg_FreeMem_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Min_FreeMem_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 font-semibold text-slate-900">{{ row.Current_RAM_GiB|default:"—" }}</td>
+                                    <td class="px-4 py-3 font-semibold text-emerald-700">{{ row.Recommended_RAM_GiB|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.RAM_Recommendation|default:"—" }}</td>
+                                    <td class="px-4 py-3">
+                                        {% if row.Lifecycle_Flag %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Lifecycle_Flag }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-400">
+                        <p class="font-semibold text-slate-500">No criticality-aware RAM candidates found.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ── LIFECYCLE RISK FLAGS ──────────────────────────────────────── -->
+            <div class="mb-8">
+                <div class="flex items-center gap-3 mb-4">
+                    <h2 class="text-xl font-extrabold text-slate-900">Lifecycle Risk Flags</h2>
+                    <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Human Review</span>
+                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.lifecycle_count|default:0 }} systems</span>
+                </div>
+                <p class="text-sm text-slate-500 mb-4">Systems flagged for human review due to critical classification, high peak CPU (&gt;95%), or critically low minimum free memory (&lt;5%).</p>
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                    {% if rs.lifecycle_risk_flags %}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Peak CPU%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Min Free Mem%</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Risk Reasons</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Human Review</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for row in rs.lifecycle_risk_flags|slice:":50" %}
+                                <tr class="hover:bg-red-50/40 transition-colors">
+                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Peak_CPU_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-700">{{ row.Min_FreeMem_12m|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.Lifecycle_Risk_Reasons|default:"—" }}</td>
+                                    <td class="px-4 py-3">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Human_Review_Required|default:"Yes" }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-400">
+                        <p class="font-semibold text-slate-500">No lifecycle risk systems identified.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ── PHYSICAL SYSTEMS FLAGS ────────────────────────────────────── -->
+            <div class="mb-4">
+                <div class="flex items-center gap-3 mb-4">
+                    <h2 class="text-xl font-extrabold text-slate-900">Physical Systems</h2>
+                    <span class="inline-flex items-center rounded-full bg-slate-200 px-2 py-1 text-[10px] font-bold text-slate-700">Physical</span>
+                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.physical_count|default:0 }} systems</span>
+                </div>
+                <p class="text-sm text-slate-500 mb-4">Physical (non-virtual) servers identified in the dataset. Rightsizing actions require human approval before execution.</p>
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                    {% if rs.physical_system_flags %}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">IsVirtual Status</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Human Review</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for row in rs.physical_system_flags|slice:":50" %}
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
+                                    </td>
+                                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">{{ row.IsVirtual_Status|default:"Physical" }}</span></td>
+                                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Human_Review_Required|default:"Yes – Physical System" }}</span></td>
+                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.Review_Reason|default:"Physical system detected." }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-8 text-center text-slate-400">
+                        <p class="font-semibold text-slate-500">No physical systems identified.</p>
+                        <p class="text-xs mt-1">All servers in scope are marked as virtual.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
             {% endwith %}
         </div>
 

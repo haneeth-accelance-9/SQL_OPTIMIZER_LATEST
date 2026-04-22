@@ -3,6 +3,7 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
+    /* ── Shared markdown renderer ─────────────────────────────────────────── */
     .report-body h1 {
         font-size: 1.75rem;
         font-weight: 800;
@@ -12,7 +13,6 @@
         border-bottom: 2px solid #0ea5e9;
         letter-spacing: -0.025em;
     }
-
     .report-body h2 {
         font-size: 1.25rem;
         font-weight: 700;
@@ -20,43 +20,30 @@
         margin: 1.75rem 0 0.75rem;
         letter-spacing: -0.015em;
     }
-
     .report-body h3 {
         font-size: 1rem;
         font-weight: 600;
         color: #334155;
         margin: 1.25rem 0 0.5rem;
     }
-
     .report-body p {
         margin: 0.75rem 0;
         line-height: 1.7;
         color: #475569;
     }
-
-    .report-body strong {
-        font-weight: 700;
-        color: #0f172a;
-    }
-
-    .report-body em {
-        font-style: italic;
-        color: #64748b;
-    }
-
+    .report-body strong { font-weight: 700; color: #0f172a; }
+    .report-body em { font-style: italic; color: #64748b; }
     .report-body ul {
         margin: 0.75rem 0;
         padding-left: 1.5rem;
         list-style-type: none;
     }
-
     .report-body li {
         margin: 0.5rem 0;
         line-height: 1.6;
         position: relative;
         color: #475569;
     }
-
     .report-body li::before {
         content: "•";
         color: #0ea5e9;
@@ -64,13 +51,7 @@
         position: absolute;
         left: -1.25rem;
     }
-
-    .report-body hr {
-        border: none;
-        border-top: 1px solid #e2e8f0;
-        margin: 2rem 0;
-    }
-
+    .report-body hr { border: none; border-top: 1px solid #e2e8f0; margin: 2rem 0; }
     .report-body blockquote {
         border-left: 4px solid #0ea5e9;
         padding: 1rem 1.25rem;
@@ -79,143 +60,469 @@
         background-color: #f8fafc;
         border-radius: 0 0.5rem 0.5rem 0;
     }
+    .report-body table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+    .report-body th { background: #f1f5f9; color: #1e293b; font-weight: 600; padding: 0.5rem 0.75rem; text-align: left; border-bottom: 2px solid #e2e8f0; }
+    .report-body td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #f1f5f9; color: #475569; }
+    .report-body tr:hover td { background: #f8fafc; }
 
-    .export-dropdown-menu {
-        display: none;
+    /* ── Tabs ─────────────────────────────────────────────────────────────── */
+    .tab-btn { outline: none; }
+    .tab-btn.active {
+        background: #0f172a;
+        color: #ffffff;
+        border-color: #0f172a;
     }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
-    .export-dropdown-menu.is-open {
-        display: block;
+    /* ── Export dropdown ─────────────────────────────────────────────────── */
+    .export-dropdown-menu { display: none; }
+    .export-dropdown-menu.is-open { display: block; }
+
+    /* ── Status badges ───────────────────────────────────────────────────── */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
     }
+    .badge-pending    { background: #fef3c7; color: #92400e; }
+    .badge-accepted   { background: #d1fae5; color: #065f46; }
+    .badge-rejected   { background: #fee2e2; color: #991b1b; }
+    .badge-in_progress { background: #dbeafe; color: #1e40af; }
+    .badge-expired    { background: #f1f5f9; color: #64748b; }
+    .badge-completed  { background: #d1fae5; color: #065f46; }
+    .badge-running    { background: #dbeafe; color: #1e40af; }
+    .badge-failed     { background: #fee2e2; color: #991b1b; }
+    .badge-partial    { background: #fef3c7; color: #92400e; }
+
+    /* ── Trigger button spinner ──────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
 </style>
 {% endblock %}
+
 {% block content %}
-<div class="max-w-5xl mx-auto h-full flex flex-col overflow-hidden py-8 px-4">
-    <div
-        class="flex flex-col md:flex-row justify-between items-start md:items-center flex-shrink-0 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
+<div class="max-w-6xl mx-auto h-full flex flex-col overflow-hidden py-8 px-4">
+
+    <!-- ── Page header ───────────────────────────────────────────────────── -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center flex-shrink-0 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Executive Summary Report</h1>
-            <p class="text-sm text-slate-500 mt-1">AI-generated analysis of optimization potential and compliance risks.
-            </p>
+            <p class="text-sm text-slate-500 mt-1">AI-generated analysis of optimization potential and compliance risks.</p>
         </div>
         <div class="flex flex-nowrap gap-3 items-center">
             <a href="{% url 'optimizer:dashboard' %}"
-                class="flex-shrink-0 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+               class="flex-shrink-0 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
                 Back to Dashboard
             </a>
+
+            <!-- Trigger agent run button -->
+            <button type="button" id="btn-trigger-run"
+                    class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-sky-600 text-white text-sm font-semibold rounded-xl hover:bg-sky-700 transition-colors shadow-sm"
+                    title="Run the liscence-optimizer agent against live DB data">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span id="btn-trigger-label">Run Agent</span>
+            </button>
+
+            <!-- Export dropdown -->
             <div class="relative" id="export-dropdown">
                 <button type="button" id="export-dropdown-toggle"
-                    aria-expanded="false"
-                    aria-haspopup="true"
-                    aria-controls="export-dropdown-menu"
-                    class="flex w-52 flex-shrink-0 items-center justify-between px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                        aria-expanded="false" aria-haspopup="true" aria-controls="export-dropdown-menu"
+                        class="flex w-44 flex-shrink-0 items-center justify-between px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
                     <span class="inline-flex items-center gap-2">
-                    <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                        </path>
-                    </svg>
-                    Export
+                        <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Export
                     </span>
-                    <svg class="w-4 h-4 text-slate-300 transition-transform duration-200" id="export-dropdown-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    <svg class="w-4 h-4 text-slate-300 transition-transform duration-200" id="export-dropdown-arrow"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
                 </button>
-                <div id="export-dropdown-menu"
-                    role="menu"
-                    class="export-dropdown-menu absolute right-0 top-full z-20 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                    <a href="{% url 'optimizer:report_download' 'pdf' %}"
-                        role="menuitem"
-                        class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">P</span>
+                <div id="export-dropdown-menu" role="menu"
+                     class="export-dropdown-menu absolute right-0 top-full z-20 mt-2 w-44 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                    <a href="{% url 'optimizer:report_download' 'pdf' %}" role="menuitem"
+                       class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                        <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white text-xs">P</span>
                         Export PDF
                     </a>
-                    <a href="{% url 'optimizer:report_download' 'docx' %}"
-                        role="menuitem"
-                        class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-sky-50">
-                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">W</span>
+                    <a href="{% url 'optimizer:report_download' 'docx' %}" role="menuitem"
+                       class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-sky-50">
+                        <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white text-xs">W</span>
                         Export Word
                     </a>
-                    <a href="{% url 'optimizer:report_download' 'excel' %}"
-                        role="menuitem"
-                        class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-emerald-50">
-                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-white">X</span>
+                    <a href="{% url 'optimizer:report_download' 'excel' %}" role="menuitem"
+                       class="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-emerald-50">
+                        <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-green-600 text-white text-xs">X</span>
                         Export Excel
                     </a>
                 </div>
             </div>
         </div>
     </div>
-    {% if report_used_fallback %}
-    <!-- <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4" role="status">
-        Report generated without AI (template summary). Configure Azure OpenAI for AI-generated reports.
-    </p> -->
-    {% endif %}
-    <div class="flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8"
-        style="border-color: #e2e8f0;">
+
+    <!-- ── Run status toast ───────────────────────────────────────────────── -->
+    <div id="run-toast" class="hidden mb-4 flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium border"></div>
+
+    <!-- ── Tab bar ────────────────────────────────────────────────────────── -->
+    <div class="flex gap-2 mb-4 flex-shrink-0">
+        <button type="button" class="tab-btn active px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
+                data-tab="tab-ai-report">AI Report</button>
+        <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
+                data-tab="tab-agentic">
+            Agentic Analysis
+            {% if has_agentic_data %}<span class="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-xs font-bold">{{ agentic.candidates_total }}</span>{% endif %}
+        </button>
+        {% if has_agentic_data and agentic.agent_run.report_markdown %}
+        <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
+                data-tab="tab-agent-report">Agent Report</button>
+        {% endif %}
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB 1: AI Report (existing Azure OpenAI report)
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div id="tab-ai-report" class="tab-panel active flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8" style="border-color:#e2e8f0;">
         <div id="report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
     </div>
-</div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB 2: Agentic Analysis (AgentRun + OptimizationCandidates)
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div id="tab-agentic" class="tab-panel flex-1 min-h-0 overflow-y-auto">
+        {% if has_agentic_data %}
+        <!-- Agent run metadata card -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 mb-5 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Latest Agent Run</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ agentic.agent_run.run_label }}</p>
+                </div>
+                <span class="badge badge-{{ agentic.agent_run.status }}">{{ agentic.agent_run.status }}</span>
+            </div>
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 font-medium">Servers Evaluated</p>
+                    <p class="text-xl font-bold text-slate-900 mt-0.5">{{ agentic.agent_run.servers_evaluated|default:"—" }}</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 font-medium">Candidates Found</p>
+                    <p class="text-xl font-bold text-sky-700 mt-0.5">{{ agentic.candidates_total }}</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 font-medium">Est. Total Saving</p>
+                    <p class="text-xl font-bold text-emerald-700 mt-0.5">€ {{ agentic.total_estimated_saving_eur|floatformat:0 }}</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 font-medium">Duration</p>
+                    <p class="text-xl font-bold text-slate-900 mt-0.5">{{ agentic.agent_run.run_duration_sec|default:"—" }}s</p>
+                </div>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+                {% if agentic.agent_run.llm_model %}<span>Model: <strong class="text-slate-700">{{ agentic.agent_run.llm_model }}</strong></span>{% endif %}
+                {% if agentic.agent_run.llm_tokens_used %}<span>Tokens: <strong class="text-slate-700">{{ agentic.agent_run.llm_tokens_used }}</strong></span>{% endif %}
+                {% if agentic.agent_run.llm_used is not None %}<span>LLM: <strong class="text-slate-700">{% if agentic.agent_run.llm_used %}Yes{% else %}No (deterministic){% endif %}</strong></span>{% endif %}
+                {% if agentic.agent_run.triggered_by %}<span>Triggered by: <strong class="text-slate-700">{{ agentic.agent_run.triggered_by }}</strong></span>{% endif %}
+                {% if agentic.agent_run.started_at %}<span>Started: <strong class="text-slate-700">{{ agentic.agent_run.started_at|slice:":19"|default:"" }}</strong></span>{% endif %}
+                {% if agentic.agent_run.agent_endpoint %}<span>Endpoint: <strong class="text-slate-700">{{ agentic.agent_run.agent_endpoint }}</strong></span>{% endif %}
+            </div>
+        </div>
+
+        <!-- Decision summary row -->
+        <div class="grid grid-cols-3 gap-4 mb-5">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                <p class="text-xs text-amber-700 font-semibold uppercase tracking-wide">Pending Review</p>
+                <p class="text-3xl font-bold text-amber-800 mt-1">{{ agentic.candidates_pending }}</p>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                <p class="text-xs text-emerald-700 font-semibold uppercase tracking-wide">Accepted</p>
+                <p class="text-3xl font-bold text-emerald-800 mt-1">{{ agentic.candidates_accepted }}</p>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                <p class="text-xs text-red-700 font-semibold uppercase tracking-wide">Rejected</p>
+                <p class="text-3xl font-bold text-red-800 mt-1">{{ agentic.candidates_rejected }}</p>
+            </div>
+        </div>
+
+        <!-- Candidates table -->
+        {% if agentic.candidates %}
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-slate-900">Optimization Candidates</h3>
+                <span class="text-xs text-slate-400">{{ agentic.candidates_total }} total</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-100">
+                            <th class="px-4 py-3 text-left font-semibold text-slate-600 bg-slate-50">Server</th>
+                            <th class="px-4 py-3 text-left font-semibold text-slate-600 bg-slate-50">Use Case</th>
+                            <th class="px-4 py-3 text-left font-semibold text-slate-600 bg-slate-50">Rule</th>
+                            <th class="px-4 py-3 text-left font-semibold text-slate-600 bg-slate-50">Recommendation</th>
+                            <th class="px-4 py-3 text-right font-semibold text-slate-600 bg-slate-50">Est. Saving (€)</th>
+                            <th class="px-4 py-3 text-center font-semibold text-slate-600 bg-slate-50">Status</th>
+                            <th class="px-4 py-3 text-center font-semibold text-slate-600 bg-slate-50">Decision</th>
+                        </tr>
+                    </thead>
+                    <tbody id="candidates-tbody">
+                        {% for c in agentic.candidates %}
+                        <tr class="border-b border-slate-50 hover:bg-slate-50 transition" data-candidate-id="{{ c.id }}" data-status="{{ c.status }}">
+                            <td class="px-4 py-3 font-medium text-slate-800 max-w-[160px] truncate" title="{{ c.server_name }}">{{ c.server_name }}</td>
+                            <td class="px-4 py-3">
+                                <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold
+                                    {% if c.use_case == 'UC1' %}bg-purple-100 text-purple-700
+                                    {% elif c.use_case == 'UC2' %}bg-orange-100 text-orange-700
+                                    {% else %}bg-teal-100 text-teal-700{% endif %}">
+                                    {{ c.use_case }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-slate-500" title="{{ c.rule_name }}">{{ c.rule_code }}</td>
+                            <td class="px-4 py-3 text-slate-600 max-w-[220px]">
+                                <span class="block truncate" title="{{ c.recommendation }}">{{ c.recommendation }}</span>
+                                {% if c.rationale %}
+                                <span class="block text-slate-400 truncate" title="{{ c.rationale }}">{{ c.rationale|truncatechars:80 }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-right font-semibold {% if c.estimated_saving_eur %}text-emerald-700{% else %}text-slate-400{% endif %}">
+                                {% if c.estimated_saving_eur %}{{ c.estimated_saving_eur|floatformat:0 }}{% else %}—{% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="badge badge-{{ c.status }}">{{ c.status }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                {% if c.decision %}
+                                <span class="badge badge-{{ c.decision.decision }}">{{ c.decision.decision }}</span>
+                                {% elif c.status == 'pending' or c.status == 'in_progress' %}
+                                <div class="flex gap-1 justify-center">
+                                    <button type="button"
+                                            class="btn-decide px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition"
+                                            data-id="{{ c.id }}" data-decision="accepted">Accept</button>
+                                    <button type="button"
+                                            class="btn-decide px-2.5 py-1 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 transition"
+                                            data-id="{{ c.id }}" data-decision="rejected">Reject</button>
+                                </div>
+                                {% else %}
+                                <span class="text-slate-300">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-400 shadow-sm">
+            <p class="font-medium">No optimization candidates for this run.</p>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- No agentic data yet -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+            <div class="inline-flex h-14 w-14 items-center justify-center rounded-full bg-sky-50 mb-4">
+                <svg class="w-7 h-7 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+            </div>
+            <p class="text-lg font-semibold text-slate-700">No agent runs found</p>
+            <p class="text-sm text-slate-400 mt-1 mb-5">Click <strong>Run Agent</strong> to trigger the liscence-optimizer agent against live database data.</p>
+            <button type="button" id="btn-trigger-run-empty"
+                    class="inline-flex items-center gap-2 px-6 py-3 bg-sky-600 text-white text-sm font-semibold rounded-xl hover:bg-sky-700 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Run Agent Now
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB 3: Agent-generated markdown report (stored in AgentRun.report_markdown)
+    ══════════════════════════════════════════════════════════════════════════ -->
+    {% if has_agentic_data and agentic.agent_run.report_markdown %}
+    <div id="tab-agent-report" class="tab-panel flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8" style="border-color:#e2e8f0;">
+        <div id="agent-report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
+    </div>
+    {% endif %}
+
+</div><!-- /max-w-6xl -->
+
 {{ report_text|default:""|json_script:"report-text" }}
+{% if has_agentic_data and agentic.agent_run.report_markdown %}
+{{ agentic.agent_run.report_markdown|json_script:"agent-report-text" }}
+{% endif %}
+
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        var exportDropdown = document.getElementById('export-dropdown');
-        var exportToggle = document.getElementById('export-dropdown-toggle');
-        var exportMenu = document.getElementById('export-dropdown-menu');
-        var exportArrow = document.getElementById('export-dropdown-arrow');
+document.addEventListener('DOMContentLoaded', function () {
+    /* ── Helpers ───────────────────────────────────────────────────────── */
+    function getCsrf() {
+        return document.cookie.split(';').map(c => c.trim())
+            .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+    }
+    function showToast(msg, type) {
+        var t = document.getElementById('run-toast');
+        if (!t) return;
+        var colours = {
+            success: 'bg-emerald-50 border-emerald-300 text-emerald-800',
+            error:   'bg-red-50 border-red-300 text-red-800',
+            info:    'bg-sky-50 border-sky-300 text-sky-800',
+        };
+        t.className = 'mb-4 flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium border ' + (colours[type] || colours.info);
+        t.textContent = msg;
+        t.classList.remove('hidden');
+        setTimeout(function () { t.classList.add('hidden'); }, 6000);
+    }
 
-        function setExportDropdown(open) {
-            if (!exportMenu || !exportToggle) return;
-            exportMenu.classList.toggle('is-open', open);
-            exportToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            exportMenu.setAttribute('aria-hidden', open ? 'false' : 'true');
-            if (exportArrow) {
-                exportArrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
-            }
-        }
-
-        if (exportToggle && exportMenu) {
-            exportToggle.addEventListener('click', function (event) {
-                event.stopPropagation();
-                setExportDropdown(!exportMenu.classList.contains('is-open'));
-            });
-
-            exportToggle.addEventListener('keydown', function (event) {
-                if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setExportDropdown(true);
-                    var firstItem = exportMenu.querySelector('a');
-                    if (firstItem) firstItem.focus();
-                }
-            });
-
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape') {
-                    setExportDropdown(false);
-                    exportToggle.focus();
-                }
-            });
-
-            document.addEventListener('click', function (event) {
-                if (exportDropdown && !exportDropdown.contains(event.target)) {
-                    setExportDropdown(false);
-                }
-            });
-        }
-
-        setExportDropdown(false);
-
-        var el = document.getElementById('report-text');
-        var raw = '';
-        if (el) try { raw = JSON.parse(el.textContent || '""'); } catch (e) { raw = el.textContent || ''; }
-        var content = document.getElementById('report-content');
-        if (typeof marked !== 'undefined' && raw) {
-            content.innerHTML = (marked.parse || marked)(raw, { gfm: true });
-        } else {
-            content.textContent = raw || 'No report generated or available in current context.';
-            content.classList.remove('report-body');
-            content.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
-        }
+    /* ── Tab switching ─────────────────────────────────────────────────── */
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panel = document.getElementById(btn.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
     });
+
+    /* ── Render AI report markdown ─────────────────────────────────────── */
+    var aiEl = document.getElementById('report-text');
+    var aiRaw = '';
+    if (aiEl) try { aiRaw = JSON.parse(aiEl.textContent || '""'); } catch(e) { aiRaw = aiEl.textContent || ''; }
+    var aiContent = document.getElementById('report-content');
+    if (typeof marked !== 'undefined' && aiRaw && aiContent) {
+        aiContent.innerHTML = (marked.parse || marked)(aiRaw, { gfm: true });
+    } else if (aiContent) {
+        aiContent.textContent = aiRaw || 'No report generated or available in current context.';
+        aiContent.classList.remove('report-body');
+        aiContent.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
+    }
+
+    /* ── Render agent report markdown ──────────────────────────────────── */
+    var agEl = document.getElementById('agent-report-text');
+    if (agEl) {
+        var agRaw = '';
+        try { agRaw = JSON.parse(agEl.textContent || '""'); } catch(e) { agRaw = agEl.textContent || ''; }
+        var agContent = document.getElementById('agent-report-content');
+        if (typeof marked !== 'undefined' && agRaw && agContent) {
+            agContent.innerHTML = (marked.parse || marked)(agRaw, { gfm: true });
+        }
+    }
+
+    /* ── Export dropdown ────────────────────────────────────────────────── */
+    var exportDropdown = document.getElementById('export-dropdown');
+    var exportToggle   = document.getElementById('export-dropdown-toggle');
+    var exportMenu     = document.getElementById('export-dropdown-menu');
+    var exportArrow    = document.getElementById('export-dropdown-arrow');
+    function setExportDropdown(open) {
+        if (!exportMenu || !exportToggle) return;
+        exportMenu.classList.toggle('is-open', open);
+        exportToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (exportArrow) exportArrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+    }
+    if (exportToggle && exportMenu) {
+        exportToggle.addEventListener('click', function (e) { e.stopPropagation(); setExportDropdown(!exportMenu.classList.contains('is-open')); });
+        document.addEventListener('click', function (e) { if (exportDropdown && !exportDropdown.contains(e.target)) setExportDropdown(false); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setExportDropdown(false); });
+    }
+    setExportDropdown(false);
+
+    /* ── Trigger agent run ─────────────────────────────────────────────── */
+    function triggerRun(btnEl) {
+        if (!btnEl) return;
+        var label = document.getElementById('btn-trigger-label');
+        btnEl.disabled = true;
+        if (label) label.textContent = 'Running…';
+        showToast('Agent run triggered — this may take up to 2 minutes…', 'info');
+
+        fetch('{% url "optimizer:api_trigger_agent_run" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ usecase_id: 'uc_1_2_3' }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btnEl.disabled = false;
+            if (label) label.textContent = 'Run Agent';
+            if (data.status === 'completed') {
+                showToast('Agent run completed! Refreshing page…', 'success');
+                setTimeout(function () { window.location.reload(); }, 1500);
+            } else {
+                var err = (data.result && data.result.error) || data.error || 'Unknown error';
+                showToast('Agent run failed: ' + err, 'error');
+            }
+        })
+        .catch(function (err) {
+            btnEl.disabled = false;
+            if (label) label.textContent = 'Run Agent';
+            showToast('Network error: ' + err.message, 'error');
+        });
+    }
+
+    var btnMain  = document.getElementById('btn-trigger-run');
+    var btnEmpty = document.getElementById('btn-trigger-run-empty');
+    if (btnMain)  btnMain.addEventListener('click',  function () { triggerRun(btnMain); });
+    if (btnEmpty) btnEmpty.addEventListener('click', function () { triggerRun(btnMain || btnEmpty); });
+
+    /* ── Accept / reject candidate ─────────────────────────────────────── */
+    document.querySelectorAll('.btn-decide').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var candidateId = btn.dataset.id;
+            var decision    = btn.dataset.decision;
+            btn.disabled = true;
+            btn.textContent = '…';
+
+            fetch('/api/candidates/' + candidateId + '/decision/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+                body: JSON.stringify({ decision: decision }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    var row = document.querySelector('[data-candidate-id="' + candidateId + '"]');
+                    if (row) {
+                        var cell = row.querySelector('td:last-child');
+                        if (cell) {
+                            var badge = document.createElement('span');
+                            badge.className = 'badge badge-' + decision;
+                            badge.textContent = decision;
+                            cell.innerHTML = '';
+                            cell.appendChild(badge);
+                        }
+                        row.dataset.status = decision;
+                    }
+                    showToast('Candidate ' + decision + ' successfully.', 'success');
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = decision === 'accepted' ? 'Accept' : 'Reject';
+                    showToast('Failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = decision === 'accepted' ? 'Accept' : 'Reject';
+                showToast('Network error: ' + err.message, 'error');
+            });
+        });
+    });
+});
 </script>
 {% endblock %}

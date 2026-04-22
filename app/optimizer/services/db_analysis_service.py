@@ -585,12 +585,16 @@ def _build_rightsizing_df() -> pd.DataFrame:
 
 def compute_rightsizing_metrics() -> dict:
     """
-    Run UC 3.1 (CPU) and UC 3.2 (RAM) right-sizing rules using CPUUtilisation data.
+    Run UC 3.1–3.4 right-sizing rules + lifecycle/physical flags using CPUUtilisation data.
     Returns a dict consumed by the results view and dashboard template.
     """
     from optimizer.rules.rightsizing import (
         find_cpu_rightsizing_optimizations,
         find_ram_rightsizing_optimizations,
+        find_criticality_cpu_optimizations,
+        find_criticality_ram_optimizations,
+        find_lifecycle_risk_flags,
+        find_physical_systems_flags,
     )
 
     workload_options = ["CPU", "RAM"]
@@ -627,6 +631,10 @@ def compute_rightsizing_metrics() -> dict:
         "ram_optimization_count": 0,
         "ram_prod_count": 0, "ram_nonprod_count": 0,
         "ram_prod_optimization_count": 0, "ram_nonprod_optimization_count": 0,
+        "crit_cpu_optimizations": [], "crit_cpu_count": 0,
+        "crit_ram_optimizations": [], "crit_ram_count": 0,
+        "lifecycle_risk_flags": [], "lifecycle_count": 0,
+        "physical_system_flags": [], "physical_count": 0,
         "workload_options": workload_options,
         "default_workload": default_workload,
         "default_filter_by_workload": default_filter_by_workload,
@@ -650,15 +658,40 @@ def compute_rightsizing_metrics() -> dict:
     # ── Run rules ─────────────────────────────────────────────────────────────
     cpu_df = pd.DataFrame()
     ram_df = pd.DataFrame()
+    crit_cpu_df = pd.DataFrame()
+    crit_ram_df = pd.DataFrame()
+    lifecycle_df = pd.DataFrame()
+    physical_df = pd.DataFrame()
+
     try:
         cpu_df = find_cpu_rightsizing_optimizations(df)
     except Exception as exc:
-        logger.exception("CPU right-sizing rule failed: %s", exc)
+        logger.exception("UC 3.1 CPU right-sizing rule failed: %s", exc)
 
     try:
         ram_df = find_ram_rightsizing_optimizations(df)
     except Exception as exc:
-        logger.exception("RAM right-sizing rule failed: %s", exc)
+        logger.exception("UC 3.2 RAM right-sizing rule failed: %s", exc)
+
+    try:
+        crit_cpu_df = find_criticality_cpu_optimizations(df)
+    except Exception as exc:
+        logger.exception("UC 3.3 criticality CPU rule failed: %s", exc)
+
+    try:
+        crit_ram_df = find_criticality_ram_optimizations(df)
+    except Exception as exc:
+        logger.exception("UC 3.4 criticality RAM rule failed: %s", exc)
+
+    try:
+        lifecycle_df = find_lifecycle_risk_flags(df)
+    except Exception as exc:
+        logger.exception("Lifecycle risk flags failed: %s", exc)
+
+    try:
+        physical_df = find_physical_systems_flags(df)
+    except Exception as exc:
+        logger.exception("Physical systems flags failed: %s", exc)
 
     # ── Column subsets for display ─────────────────────────────────────────────
     _CPU_COLS = [
@@ -688,6 +721,51 @@ def compute_rightsizing_metrics() -> dict:
         "RAM_Recommendation",
         "Optimization_Type",
         "Recommendation_Type",
+    ]
+    _CRIT_CPU_COLS = [
+        "server_name",
+        "is_virtual",
+        "Criticality",
+        "Environment",
+        "Avg_CPU_12m",
+        "Peak_CPU_12m",
+        "Current_vCPU",
+        "Recommended_vCPU",
+        "CPU_Recommendation",
+        "Lifecycle_Flag",
+        "Optimization_Type",
+    ]
+    _CRIT_RAM_COLS = [
+        "server_name",
+        "is_virtual",
+        "Criticality",
+        "Environment",
+        "Avg_FreeMem_12m",
+        "Min_FreeMem_12m",
+        "Current_RAM_GiB",
+        "Recommended_RAM_GiB",
+        "RAM_Recommendation",
+        "Lifecycle_Flag",
+        "Optimization_Type",
+    ]
+    _LIFECYCLE_COLS = [
+        "server_name",
+        "is_virtual",
+        "Criticality",
+        "Environment",
+        "Peak_CPU_12m",
+        "Min_FreeMem_12m",
+        "Lifecycle_Risk_Reasons",
+        "Human_Review_Required",
+    ]
+    _PHYSICAL_COLS = [
+        "server_name",
+        "is_virtual",
+        "Environment",
+        "Criticality",
+        "IsVirtual_Status",
+        "Human_Review_Required",
+        "Review_Reason",
     ]
 
     def _to_records(
@@ -726,6 +804,34 @@ def compute_rightsizing_metrics() -> dict:
         recommended_col="Recommended_RAM_GiB",
         reduction_col="Potential_RAM_Reduction_GiB",
     )
+    crit_cpu_records = _to_records(
+        crit_cpu_df,
+        _CRIT_CPU_COLS,
+        current_col="Current_vCPU",
+        recommended_col="Recommended_vCPU",
+        reduction_col="Potential_vCPU_Reduction",
+    )
+    crit_ram_records = _to_records(
+        crit_ram_df,
+        _CRIT_RAM_COLS,
+        current_col="Current_RAM_GiB",
+        recommended_col="Recommended_RAM_GiB",
+        reduction_col="Potential_RAM_Reduction_GiB",
+    )
+
+    def _simple_records(src: pd.DataFrame, cols: list) -> list:
+        if src.empty:
+            return []
+        keep = [c for c in cols if c in src.columns]
+        return (
+            src[keep]
+            .round(2)
+            .replace({float("nan"): None})
+            .to_dict("records")
+        )
+
+    lifecycle_records = _simple_records(lifecycle_df, _LIFECYCLE_COLS)
+    physical_records  = _simple_records(physical_df,  _PHYSICAL_COLS)
 
     # ── PROD / NON-PROD breakdown ──────────────────────────────────────────────
     def _filter_records(records: list, filter_value: str) -> list:
@@ -847,6 +953,14 @@ def compute_rightsizing_metrics() -> dict:
         "ram_prod_count": _count(ram_df, "PROD"),
         "ram_nonprod_optimization_count": _count(ram_df, "NON-PROD"),
         "ram_nonprod_count": _count(ram_df, "NON-PROD"),
+        "crit_cpu_optimizations": crit_cpu_records,
+        "crit_cpu_count": len(crit_cpu_records),
+        "crit_ram_optimizations": crit_ram_records,
+        "crit_ram_count": len(crit_ram_records),
+        "lifecycle_risk_flags": lifecycle_records,
+        "lifecycle_count": len(lifecycle_records),
+        "physical_system_flags": physical_records,
+        "physical_count": len(physical_records),
         "workload_options": workload_options,
         "default_workload": default_workload,
         "default_filter_by_workload": default_filter_by_workload,
@@ -909,6 +1023,118 @@ def build_rightsizing_sheet_export(sheet_key: str) -> pd.DataFrame:
     if len(numeric_columns):
         filtered_df.loc[:, numeric_columns] = filtered_df[numeric_columns].round(2)
     return filtered_df.where(pd.notna(filtered_df), None)
+
+
+def get_latest_agentic_context() -> dict:
+    """
+    Build a context dict from the most-recent completed AgentRun and its
+    OptimizationCandidates + OptimizationDecisions.
+
+    Returns an empty dict with has_agentic_data=False when no completed run exists.
+    """
+    from optimizer.models import AgentRun, OptimizationCandidate, OptimizationDecision
+
+    run = (
+        AgentRun.objects.filter(status=AgentRun.STATUS_COMPLETED)
+        .order_by("-started_at")
+        .first()
+    )
+    if not run:
+        return {"has_agentic_data": False}
+
+    candidates_qs = (
+        OptimizationCandidate.objects.filter(agent_run=run)
+        .select_related("server", "rule")
+        .order_by("-estimated_saving_eur")
+    )
+
+    candidates = []
+    for c in candidates_qs:
+        decision = None
+        try:
+            decision = {
+                "decision": c.decision.decision,
+                "decided_by_email": c.decision.decided_by_email or "",
+                "decided_at": c.decision.decided_at.isoformat() if c.decision.decided_at else None,
+                "decision_notes": c.decision.decision_notes or "",
+                "snow_ticket_id": c.decision.snow_ticket_id or "",
+            }
+        except OptimizationDecision.DoesNotExist:
+            pass
+        candidates.append({
+            "id": str(c.id),
+            "use_case": c.use_case,
+            "server_name": c.server.server_name if c.server else "",
+            "rule_name": c.rule.rule_name if c.rule else "",
+            "rule_code": c.rule.rule_code if c.rule else "",
+            "recommendation": c.recommendation,
+            "rationale": c.rationale,
+            "estimated_saving_eur": float(c.estimated_saving_eur) if c.estimated_saving_eur is not None else None,
+            "status": c.status,
+            "detected_on": c.detected_on.isoformat() if c.detected_on else None,
+            "decision": decision,
+        })
+
+    total_saving = sum(
+        c["estimated_saving_eur"] for c in candidates if c["estimated_saving_eur"] is not None
+    )
+    accepted = [c for c in candidates if c["status"] == OptimizationCandidate.STATUS_ACCEPTED]
+    pending = [c for c in candidates if c["status"] == OptimizationCandidate.STATUS_PENDING]
+    rejected = [c for c in candidates if c["status"] == OptimizationCandidate.STATUS_REJECTED]
+
+    return {
+        "has_agentic_data": True,
+        "agent_run": {
+            "id": str(run.id),
+            "run_label": run.run_label,
+            "status": run.status,
+            "triggered_by": run.triggered_by,
+            "servers_evaluated": run.servers_evaluated,
+            "candidates_found": run.candidates_found,
+            "llm_model": run.llm_model,
+            "llm_tokens_used": run.llm_tokens_used,
+            "llm_used": run.llm_used,
+            "run_duration_sec": float(run.run_duration_sec) if run.run_duration_sec else None,
+            "agent_endpoint": run.agent_endpoint,
+            "report_markdown": run.report_markdown,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "error_detail": run.error_detail,
+        },
+        "candidates": candidates,
+        "candidates_total": len(candidates),
+        "candidates_accepted": len(accepted),
+        "candidates_pending": len(pending),
+        "candidates_rejected": len(rejected),
+        "total_estimated_saving_eur": round(total_saving, 2),
+    }
+
+
+def get_agent_run_list(limit: int = 20) -> list:
+    """Return a summary list of recent agent runs for the API."""
+    from optimizer.models import AgentRun
+
+    runs = AgentRun.objects.order_by("-started_at")[:limit]
+    result = []
+    for run in runs:
+        result.append({
+            "id": str(run.id),
+            "run_label": run.run_label,
+            "status": run.status,
+            "triggered_by": run.triggered_by,
+            "servers_evaluated": run.servers_evaluated,
+            "candidates_found": run.candidates_found,
+            "llm_model": run.llm_model,
+            "llm_tokens_used": run.llm_tokens_used,
+            "llm_used": run.llm_used,
+            "run_duration_sec": float(run.run_duration_sec) if run.run_duration_sec else None,
+            "agent_endpoint": run.agent_endpoint,
+            "has_report": bool(run.report_markdown),
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "error_detail": run.error_detail,
+        })
+    return result
 
 
 def compute_live_db_metrics() -> dict:

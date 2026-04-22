@@ -1085,6 +1085,13 @@ def report_page(request):
             context["report_text"],
             report_context=_build_report_render_context(context),
         )
+
+    # Merge in the latest agentic run data (agent report + candidates)
+    from optimizer.services.db_analysis_service import get_latest_agentic_context
+    agentic = get_latest_agentic_context()
+    context["agentic"] = agentic
+    context["has_agentic_data"] = agentic.get("has_agentic_data", False)
+
     return render(request, "optimizer/report.html", context)
 
 
@@ -1132,6 +1139,259 @@ def report_download(request, format_type):
 def analysis_logs(request):
     """Return all persisted analysis logs for the authenticated user."""
     return JsonResponse({"logs": get_user_analysis_logs(request.user)})
+
+
+@require_GET
+@login_required
+def api_agent_runs(request):
+    """
+    API: List recent agent runs.
+
+    GET /api/agent-runs/
+    Response shape (A2A-style):
+      {
+        "request_id": str,
+        "status": "completed",
+        "result": {
+          "runs": [...],
+          "total": int
+        }
+      }
+    """
+    from optimizer.services.db_analysis_service import get_agent_run_list
+    limit = min(int(request.GET.get("limit", 20)), 100)
+    runs = get_agent_run_list(limit=limit)
+    return JsonResponse({
+        "request_id": str(uuid.uuid4()),
+        "status": "completed",
+        "result": {
+            "runs": runs,
+            "total": len(runs),
+        },
+    })
+
+
+@require_GET
+@login_required
+def api_agent_run_detail(request, run_id):
+    """
+    API: Get a single agent run with its candidates.
+
+    GET /api/agent-runs/<run_id>/
+    Response shape:
+      {
+        "request_id": str,
+        "status": "completed",
+        "result": { agent_run, candidates, ... }
+      }
+    """
+    from optimizer.models import AgentRun, OptimizationCandidate, OptimizationDecision
+    try:
+        run = AgentRun.objects.get(pk=run_id)
+    except (AgentRun.DoesNotExist, Exception):
+        return JsonResponse({"status": "failed", "error": "Agent run not found."}, status=404)
+
+    candidates_qs = (
+        OptimizationCandidate.objects.filter(agent_run=run)
+        .select_related("server", "rule")
+        .order_by("-estimated_saving_eur")
+    )
+    candidates = []
+    for c in candidates_qs:
+        decision = None
+        try:
+            decision = {
+                "decision": c.decision.decision,
+                "decided_by_email": c.decision.decided_by_email or "",
+                "decided_at": c.decision.decided_at.isoformat() if c.decision.decided_at else None,
+                "decision_notes": c.decision.decision_notes or "",
+            }
+        except OptimizationDecision.DoesNotExist:
+            pass
+        candidates.append({
+            "id": str(c.id),
+            "use_case": c.use_case,
+            "server_name": c.server.server_name if c.server else "",
+            "rule_name": c.rule.rule_name if c.rule else "",
+            "rule_code": c.rule.rule_code if c.rule else "",
+            "recommendation": c.recommendation,
+            "rationale": c.rationale,
+            "estimated_saving_eur": float(c.estimated_saving_eur) if c.estimated_saving_eur is not None else None,
+            "status": c.status,
+            "detected_on": c.detected_on.isoformat() if c.detected_on else None,
+            "decision": decision,
+        })
+
+    return JsonResponse({
+        "request_id": str(uuid.uuid4()),
+        "status": "completed",
+        "result": {
+            "agent_run": {
+                "id": str(run.id),
+                "run_label": run.run_label,
+                "status": run.status,
+                "triggered_by": run.triggered_by,
+                "servers_evaluated": run.servers_evaluated,
+                "candidates_found": run.candidates_found,
+                "llm_model": run.llm_model,
+                "llm_tokens_used": run.llm_tokens_used,
+                "llm_used": run.llm_used,
+                "run_duration_sec": float(run.run_duration_sec) if run.run_duration_sec else None,
+                "agent_endpoint": run.agent_endpoint,
+                "has_report": bool(run.report_markdown),
+                "report_markdown": run.report_markdown,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+                "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                "error_detail": run.error_detail,
+            },
+            "candidates": candidates,
+        },
+    })
+
+
+@require_http_methods(["POST"])
+@csrf_protect
+@login_required
+def api_trigger_agent_run(request):
+    """
+    API: Trigger a new agent run using live DB data.
+
+    POST /api/agent-runs/trigger/
+    Body (optional JSON):
+      { "usecase_id": str, "notes": str }
+
+    Response shape (A2A-style):
+      {
+        "request_id": str,
+        "workflow_id": str,   <- agent_run UUID
+        "status": "completed" | "failed",
+        "result": { "agent_run_id", "report_markdown", "candidates_created", ... },
+        "execution_time_ms": int
+      }
+    """
+    import json as _json
+    import time
+
+    from optimizer.services.db_analysis_service import _build_installations_df, compute_rightsizing_metrics
+    from optimizer.services.ai_report_generator import generate_and_store_agentic_report
+
+    # Parse optional body
+    body = {}
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            body = _json.loads(request.body.decode("utf-8"))
+        except Exception:
+            pass
+
+    usecase_id = body.get("usecase_id") or "uc_1_2_3"
+    notes = body.get("notes") or ""
+
+    started = time.time()
+
+    # Build normalized records from live DB (same pipeline as db_analysis_service)
+    try:
+        df = _build_installations_df()
+        records = df.to_dict("records") if not df.empty else []
+    except Exception as exc:
+        logger.exception("Failed to build installation records for agent run: %s", exc)
+        records = []
+
+    # Also add rightsizing data as strategy_results context
+    try:
+        rs = compute_rightsizing_metrics()
+        strategy_results = {
+            "strategy_3_rightsizing": {
+                "cpu_candidates": rs.get("cpu_optimizations") or [],
+                "ram_candidates": rs.get("ram_optimizations") or [],
+                "total_vcpu_reduction": rs.get("total_vcpu_reduction"),
+                "total_ram_reduction_gib": rs.get("total_ram_reduction_gib"),
+            }
+        }
+    except Exception:
+        strategy_results = {}
+
+    result = generate_and_store_agentic_report(
+        records=records,
+        usecase_id=usecase_id,
+        strategy_results=strategy_results,
+        triggered_by=request.user.email or request.user.username,
+    )
+
+    elapsed_ms = int((time.time() - started) * 1000)
+    http_status = 200 if result.get("success") else 500
+
+    return JsonResponse(
+        {
+            "request_id": str(uuid.uuid4()),
+            "workflow_id": result.get("agent_run_id", ""),
+            "status": "completed" if result.get("success") else "failed",
+            "result": result,
+            "execution_time_ms": elapsed_ms,
+            "metadata": {
+                "triggered_by": request.user.email or request.user.username,
+                "usecase_id": usecase_id,
+            },
+        },
+        status=http_status,
+    )
+
+
+@require_http_methods(["POST"])
+@csrf_protect
+@login_required
+def api_candidate_decision(request, candidate_id):
+    """
+    API: Accept or reject an OptimizationCandidate.
+
+    POST /api/candidates/<candidate_id>/decision/
+    Body (JSON):
+      {
+        "decision": "accepted" | "rejected",
+        "decision_notes": str   (optional)
+      }
+
+    Response:
+      { "success": bool, "candidate_id": str, "decision": str }
+    """
+    import json as _json
+    from optimizer.models import OptimizationCandidate, OptimizationDecision
+
+    try:
+        candidate = OptimizationCandidate.objects.get(pk=candidate_id)
+    except (OptimizationCandidate.DoesNotExist, Exception):
+        return JsonResponse({"success": False, "error": "Candidate not found."}, status=404)
+
+    try:
+        body = _json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"success": False, "error": "Invalid JSON body."}, status=400)
+
+    decision_value = body.get("decision", "").strip().lower()
+    if decision_value not in (OptimizationDecision.DECISION_ACCEPTED, OptimizationDecision.DECISION_REJECTED):
+        return JsonResponse(
+            {"success": False, "error": "decision must be 'accepted' or 'rejected'."}, status=400
+        )
+
+    decision_notes = str(body.get("decision_notes") or "").strip()[:500]
+
+    # Upsert decision — overwrite an existing decision if present
+    OptimizationDecision.objects.update_or_create(
+        candidate=candidate,
+        defaults={
+            "tenant": candidate.tenant,
+            "decision": decision_value,
+            "decided_by": request.user.get_full_name() or request.user.username,
+            "decided_by_email": request.user.email or None,
+            "decision_notes": decision_notes,
+        },
+    )
+
+    return JsonResponse({
+        "success": True,
+        "candidate_id": str(candidate.id),
+        "decision": decision_value,
+        "server_name": candidate.server.server_name if candidate.server else "",
+    })
 
 
 @require_GET

@@ -8,16 +8,18 @@ Average/Peak CPU and Average/Minimum free Memory columns.
 Enterprise use cases:
   UC 3.1 – CPU Right-Sizing: reduce vCPU count for under-utilised VMs.
   UC 3.2 – RAM Right-Sizing: reduce RAM allocation for under-utilised VMs.
+  UC 3.3 – Criticality-Aware CPU Optimization.
+  UC 3.4 – Criticality-Aware RAM Optimization.
 
 PROD eligibility (UC 3.1):
 - Avg_CPU_12m  < 15%
 - Peak_CPU_12m <= 70%
-- Current_vCPU > 2
+- Current_vCPU >= 4   (was > 2; updated to match business rule)
 
 NON-PROD eligibility (UC 3.1):
 - Avg_CPU_12m  < 15%
 - Peak_CPU_12m <= 80%
-- Current_vCPU > 2
+- Current_vCPU >= 4   (was > 2; updated to match business rule)
 
 PROD eligibility (UC 3.2):
 - Avg_FreeMem_12m >= 35%
@@ -59,6 +61,14 @@ WORKLOAD_CPU = "CPU"
 WORKLOAD_RAM = "RAM"
 DETAIL_OPTIMIZATION = "Optimization"
 DETAIL_RECOMMENDATION = "Recommendation"
+
+# ── Criticality constants ─────────────────────────────────────────────────────
+COL_CRITICALITY   = "Criticality"
+COL_IS_VIRTUAL    = "Is Virtual?"
+
+CRITICAL_VALS:     List[str] = ["Business Critical", "Mission Critical"]
+MFG_CRITICAL_VALS: List[str] = ["Manufacturing Critical"]
+ALL_CRITICAL_VALS: List[str] = CRITICAL_VALS + MFG_CRITICAL_VALS
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -125,8 +135,8 @@ def compute_utilisation_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df["Peak_CPU_12m"]    = df[max_cpu].max(axis=1,  skipna=True)
     df["Avg_FreeMem_12m"] = df[avg_mem].mean(axis=1, skipna=True)
     df["Min_FreeMem_12m"] = df[min_mem].min(axis=1,  skipna=True)
-    df["Current_vCPU"]    = df[lcpu].ffill(axis=1).iloc[:, -1]
-    df["Current_RAM_GiB"] = df[ram].ffill(axis=1).iloc[:, -1]
+    df["Current_vCPU"]    = df[lcpu].ffill(axis=1).iloc[:, -1] if lcpu else np.nan
+    df["Current_RAM_GiB"] = df[ram].ffill(axis=1).iloc[:, -1] if ram else np.nan
 
     logger.info("Utilisation metrics computed for %d rows.", len(df))
     return df
@@ -164,6 +174,7 @@ def find_cpu_rightsizing_optimizations(
     )
     return result
 
+
 def find_cpu_rightsizing_candidates(
     df: pd.DataFrame,
     non_prod_envs: List[str] = NON_PROD_ENVS,
@@ -177,7 +188,7 @@ def _cpu_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFra
     return prod[
         (prod["Avg_CPU_12m"]  < 15) &
         (prod["Peak_CPU_12m"] <= 70) &
-        (prod["Current_vCPU"] > 2)
+        (prod["Current_vCPU"] >= 4)   # UC 3.1: Current vCPU >= 4
     ].copy()
 
 
@@ -186,15 +197,15 @@ def _cpu_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.Data
     return nonprod[
         (nonprod["Avg_CPU_12m"]  < 15) &
         (nonprod["Peak_CPU_12m"] <= 80) &
-        (nonprod["Current_vCPU"] > 2)
+        (nonprod["Current_vCPU"] >= 4)  # UC 3.1: Current vCPU >= 4
     ].copy()
 
 
 def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.1 PROD recommendations:
-      Avg < 10% AND Peak in [50%–70%]  → reduce vCPU by ~50%, min 2
-      Avg in [10%–15%) AND Peak <= 60% → reduce vCPU by ~25%, min 2
+      Avg < 10%                        → reduce vCPU by ~50%, never below 4
+      Avg in [10%–15%) AND Peak <= 60% → reduce vCPU by ~25%, never below 4
       Peak > 70%                       → no reduction (peak protection)
     """
     df = eligible_df.copy()
@@ -210,11 +221,11 @@ def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
         vcpu = float(vcpu)
         if peak > 70:
             return "No reduction – Peak > 70% (protect peak performance)", int(vcpu)
-        if avg < 10 and peak >= 50:
-            new = max(2, round(vcpu * 0.50))
+        if avg < 10:
+            new = max(4, round(vcpu * 0.50))   # never below 4 vCPU
             return f"Reduce vCPU by ~50% → {int(new)}", int(new)
         if 10 <= avg < 15 and peak <= 60:
-            new = max(2, round(vcpu * 0.75))
+            new = max(4, round(vcpu * 0.75))   # never below 4 vCPU
             return f"Reduce vCPU by ~25% → {int(new)}", int(new)
         return "No specific recommendation", int(vcpu)
 
@@ -227,8 +238,8 @@ def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
 def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.1 NON-PROD recommendations:
-      Avg < 15% AND Peak < 60%          → reduce by ~50–60% (keep 45%), min 2
-      Avg in [15%–25%) AND Peak <= 70%  → reduce by ~25–33% (keep 71%), min 2
+      Avg < 15% AND Peak < 60%          → reduce by ~50–60% (keep 45%), never below 4
+      Avg in [15%–25%) AND Peak <= 70%  → reduce by ~25–33% (keep 71%), never below 4
       Peak > 80%                        → no reduction
     """
     df = eligible_df.copy()
@@ -245,10 +256,10 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
         if peak > 80:
             return "No reduction – Peak > 80%", int(vcpu)
         if avg < 15 and peak < 60:
-            new = max(2, round(vcpu * 0.45))
+            new = max(4, round(vcpu * 0.45))   # never below 4 vCPU
             return f"Reduce vCPU by ~50-60% → {int(new)}", int(new)
         if 15 <= avg < 25 and peak <= 70:
-            new = max(2, round(vcpu * 0.71))
+            new = max(4, round(vcpu * 0.71))   # never below 4 vCPU
             return f"Reduce vCPU by ~25-33% → {int(new)}", int(new)
         return "No specific recommendation", int(vcpu)
 
@@ -289,6 +300,7 @@ def find_ram_rightsizing_optimizations(
         len(prod_rec), len(nonprod_rec), len(result),
     )
     return result
+
 
 def find_ram_rightsizing_candidates(
     df: pd.DataFrame,
@@ -374,3 +386,257 @@ def _ram_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     df["RAM_Recommendation"]  = result[0]
     df["Recommended_RAM_GiB"] = result[1]
     return df
+
+
+# ── UC 3.3 – Criticality-Aware CPU Optimization ───────────────────────────────
+
+def find_criticality_cpu_optimizations(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    UC 3.3 Criticality-Aware CPU Optimization.
+    Applies to ALL rows (all environments, all criticality levels).
+
+    Eligible rows = any of:
+      Avg_CPU_12m  < 10%    → candidate for cautious downsize
+      Avg_CPU_12m  > 80%    → candidate for upsize flag
+      Peak_CPU_12m > 95%    → lifecycle / blocking flag
+    """
+    eligible = _criticality_cpu_eligible(df)
+    rec = _criticality_cpu_recommendation(eligible)
+    rec["Optimization_Type"] = "Crit_CPU_Optimization"
+    rec["Recommendation_Type"] = "Crit_CPU_Recommendation"
+    logger.info("UC 3.3 criticality CPU optimizations: %d rows.", len(rec))
+    return rec
+
+
+def _criticality_cpu_eligible(df: pd.DataFrame) -> pd.DataFrame:
+    mask = (
+        (df["Avg_CPU_12m"].fillna(0)  < 10) |
+        (df["Avg_CPU_12m"].fillna(0)  > 80) |
+        (df["Peak_CPU_12m"].fillna(0) > 95)
+    )
+    return df[mask].copy()
+
+
+def _criticality_cpu_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    UC 3.3 recommendations:
+      Peak_CPU > 95%   → Downsize BLOCKED; lifecycle flag triggered
+      Avg_CPU < 10%    → Cautious downsize by ~25%, never below 4 vCPU
+      Avg_CPU > 80%    → Upsize by ~25% (flag only)
+    """
+    df = eligible_df.copy()
+    if df.empty:
+        for col in ("CPU_Recommendation", "Recommended_vCPU", "Lifecycle_Flag"):
+            df[col] = pd.Series(dtype="object")
+        return df
+
+    has_criticality = COL_CRITICALITY in df.columns
+
+    def _rec(row):
+        avg        = row["Avg_CPU_12m"]
+        peak       = row["Peak_CPU_12m"]
+        vcpu       = row["Current_vCPU"]
+        criticality = str(row.get(COL_CRITICALITY, "")) if has_criticality else ""
+        is_mfg     = criticality in MFG_CRITICAL_VALS
+        is_bc_mc   = criticality in CRITICAL_VALS
+
+        if pd.isna(avg) or pd.isna(vcpu):
+            return "Insufficient data", np.nan, ""
+
+        vcpu = float(vcpu)
+        lifecycle = ""
+
+        if not pd.isna(peak) and peak > 95:
+            lifecycle = "Lifecycle Risk: High Peak CPU (>95%)"
+            return (
+                "High Peak CPU (>95%) – Downsizing BLOCKED; Lifecycle Flag Triggered",
+                int(vcpu),
+                lifecycle,
+            )
+
+        if avg < 10:
+            new = max(4, round(vcpu * 0.75))
+            note = "Critical System – Cautious Downsizing by ~25%"
+            if is_mfg:
+                note += " (Manufacturing Critical – Extra Conservatism; Human Review Required)"
+            elif is_bc_mc:
+                note += " (Human Intervention Required)"
+            return f"{note} → {int(new)} vCPU", int(new), lifecycle
+
+        if avg > 80:
+            new = round(vcpu * 1.25)
+            note = "Upsize by ~25% – Flag Only"
+            if is_bc_mc or is_mfg:
+                note += " (Human Intervention Required)"
+            return f"{note} → {int(new)} vCPU", int(new), "Upsize Flag"
+
+        return "No specific recommendation", int(vcpu), lifecycle
+
+    result = df.apply(_rec, axis=1, result_type="expand")
+    df["CPU_Recommendation"] = result[0]
+    df["Recommended_vCPU"]   = result[1]
+    df["Lifecycle_Flag"]     = result[2]
+    return df
+
+
+# ── UC 3.4 – Criticality-Aware RAM Optimization ───────────────────────────────
+
+def find_criticality_ram_optimizations(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    UC 3.4 Criticality-Aware RAM Optimization.
+    Applies to ALL rows (all environments, all criticality levels).
+
+    Eligible rows = any of:
+      Avg_FreeMem_12m > 80%   → candidate for downsize (critical threshold)
+      Avg_FreeMem_12m < 20%   → candidate for upsize flag
+      Min_FreeMem_12m < 5%    → lifecycle risk flag
+    """
+    eligible = _criticality_ram_eligible(df)
+    rec = _criticality_ram_recommendation(eligible)
+    rec["Optimization_Type"] = "Crit_RAM_Optimization"
+    rec["Recommendation_Type"] = "Crit_RAM_Recommendation"
+    logger.info("UC 3.4 criticality RAM optimizations: %d rows.", len(rec))
+    return rec
+
+
+def _criticality_ram_eligible(df: pd.DataFrame) -> pd.DataFrame:
+    mask = (
+        (df["Avg_FreeMem_12m"].fillna(0) > 80) |
+        (df["Avg_FreeMem_12m"].fillna(0) < 20) |
+        (df["Min_FreeMem_12m"].fillna(0) < 5)
+    )
+    return df[mask].copy()
+
+
+def _criticality_ram_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    UC 3.4 recommendations:
+      Avg_FreeMem > 80%   → Downsize by ~25%, rounded to practical size, min 8 GiB
+      Avg_FreeMem < 20%   → Upsize flag only (no automated action)
+      Min_FreeMem < 5%    → Lifecycle risk flag (can co-exist)
+    """
+    df = eligible_df.copy()
+    if df.empty:
+        for col in ("RAM_Recommendation", "Recommended_RAM_GiB", "Lifecycle_Flag"):
+            df[col] = pd.Series(dtype="object")
+        return df
+
+    has_criticality = COL_CRITICALITY in df.columns
+
+    def _rec(row):
+        avg_mem    = row["Avg_FreeMem_12m"]
+        min_mem    = row["Min_FreeMem_12m"]
+        ram        = row["Current_RAM_GiB"]
+        criticality = str(row.get(COL_CRITICALITY, "")) if has_criticality else ""
+        is_mfg     = criticality in MFG_CRITICAL_VALS
+        is_bc_mc   = criticality in CRITICAL_VALS
+
+        if pd.isna(avg_mem) or pd.isna(ram):
+            return "Insufficient data", np.nan, ""
+
+        lifecycle = ""
+        if not pd.isna(min_mem) and min_mem < 5:
+            lifecycle = "Lifecycle Risk: Low Minimum Memory (<5%)"
+
+        human_note = ""
+        if is_bc_mc:
+            human_note = " (Human Intervention Required)"
+        elif is_mfg:
+            human_note = " (Manufacturing Critical – Extra Conservatism; Human Review Required)"
+
+        if avg_mem > 80:
+            target = _round_ram(ram * 0.75, 8)
+            return (
+                f"Critical System – Downsize RAM by ~25%{human_note} → {target} GiB",
+                target,
+                lifecycle,
+            )
+
+        if avg_mem < 20:
+            upsize_note = f"Upsize RAM – Flag Only (Avg Free Mem < 20%){human_note}"
+            return upsize_note, int(ram), lifecycle or "Upsize Flag"
+
+        return "No specific recommendation", int(ram), lifecycle
+
+    result = df.apply(_rec, axis=1, result_type="expand")
+    df["RAM_Recommendation"]  = result[0]
+    df["Recommended_RAM_GiB"] = result[1]
+    df["Lifecycle_Flag"]      = result[2]
+    return df
+
+
+# ── Lifecycle Risk Flags ──────────────────────────────────────────────────────
+
+def find_lifecycle_risk_flags(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Flag ALL systems (not just critical) that meet ANY lifecycle risk condition:
+      • Is a Critical system (Business Critical / Mission Critical / Manufacturing Critical)
+      • Peak_CPU_12m > 95%
+      • Min_FreeMem_12m < 5%
+
+    Returns a DataFrame with 'Lifecycle_Risk_Reasons' and 'Human_Review_Required'.
+    """
+    has_criticality = COL_CRITICALITY in df.columns
+
+    is_critical = (
+        df[COL_CRITICALITY].isin(ALL_CRITICAL_VALS)
+        if has_criticality
+        else pd.Series(False, index=df.index)
+    )
+    high_peak   = df["Peak_CPU_12m"].fillna(0)    > 95
+    low_min_mem = df["Min_FreeMem_12m"].fillna(100) < 5
+
+    flagged = df[is_critical | high_peak | low_min_mem].copy()
+    if flagged.empty:
+        flagged["Lifecycle_Risk_Reasons"] = pd.Series(dtype="object")
+        flagged["Human_Review_Required"]  = pd.Series(dtype="object")
+        return flagged
+
+    def _flag(row):
+        reasons = []
+        if has_criticality and row.get(COL_CRITICALITY, "") in ALL_CRITICAL_VALS:
+            reasons.append(f"Critical System ({row[COL_CRITICALITY]})")
+        if not pd.isna(row["Peak_CPU_12m"]) and row["Peak_CPU_12m"] > 95:
+            reasons.append("High Peak CPU (>95%)")
+        if not pd.isna(row["Min_FreeMem_12m"]) and row["Min_FreeMem_12m"] < 5:
+            reasons.append("Low Minimum Memory (<5%)")
+        return "; ".join(reasons)
+
+    flagged["Lifecycle_Risk_Reasons"] = flagged.apply(_flag, axis=1)
+    flagged["Human_Review_Required"]  = "Yes"
+    logger.info("Lifecycle risk flags: %d systems flagged.", len(flagged))
+    return flagged
+
+
+# ── Physical Systems Flag ─────────────────────────────────────────────────────
+
+def find_physical_systems_flags(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Identify physical systems for human review.
+
+    IsVirtual == "false" (case-insensitive) → Physical → flag for human review.
+    All other values including blank/NaN → treated as Virtual (not flagged here).
+
+    Column checked: 'Is Virtual?' (COL_IS_VIRTUAL) or 'is_virtual' (DB model field).
+    """
+    # Support both Excel column name and DB-normalized column name
+    col = None
+    for candidate in (COL_IS_VIRTUAL, "is_virtual", "IsVirtual"):
+        if candidate in df.columns:
+            col = candidate
+            break
+
+    if col is None:
+        logger.warning("find_physical_systems_flags: no IsVirtual column found.")
+        return pd.DataFrame(columns=list(df.columns) + ["IsVirtual_Status", "Human_Review_Required", "Review_Reason"])
+
+    is_physical = df[col].astype(str).str.strip().str.lower() == "false"
+    physical = df[is_physical].copy()
+    physical["IsVirtual_Status"]      = "Physical"
+    physical["Human_Review_Required"] = "Yes – Physical System"
+    physical["Review_Reason"]         = (
+        "Physical system detected. Human review required before any "
+        "rightsizing action is taken."
+    )
+    logger.info("Physical systems flagged: %d.", len(physical))
+    return physical
