@@ -16,6 +16,71 @@ def _ci(s: Any) -> str:
     return str(s).strip().lower()
 
 
+def _resolve_any(record: dict[str, Any], cols: list[str], column_map: dict[str, str]) -> Any:
+    """
+    Best-effort column resolution across multiple possible logical/physical names.
+    Useful when upstream datasets use inconsistent CMDB labels (e.g. IsVirtual vs is_virtual).
+    """
+    for c in cols:
+        v = _resolve_col(record, c, column_map)
+        if v is None:
+            continue
+        if isinstance(v, str) and not v.strip():
+            continue
+        return v
+    # fall back to raw keys (no mapping)
+    for c in cols:
+        v = record.get(c)
+        if v is None:
+            continue
+        if isinstance(v, str) and not v.strip():
+            continue
+        return v
+    return None
+
+
+def _is_virtual_system(record: dict[str, Any], column_map: dict[str, str]) -> bool:
+    """
+    NOTE: per business rule, blank IsVirtual is treated as virtual.
+    """
+    raw = _resolve_any(record, ["is_virtual", "IsVirtual", "isVirtual", "is virtual"], column_map)
+    if raw is None:
+        return True
+    if isinstance(raw, bool):
+        return bool(raw)
+    s = _ci(raw)
+    if not s:
+        return True
+    if s in {"true", "t", "1", "yes", "y", "virtual", "vm"}:
+        return True
+    if s in {"false", "f", "0", "no", "n", "physical", "baremetal", "bare metal"}:
+        return False
+    # unknown label: default to virtual (safer than accidentally blocking a large population)
+    return True
+
+
+def _is_critical_system(record: dict[str, Any], column_map: dict[str, str]) -> bool:
+    """
+    Human intervention / conservative rightsizing when CI criticality indicates:
+    - Business Critical
+    - Mission Critical
+    - Manufacturing Critical (often used in site contexts)
+    """
+    raw = _resolve_any(record, ["criticality", "Critically", "Criticality", "critical", "Critical"], column_map)
+    if raw is None:
+        return False
+    s = _ci(raw)
+    return any(
+        k in s
+        for k in [
+            "business critical",
+            "mission critical",
+            "manufacturing critical",
+            "manufacturing-critical",
+        ]
+    )
+
+
 def _to_float(x: Any) -> float | None:
     if x is None:
         return None
@@ -181,10 +246,12 @@ def _round_ram_down(current_gib: int, target_gib: float, minimum_gib: int) -> in
         return current_gib
     desired = int(math.floor(target_gib))
     desired = max(desired, minimum_gib)
+    cap = min(current_gib, desired)
+    # choose the largest practical size <= cap
     for size in reversed(_allowed_ram_gib()):
-        if size <= current_gib and size >= desired and size >= minimum_gib:
+        if size <= cap and size >= minimum_gib:
             return size
-    return max(minimum_gib, min(current_gib, desired))
+    return max(minimum_gib, cap)
 
 
 def _engine_cpu_rightsizing_prod_v1(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
@@ -251,6 +318,156 @@ def _engine_cpu_rightsizing_prod_v1(record: dict[str, Any], column_map: dict[str
         "recommendation": {
             "action": "no_change",
             "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+        },
+    }
+
+
+def _cpu_lifecycle_flags(*, critical: bool, peak: float | None) -> list[str]:
+    flags: list[str] = []
+    if critical:
+        flags.append("Critical System")
+    if peak is not None and peak > 0.95:
+        flags.append("High peak CPU (>95%)")
+    return flags
+
+
+def _engine_cpu_rightsizing_prod_v2(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
+    avg = _to_float(_resolve_col(record, "avg_cpu_12m", column_map))
+    peak = _to_float(_resolve_col(record, "peak_cpu_12m", column_map))
+    vcpu = _to_int(_resolve_col(record, "current_vcpu", column_map))
+    if avg is None or peak is None or vcpu is None:
+        return {
+            "candidate": False,
+            "reasons": ["Missing one of avg_cpu_12m / peak_cpu_12m / current_vcpu"],
+            "recommendation": None,
+        }
+
+    is_virtual = _is_virtual_system(record, column_map)
+    critical = _is_critical_system(record, column_map)
+    lifecycle_flags = _cpu_lifecycle_flags(critical=critical, peak=peak)
+
+    if not is_virtual:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "human_review_required",
+                "rationale": "Physical system detected (IsVirtual=false) — requires human review before rightsizing.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Upsizing (flag/recommendation)
+    if avg > 0.80:
+        new_vcpu = max(4, int(math.ceil(vcpu * 1.25)))
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "upsize_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg CPU > 80% → upsize by ~25%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # High peak blocks downsizing and triggers lifecycle flags
+    if peak > 0.95:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "High peak CPU (>95%) blocks downsizing and triggers lifecycle review.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Candidate rules (PROD): avg < 15%, peak <= 70%, current vCPU >= 4
+    candidate = (avg < 0.15) and (peak <= 0.70) and (vcpu >= 4)
+    if not candidate:
+        return {
+            "candidate": False,
+            "reasons": ["CPU rightsizing candidate rules not met (PROD)"],
+            "recommendation": None,
+        }
+
+    # Critical systems: extra conservatism
+    if critical:
+        if avg < 0.10:
+            target = vcpu * 0.75  # downsize ~25%
+            new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+            return {
+                "candidate": True,
+                "reasons": [],
+                "recommendation": {
+                    "action": "reduce_vcpu",
+                    "from": vcpu,
+                    "to": new_vcpu,
+                    "rationale": "Critical System – Cautious downsizing: Avg CPU < 10% → downsize ~25% (never below 4).",
+                    "lifecycle_flags": lifecycle_flags,
+                },
+            }
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "Critical System: only downsize when Avg CPU < 10%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Non-critical PROD recommendations
+    if peak > 0.70:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "Peak CPU > 70% — protect peak performance even if average is low.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    if avg < 0.10 and (0.69 <= peak <= 0.71):  # "~70%" interpreted as a tight band
+        target = vcpu * 0.50
+        new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg < 10% and peak ~70% → reduce ~50% (never below 4).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    if (0.10 <= avg <= 0.15) and (peak <= 0.60):
+        target = vcpu * 0.75
+        new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg between 10%–15% and peak <= 60% → reduce ~25% (never below 4).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    return {
+        "candidate": True,
+        "reasons": [],
+        "recommendation": {
+            "action": "no_change",
+            "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+            "lifecycle_flags": lifecycle_flags,
         },
     }
 
@@ -322,6 +539,147 @@ def _engine_cpu_rightsizing_nonprod_v1(record: dict[str, Any], column_map: dict[
     }
 
 
+def _engine_cpu_rightsizing_nonprod_v2(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
+    avg = _to_float(_resolve_col(record, "avg_cpu_12m", column_map))
+    peak = _to_float(_resolve_col(record, "peak_cpu_12m", column_map))
+    vcpu = _to_int(_resolve_col(record, "current_vcpu", column_map))
+    if avg is None or peak is None or vcpu is None:
+        return {
+            "candidate": False,
+            "reasons": ["Missing one of avg_cpu_12m / peak_cpu_12m / current_vcpu"],
+            "recommendation": None,
+        }
+
+    is_virtual = _is_virtual_system(record, column_map)
+    critical = _is_critical_system(record, column_map)
+    lifecycle_flags = _cpu_lifecycle_flags(critical=critical, peak=peak)
+
+    if not is_virtual:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "human_review_required",
+                "rationale": "Physical system detected (IsVirtual=false) — requires human review before rightsizing.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Upsizing (flag/recommendation)
+    if avg > 0.80:
+        new_vcpu = max(4, int(math.ceil(vcpu * 1.25)))
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "upsize_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg CPU > 80% → upsize by ~25%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # High peak blocks downsizing and triggers lifecycle flags
+    if peak > 0.95:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "High peak CPU (>95%) blocks downsizing and triggers lifecycle review.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Candidate rules (non-PROD): avg < 25% (to allow 15–25 band), peak <= 80%, vCPU >= 4
+    candidate = (avg < 0.25) and (peak <= 0.80) and (vcpu >= 4)
+    if not candidate:
+        return {
+            "candidate": False,
+            "reasons": ["CPU rightsizing candidate rules not met (non-PROD)"],
+            "recommendation": None,
+        }
+
+    if peak > 0.80:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "Peak CPU > 80% — no CPU reduction.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Critical systems: extra conservatism
+    if critical:
+        if avg < 0.10:
+            target = vcpu * 0.75  # downsize ~25%
+            new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+            return {
+                "candidate": True,
+                "reasons": [],
+                "recommendation": {
+                    "action": "reduce_vcpu",
+                    "from": vcpu,
+                    "to": new_vcpu,
+                    "rationale": "Critical System – Cautious downsizing: Avg CPU < 10% → downsize ~25% (never below 4).",
+                    "lifecycle_flags": lifecycle_flags,
+                },
+            }
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_cpu_reduction",
+                "rationale": "Critical System: only downsize when Avg CPU < 10%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Non-PROD recommendations
+    if avg < 0.15 and peak < 0.60:
+        target = vcpu * 0.45  # middle of 50–60% reduction band
+        new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg < 15% and peak < 60% → allow ~50–60% reduction (never below 4).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    if (0.15 <= avg <= 0.25) and (peak <= 0.70):
+        target = vcpu * 0.71  # middle of 25–33% reduction band (~29%)
+        new_vcpu = _round_vcpu_down_to_min(vcpu, target, minimum=4)
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_vcpu",
+                "from": vcpu,
+                "to": new_vcpu,
+                "rationale": "Avg between 15%–25% and peak <= 70% → reduce ~25–33% (never below 4).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    return {
+        "candidate": True,
+        "reasons": [],
+        "recommendation": {
+            "action": "no_change",
+            "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+            "lifecycle_flags": lifecycle_flags,
+        },
+    }
+
+
 def _engine_ram_rightsizing_prod_v1(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
     avg_free = _to_float(_resolve_col(record, "avg_free_mem_12m", column_map))
     min_free = _to_float(_resolve_col(record, "min_free_mem_12m", column_map))
@@ -374,6 +732,128 @@ def _engine_ram_rightsizing_prod_v1(record: dict[str, Any], column_map: dict[str
         "recommendation": {
             "action": "no_change",
             "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+        },
+    }
+
+
+def _ram_lifecycle_flags(*, critical: bool, min_free: float | None) -> list[str]:
+    flags: list[str] = []
+    if critical:
+        flags.append("Critical System")
+    if min_free is not None and min_free < 0.05:
+        flags.append("Low minimum memory (<5%)")
+    return flags
+
+
+def _engine_ram_rightsizing_prod_v2(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
+    avg_free = _to_float(_resolve_col(record, "avg_free_mem_12m", column_map))
+    min_free = _to_float(_resolve_col(record, "min_free_mem_12m", column_map))
+    ram = _to_float(_resolve_col(record, "current_ram_gib", column_map))
+    if avg_free is None or min_free is None or ram is None:
+        return {
+            "candidate": False,
+            "reasons": ["Missing one of avg_free_mem_12m / min_free_mem_12m / current_ram_gib"],
+            "recommendation": None,
+        }
+
+    ram_i = int(ram)
+    is_virtual = _is_virtual_system(record, column_map)
+    critical = _is_critical_system(record, column_map)
+    lifecycle_flags = _ram_lifecycle_flags(critical=critical, min_free=min_free)
+
+    if not is_virtual:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "human_review_required",
+                "rationale": "Physical system detected (IsVirtual=false) — requires human review before rightsizing.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Upsizing: flag only per spec (no need to do anything)
+    if (critical and avg_free < 0.20) or ((not critical) and avg_free < 0.30) or (avg_free < 0.20):
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "flag_ram_upsize",
+                "rationale": "Low Avg Free Mem suggests potential RAM pressure — flag for review (no auto action).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Candidate (PROD): avg_free >=35%, min_free >=20%, RAM > 8 GiB
+    candidate = (avg_free >= 0.35) and (min_free >= 0.20) and (ram_i > 8)
+    if not candidate:
+        return {
+            "candidate": False,
+            "reasons": ["RAM reduction candidate rules not met (PROD)"],
+            "recommendation": None,
+        }
+
+    # Critical systems: only downsize when Avg_FreeMem > 80%
+    if critical:
+        if avg_free > 0.80:
+            new_ram = _round_ram_down(ram_i, ram_i * 0.75, minimum_gib=8)  # ~25% reduction
+            return {
+                "candidate": True,
+                "reasons": [],
+                "recommendation": {
+                    "action": "reduce_ram_gib",
+                    "from": ram_i,
+                    "to": new_ram,
+                    "rationale": "Critical System: Avg free mem > 80% → downsize ~25%, never below 8 GiB.",
+                    "lifecycle_flags": lifecycle_flags,
+                },
+            }
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_change",
+                "rationale": "Critical System: only downsize RAM when Avg free mem > 80%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Non-critical PROD recommendations
+    if 0.35 <= avg_free <= 0.50:
+        new_ram = _round_ram_down(ram_i, ram_i * 0.75, minimum_gib=8)  # ~25% reduction
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_ram_gib",
+                "from": ram_i,
+                "to": new_ram,
+                "rationale": "Avg free mem between 35%–50% → reduce ~25%, never below 8 GiB.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    if avg_free > 0.50 and min_free >= 0.30:
+        new_ram = _round_ram_down(ram_i, ram_i * 0.55, minimum_gib=8)  # middle of 40–50%
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_ram_gib",
+                "from": ram_i,
+                "to": new_ram,
+                "rationale": "Avg free mem > 50% and min free mem >= 30% → reduce ~40–50%, never below 8 GiB.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    return {
+        "candidate": True,
+        "reasons": [],
+        "recommendation": {
+            "action": "no_change",
+            "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+            "lifecycle_flags": lifecycle_flags,
         },
     }
 
@@ -434,11 +914,128 @@ def _engine_ram_rightsizing_nonprod_v1(record: dict[str, Any], column_map: dict[
     }
 
 
+def _engine_ram_rightsizing_nonprod_v2(record: dict[str, Any], column_map: dict[str, str]) -> dict[str, Any]:
+    avg_free = _to_float(_resolve_col(record, "avg_free_mem_12m", column_map))
+    min_free = _to_float(_resolve_col(record, "min_free_mem_12m", column_map))
+    ram = _to_float(_resolve_col(record, "current_ram_gib", column_map))
+    if avg_free is None or min_free is None or ram is None:
+        return {
+            "candidate": False,
+            "reasons": ["Missing one of avg_free_mem_12m / min_free_mem_12m / current_ram_gib"],
+            "recommendation": None,
+        }
+
+    ram_i = int(ram)
+    is_virtual = _is_virtual_system(record, column_map)
+    critical = _is_critical_system(record, column_map)
+    lifecycle_flags = _ram_lifecycle_flags(critical=critical, min_free=min_free)
+
+    if not is_virtual:
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "human_review_required",
+                "rationale": "Physical system detected (IsVirtual=false) — requires human review before rightsizing.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Upsizing: flag only
+    if (critical and avg_free < 0.20) or ((not critical) and avg_free < 0.30) or (avg_free < 0.20):
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "flag_ram_upsize",
+                "rationale": "Low Avg Free Mem suggests potential RAM pressure — flag for review (no auto action).",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Candidate (non-PROD): avg_free >=30%, min_free >=15%, RAM > 4 GiB
+    candidate = (avg_free >= 0.30) and (min_free >= 0.15) and (ram_i > 4)
+    if not candidate:
+        return {
+            "candidate": False,
+            "reasons": ["RAM reduction candidate rules not met (non-PROD)"],
+            "recommendation": None,
+        }
+
+    # Critical systems: only downsize when Avg_FreeMem > 80%
+    if critical:
+        if avg_free > 0.80:
+            new_ram = _round_ram_down(ram_i, ram_i * 0.75, minimum_gib=4)  # ~25% reduction, non-prod min 4
+            return {
+                "candidate": True,
+                "reasons": [],
+                "recommendation": {
+                    "action": "reduce_ram_gib",
+                    "from": ram_i,
+                    "to": new_ram,
+                    "rationale": "Critical System: Avg free mem > 80% → downsize ~25%, never below 4 GiB.",
+                    "lifecycle_flags": lifecycle_flags,
+                },
+            }
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "no_change",
+                "rationale": "Critical System: only downsize RAM when Avg free mem > 80%.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    # Non-critical non-PROD recommendations
+    if 0.30 <= avg_free <= 0.50:
+        new_ram = _round_ram_down(ram_i, ram_i * 0.67, minimum_gib=4)  # ~33% reduction
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_ram_gib",
+                "from": ram_i,
+                "to": new_ram,
+                "rationale": "Avg free mem between 30%–50% → reduce ~33%, never below 4 GiB.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    if avg_free > 0.50 and min_free >= 0.25:
+        new_ram = _round_ram_down(ram_i, ram_i * 0.50, minimum_gib=4)  # middle of 40–60%
+        return {
+            "candidate": True,
+            "reasons": [],
+            "recommendation": {
+                "action": "reduce_ram_gib",
+                "from": ram_i,
+                "to": new_ram,
+                "rationale": "Avg free mem > 50% and min free mem >= 25% → reduce ~40–60%, never below 4 GiB.",
+                "lifecycle_flags": lifecycle_flags,
+            },
+        }
+
+    return {
+        "candidate": True,
+        "reasons": [],
+        "recommendation": {
+            "action": "no_change",
+            "rationale": "Candidate met optimization thresholds, but no recommendation branch matched.",
+            "lifecycle_flags": lifecycle_flags,
+        },
+    }
+
+
 ENGINES: dict[str, Any] = {
     "cpu_rightsizing_prod_v1": _engine_cpu_rightsizing_prod_v1,
     "cpu_rightsizing_nonprod_v1": _engine_cpu_rightsizing_nonprod_v1,
     "ram_rightsizing_prod_v1": _engine_ram_rightsizing_prod_v1,
     "ram_rightsizing_nonprod_v1": _engine_ram_rightsizing_nonprod_v1,
+    "cpu_rightsizing_prod_v2": _engine_cpu_rightsizing_prod_v2,
+    "cpu_rightsizing_nonprod_v2": _engine_cpu_rightsizing_nonprod_v2,
+    "ram_rightsizing_prod_v2": _engine_ram_rightsizing_prod_v2,
+    "ram_rightsizing_nonprod_v2": _engine_ram_rightsizing_nonprod_v2,
 }
 
 
