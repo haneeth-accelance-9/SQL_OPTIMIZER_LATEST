@@ -195,7 +195,7 @@
                     <a href="{% url 'optimizer:results' %}" class="appbar-link {% if request.resolver_match.url_name == 'results' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">RESULTS</a>
                     <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
                     {% endif %}
-                    <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">Log out</a>
+                    <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">LOG OUT</a>
                      <button type="button"
                         id="notification-trigger"
                         class="notification-trigger {% if request.resolver_match.url_name == 'alerts' %}is-current{% endif %} focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"

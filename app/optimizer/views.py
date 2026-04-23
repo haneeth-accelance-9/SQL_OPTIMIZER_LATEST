@@ -246,10 +246,18 @@ def _get_page_number(request, param_name, default=1):
         return default
 
 
+def _format_metric_label(metric_name):
+    metric_name = str(metric_name or "").strip()
+    if not metric_name:
+        return ""
+    if metric_name == "database_size_mib":
+        return "Database Size Mmib"
+    return " ".join(part.capitalize() for part in metric_name.split("_") if part)
+
+
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Avg_CPU_12m",
     "Peak_CPU_12m",
@@ -257,10 +265,19 @@ RS3_CPU_OPTIMIZATION_COLUMNS = [
     "Potential_vCPU_Reduction",
 ]
 
+RS3_CPU_RIGHTSIZING_COLUMNS = [
+    "server_name",
+    "Env_Type",
+    "Avg_CPU_12m",
+    "Peak_CPU_12m",
+    "Current_vCPU",
+    "Recommended_vCPU",
+    "CPU_Recommendation",
+]
+
 RS3_RAM_OPTIMIZATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Avg_FreeMem_12m",
     "Min_FreeMem_12m",
@@ -268,10 +285,19 @@ RS3_RAM_OPTIMIZATION_COLUMNS = [
     "Potential_RAM_Reduction_GiB",
 ]
 
+RS3_RAM_RIGHTSIZING_COLUMNS = [
+    "server_name",
+    "Env_Type",
+    "Avg_FreeMem_12m",
+    "Min_FreeMem_12m",
+    "Current_RAM_GiB",
+    "Recommended_RAM_GiB",
+    "RAM_Recommendation",
+]
+
 RS3_CPU_RECOMMENDATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Current_vCPU",
     "Recommended_vCPU",
@@ -281,7 +307,6 @@ RS3_CPU_RECOMMENDATION_COLUMNS = [
 RS3_RAM_RECOMMENDATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Current_RAM_GiB",
     "Recommended_RAM_GiB",
@@ -290,22 +315,31 @@ RS3_RAM_RECOMMENDATION_COLUMNS = [
 
 RS3_WORKLOAD_DEFAULT = "ALL"
 RS3_DEFAULT_FILTER_BY_WORKLOAD = {
-    "CPU": "PROD_CPU_Optimization",
-    "RAM": "PROD_RAM_Optimization",
+    "CPU": "PROD_CPU_Rightsizing",
+    "RAM": "PROD_RAM_Rightsizing",
 }
 RS3_SCREEN_FILTER_OPTIONS = {
     "CPU": [
-        "PROD_CPU_Optimization",
-        "PROD_CPU_Recommendation",
-        "NONPROD_CPU_Optimization",
-        "NONPROD_CPU_Recommendation",
+        "PROD_CPU_Rightsizing",
+        "NONPROD_CPU_Rightsizing",
     ],
     "RAM": [
-        "PROD_RAM_Optimization",
-        "PROD_RAM_Recommendation",
-        "NONPROD_RAM_Optimization",
-        "NONPROD_RAM_Recommendation",
+        "PROD_RAM_Rightsizing",
+        "NONPROD_RAM_Rightsizing",
     ],
+}
+
+RS3_CPU_FILTER_ALIASES = {
+    "PROD_CPU_Optimization": "PROD_CPU_Rightsizing",
+    "PROD_CPU_Recommendation": "PROD_CPU_Rightsizing",
+    "NONPROD_CPU_Optimization": "NONPROD_CPU_Rightsizing",
+    "NONPROD_CPU_Recommendation": "NONPROD_CPU_Rightsizing",
+}
+RS3_RAM_FILTER_ALIASES = {
+    "PROD_RAM_Optimization": "PROD_RAM_Rightsizing",
+    "PROD_RAM_Recommendation": "PROD_RAM_Rightsizing",
+    "NONPROD_RAM_Optimization": "NONPROD_RAM_Rightsizing",
+    "NONPROD_RAM_Recommendation": "NONPROD_RAM_Rightsizing",
 }
 RS3_DOWNLOAD_SHEET_KEYS = tuple(
     RS3_SCREEN_FILTER_OPTIONS["CPU"] + RS3_SCREEN_FILTER_OPTIONS["RAM"]
@@ -345,13 +379,32 @@ def _is_rs3_recommendation_filter(filter_value):
     return str(filter_value or "").endswith("_Recommendation")
 
 
+def _normalize_rs3_filter_value(workload, filter_value):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    value = str(filter_value or "").strip()
+    if normalized_workload == "CPU":
+        return RS3_CPU_FILTER_ALIASES.get(value, value)
+    if normalized_workload == "RAM":
+        return RS3_RAM_FILTER_ALIASES.get(value, value)
+    return value
+
+
 def _get_rs3_filter_field(filter_value):
+    if str(filter_value or "").endswith("_Rightsizing"):
+        return "Env_Type"
     return "Recommendation_Type" if _is_rs3_recommendation_filter(filter_value) else "Optimization_Type"
 
 
 def _filter_rs3_records(records, filter_value):
     if not filter_value:
         return list(records or [])
+    if str(filter_value or "").endswith("_Rightsizing"):
+        env_type = "NON-PROD" if str(filter_value).startswith("NONPROD_") else "PROD"
+        return [
+            record
+            for record in (records or [])
+            if str(record.get("Env_Type") or "") == env_type
+        ]
     filter_field = _get_rs3_filter_field(filter_value)
     return [
         record
@@ -363,11 +416,15 @@ def _filter_rs3_records(records, filter_value):
 def _get_rs3_columns(workload, filter_value):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
     if normalized_workload == "RAM":
+        if str(filter_value or "").endswith("_Rightsizing"):
+            return RS3_RAM_RIGHTSIZING_COLUMNS
         return (
             RS3_RAM_RECOMMENDATION_COLUMNS
             if _is_rs3_recommendation_filter(filter_value)
             else RS3_RAM_OPTIMIZATION_COLUMNS
         )
+    if str(filter_value or "").endswith("_Rightsizing"):
+        return RS3_CPU_RIGHTSIZING_COLUMNS
     return (
         RS3_CPU_RECOMMENDATION_COLUMNS
         if _is_rs3_recommendation_filter(filter_value)
@@ -377,11 +434,13 @@ def _get_rs3_columns(workload, filter_value):
 
 def _get_rs3_filter_options(rs, workload):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    if normalized_workload == "CPU":
+        return list(RS3_SCREEN_FILTER_OPTIONS["CPU"])
+    if normalized_workload == "RAM":
+        return list(RS3_SCREEN_FILTER_OPTIONS["RAM"])
     generic_options = (rs.get("screen_filter_options") or {}).get(normalized_workload)
     if generic_options:
         return list(generic_options)
-    if normalized_workload == "RAM":
-        return list(rs.get("ram_filter_options") or RS3_SCREEN_FILTER_OPTIONS["RAM"])
     return list(rs.get("cpu_filter_options") or RS3_SCREEN_FILTER_OPTIONS["CPU"])
 
 
@@ -390,6 +449,7 @@ def _get_rs3_default_filter(rs, workload):
     defaults = rs.get("default_filter_by_workload") or RS3_DEFAULT_FILTER_BY_WORKLOAD
     fallback = defaults.get(normalized_workload) or RS3_DEFAULT_FILTER_BY_WORKLOAD.get(normalized_workload, "")
     options = _get_rs3_filter_options(rs, normalized_workload)
+    fallback = _normalize_rs3_filter_value(normalized_workload, fallback)
     if fallback in options:
         return fallback
     return options[0] if options else fallback
@@ -397,6 +457,7 @@ def _get_rs3_default_filter(rs, workload):
 
 def _get_rs3_summary(rs, workload, filter_value, records):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    filter_value = _normalize_rs3_filter_value(normalized_workload, filter_value)
     summaries = ((rs.get("screen_summaries") or {}).get(normalized_workload) or {})
     summary = summaries.get(filter_value)
     if summary:
@@ -424,7 +485,8 @@ def _get_rs3_workload_for_filter(filter_value):
 
 
 def _format_rs3_sheet_label(filter_value):
-    parts = [segment.capitalize() for segment in str(filter_value or "").split("_") if segment]
+    normalized_filter = RS3_CPU_FILTER_ALIASES.get(str(filter_value or ""), str(filter_value or ""))
+    parts = [segment.capitalize() for segment in str(normalized_filter or "").split("_") if segment]
     return " ".join(parts)
 
 
@@ -898,15 +960,16 @@ def results(request):
     rs3_workload_options = ["ALL"] + [str(option).upper() for option in (rs.get("workload_options") or ["CPU", "RAM"])]
     rs3_workload = str(
         request.GET.get("rs3_workload")
-        or rs.get("default_workload")
         or RS3_WORKLOAD_DEFAULT
     ).upper()
     if rs3_workload not in rs3_workload_options:
         rs3_workload = rs3_workload_options[0] if rs3_workload_options else RS3_WORKLOAD_DEFAULT
 
-    rs3_filter_options = _get_rs3_filter_options(rs, rs3_workload)
-    rs3_default_filter = _get_rs3_default_filter(rs, rs3_workload)
-    rs3_filter = request.GET.get("rs3_filter") or rs3_default_filter
+    requested_rs3_filter = request.GET.get("rs3_filter") or ""
+    rs3_filter_workload = rs3_workload if rs3_workload in ("CPU", "RAM") else _get_rs3_workload_for_filter(requested_rs3_filter or _get_rs3_default_filter(rs, "CPU"))
+    rs3_filter_options = _get_rs3_filter_options(rs, rs3_filter_workload)
+    rs3_default_filter = _get_rs3_default_filter(rs, rs3_filter_workload)
+    rs3_filter = _normalize_rs3_filter_value(rs3_filter_workload, requested_rs3_filter or rs3_default_filter)
     if rs3_filter not in rs3_filter_options:
         rs3_filter = rs3_default_filter
 
@@ -928,10 +991,20 @@ def results(request):
     rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
 
-    cpu_keys = [key for key in RS3_CPU_OPTIMIZATION_COLUMNS if any(key in row for row in cpu_full)]
-    ram_keys = [key for key in RS3_RAM_OPTIMIZATION_COLUMNS if any(key in row for row in ram_full)]
-    cpu_slice = cpu_full[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
-    ram_slice = ram_full[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
+    cpu_initial_filter = _normalize_rs3_filter_value("CPU", rs3_filter if rs3_workload in ("ALL", "CPU") else _get_rs3_default_filter(rs, "CPU"))
+    cpu_initial_records = _filter_rs3_records(cpu_full, cpu_initial_filter)
+    cpu_initial_columns = _get_rs3_columns("CPU", cpu_initial_filter)
+    ram_initial_filter = _normalize_rs3_filter_value("RAM", rs3_filter if rs3_workload in ("ALL", "RAM") else _get_rs3_default_filter(rs, "RAM"))
+    cpu_keys = [key for key in cpu_initial_columns if any(key in row for row in cpu_initial_records)]
+    ram_initial_records = _filter_rs3_records(ram_full, ram_initial_filter)
+    ram_initial_columns = _get_rs3_columns("RAM", ram_initial_filter)
+    ram_keys = [key for key in ram_initial_columns if any(key in row for row in ram_initial_records)]
+    total_rs_cpu_pages = max(1, (len(cpu_initial_records) + per_page - 1) // per_page)
+    total_rs_ram_pages = max(1, (len(ram_initial_records) + per_page - 1) // per_page)
+    rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
+    rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
+    cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
+    ram_slice = ram_initial_records[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
 
     render_context.update({
         "rightsizing": rs,
@@ -957,6 +1030,10 @@ def results(request):
         "rs3_selected_workload": rs3_workload,
         "rs3_filter_options": rs3_filter_options,
         "rs3_selected_filter": rs3_filter,
+        "rs3_cpu_filter_options": _get_rs3_filter_options(rs, "CPU"),
+        "rs3_cpu_selected_filter": cpu_initial_filter,
+        "rs3_ram_filter_options": _get_rs3_filter_options(rs, "RAM"),
+        "rs3_ram_selected_filter": ram_initial_filter,
         "rs3_selected_summary": rs3_summary,
         "rightsizing_cpu_data_json": cpu_full,
         "rightsizing_ram_data_json": ram_full,
@@ -985,6 +1062,8 @@ def results(request):
         ]
 
         from django.db.models import Avg, Max, Min, Count
+
+        dq_grafana_connections_by_server = []
 
         grafana_qs = (
             GrafanaMetricSnapshot.objects
@@ -1039,7 +1118,7 @@ def results(request):
                     "y": [round(sum(v) / len(v), 4) for _, v in pts],
                 }
 
-            # ── Chart 3: top 10 servers by avg value (per metric) ─────────────
+            # ── Chart 3: servers by avg value (per metric) ────────────────────
             server_metric_map = defaultdict(lambda: defaultdict(list))
             for g in grafana_snap_list:
                 if g.metric_value is None:
@@ -1051,8 +1130,29 @@ def results(request):
                 ranked = sorted(
                     [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in srv_dict.items()],
                     key=lambda r: r["avg"], reverse=True
-                )[:10]
+                )
                 dq_grafana_top_servers[mn] = ranked
+
+            connection_snapshots = (
+                GrafanaMetricSnapshot.objects
+                .select_related("server")
+                .filter(metric_name="connections")
+                .order_by("-metric_ts")
+            )
+            connection_server_map = defaultdict(list)
+            for row in connection_snapshots:
+                if row.metric_value is None:
+                    continue
+                server_name = row.server.server_name if row.server else "Unknown"
+                connection_server_map[server_name].append(float(row.metric_value))
+            dq_grafana_connections_by_server = sorted(
+                [
+                    {"server": server_name, "avg": round(sum(values) / len(values), 4)}
+                    for server_name, values in connection_server_map.items()
+                ],
+                key=lambda r: r["avg"],
+                reverse=True,
+            )
 
             # ── Chart 4: KPI summary ───────────────────────────────────────────
             dq_grafana_kpis = {
@@ -1122,7 +1222,7 @@ def results(request):
                     "y": [round(sum(v) / len(v), 4) for _, v in pts],
                 }
 
-            # ── Chart 3: top servers per metric ───────────────────────────────
+            # ── Chart 3: servers per metric ───────────────────────────────────
             srv_map = defaultdict(lambda: defaultdict(list))
             for r in rollup_list:
                 if r.avg_value is None:
@@ -1134,8 +1234,29 @@ def results(request):
                 ranked = sorted(
                     [{"server": sn, "avg": round(sum(v) / len(v), 4)} for sn, v in sd.items()],
                     key=lambda r: r["avg"], reverse=True
-                )[:10]
+                )
                 dq_grafana_top_servers[mn] = ranked
+
+            connection_rollups = (
+                GrafanaMetricMonthlyRollup.objects
+                .select_related("server")
+                .filter(metric_name="connections")
+                .order_by("-period_month")
+            )
+            connection_server_map = defaultdict(list)
+            for row in connection_rollups:
+                if row.avg_value is None:
+                    continue
+                server_name = row.server.server_name if row.server else "Unknown"
+                connection_server_map[server_name].append(float(row.avg_value))
+            dq_grafana_connections_by_server = sorted(
+                [
+                    {"server": server_name, "avg": round(sum(values) / len(values), 4)}
+                    for server_name, values in connection_server_map.items()
+                ],
+                key=lambda r: r["avg"],
+                reverse=True,
+            )
 
             dq_grafana_metric_avg = dq_grafana_rollup_summary
 
@@ -1170,6 +1291,7 @@ def results(request):
         logger.warning("Data Quality fetch failed: %s", _dq_exc)
         dq_usu_rows, dq_grafana_rows, dq_flatfile_rows = [], [], []
         dq_grafana_metric_avg, dq_grafana_timeline, dq_grafana_top_servers = [], {}, {}
+        dq_grafana_connections_by_server = []
         dq_grafana_rollup_summary, dq_grafana_kpis = [], {"total_records": 0, "unique_metrics": 0, "unique_servers": 0, "unique_dashboards": 0}
         dq_grafana_is_snapshot = False
 
@@ -1182,10 +1304,15 @@ def results(request):
     render_context["dq_grafana_metric_avg"] = dq_grafana_metric_avg
     render_context["dq_grafana_timeline"] = dq_grafana_timeline
     render_context["dq_grafana_top_servers"] = dq_grafana_top_servers
+    render_context["dq_grafana_connections_by_server"] = dq_grafana_connections_by_server
     render_context["dq_grafana_rollup_summary"] = dq_grafana_rollup_summary
     render_context["dq_grafana_kpis"] = dq_grafana_kpis
     render_context["dq_grafana_is_snapshot"] = dq_grafana_is_snapshot
     render_context["dq_grafana_metric_names"] = list(dq_grafana_top_servers.keys())
+    render_context["dq_grafana_metric_options"] = [
+        {"value": metric_name, "label": _format_metric_label(metric_name)}
+        for metric_name in render_context["dq_grafana_metric_names"]
+    ]
 
     # Interactive Plotly charts (hover tooltips, responsive)
     if get_all_plotly_specs is not None:
