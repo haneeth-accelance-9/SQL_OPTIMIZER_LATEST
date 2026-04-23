@@ -186,6 +186,14 @@ OPTIMIZER_CHARTS_ENABLED = _env_bool("OPTIMIZER_CHARTS_ENABLED", True)
 OPTIMIZER_ANALYSIS_TTL_SECONDS = int(os.environ.get("OPTIMIZER_ANALYSIS_TTL_SECONDS", "86400"))
 OPTIMIZER_UPLOAD_RETENTION_DAYS = int(os.environ.get("OPTIMIZER_UPLOAD_RETENTION_DAYS", "7"))
 
+# ── License Optimizer Agent (A2A server) ──────────────────────────────────────
+# Base URL of the running liscence-optimizer A2A agent (default: local dev port)
+AGENT_A2A_ENDPOINT = os.environ.get("AGENT_A2A_ENDPOINT", "http://localhost:8000").strip().rstrip("/")
+# Timeout for A2A /generate-report calls (seconds)
+AGENT_A2A_TIMEOUT = int(os.environ.get("AGENT_A2A_TIMEOUT", "120"))
+# Max retries on 429/5xx before falling back to Azure OpenAI direct report
+AGENT_A2A_MAX_RETRIES = int(os.environ.get("AGENT_A2A_MAX_RETRIES", "2"))
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

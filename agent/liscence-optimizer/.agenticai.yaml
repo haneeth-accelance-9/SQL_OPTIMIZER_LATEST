@@ -1,0 +1,40 @@
+# Agent Configuration for Agentic AI CLI
+
+agent:
+  name: "liscence-optimizer"
+  version: "0.1.0"
+  description: "This agent creates executive summary or the results that are obtained by applying usecases on the data"
+
+paths:
+  entry: "src/a2a_server.py"
+  tools: "src/tools"
+  configs: "configs"
+  default_config: "configs/config.yaml"
+
+runtime:
+  port: 8000
+  debug_port: 5678
+  default_mode: "local"
+  env_file: ".env.development"
+
+development:
+  hot_reload: true
+  debug: true
+  watch_paths:
+    - "tools"
+    - "configs"
+    - "."
+  watch_patterns:
+    - "*.py"
+    - "*.yaml"
+  
+  sdk:
+    enabled: true
+    auto_detect: true
+    extras:
+      - "microsoft"
+
+docker:
+  image_name: "liscence-optimizer"
+  tag: "latest"
+  dockerfile: "Dockerfile"
