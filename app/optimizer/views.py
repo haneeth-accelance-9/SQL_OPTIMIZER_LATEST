@@ -258,7 +258,6 @@ def _format_metric_label(metric_name):
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Avg_CPU_12m",
     "Peak_CPU_12m",
@@ -266,10 +265,19 @@ RS3_CPU_OPTIMIZATION_COLUMNS = [
     "Potential_vCPU_Reduction",
 ]
 
+RS3_CPU_RIGHTSIZING_COLUMNS = [
+    "server_name",
+    "Env_Type",
+    "Avg_CPU_12m",
+    "Peak_CPU_12m",
+    "Current_vCPU",
+    "Recommended_vCPU",
+    "CPU_Recommendation",
+]
+
 RS3_RAM_OPTIMIZATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Avg_FreeMem_12m",
     "Min_FreeMem_12m",
@@ -277,10 +285,19 @@ RS3_RAM_OPTIMIZATION_COLUMNS = [
     "Potential_RAM_Reduction_GiB",
 ]
 
+RS3_RAM_RIGHTSIZING_COLUMNS = [
+    "server_name",
+    "Env_Type",
+    "Avg_FreeMem_12m",
+    "Min_FreeMem_12m",
+    "Current_RAM_GiB",
+    "Recommended_RAM_GiB",
+    "RAM_Recommendation",
+]
+
 RS3_CPU_RECOMMENDATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Current_vCPU",
     "Recommended_vCPU",
@@ -290,7 +307,6 @@ RS3_CPU_RECOMMENDATION_COLUMNS = [
 RS3_RAM_RECOMMENDATION_COLUMNS = [
     "server_name",
     "is_virtual",
-    "Environment",
     "Env_Type",
     "Current_RAM_GiB",
     "Recommended_RAM_GiB",
@@ -299,22 +315,31 @@ RS3_RAM_RECOMMENDATION_COLUMNS = [
 
 RS3_WORKLOAD_DEFAULT = "ALL"
 RS3_DEFAULT_FILTER_BY_WORKLOAD = {
-    "CPU": "PROD_CPU_Optimization",
-    "RAM": "PROD_RAM_Optimization",
+    "CPU": "PROD_CPU_Rightsizing",
+    "RAM": "PROD_RAM_Rightsizing",
 }
 RS3_SCREEN_FILTER_OPTIONS = {
     "CPU": [
-        "PROD_CPU_Optimization",
-        "PROD_CPU_Recommendation",
-        "NONPROD_CPU_Optimization",
-        "NONPROD_CPU_Recommendation",
+        "PROD_CPU_Rightsizing",
+        "NONPROD_CPU_Rightsizing",
     ],
     "RAM": [
-        "PROD_RAM_Optimization",
-        "PROD_RAM_Recommendation",
-        "NONPROD_RAM_Optimization",
-        "NONPROD_RAM_Recommendation",
+        "PROD_RAM_Rightsizing",
+        "NONPROD_RAM_Rightsizing",
     ],
+}
+
+RS3_CPU_FILTER_ALIASES = {
+    "PROD_CPU_Optimization": "PROD_CPU_Rightsizing",
+    "PROD_CPU_Recommendation": "PROD_CPU_Rightsizing",
+    "NONPROD_CPU_Optimization": "NONPROD_CPU_Rightsizing",
+    "NONPROD_CPU_Recommendation": "NONPROD_CPU_Rightsizing",
+}
+RS3_RAM_FILTER_ALIASES = {
+    "PROD_RAM_Optimization": "PROD_RAM_Rightsizing",
+    "PROD_RAM_Recommendation": "PROD_RAM_Rightsizing",
+    "NONPROD_RAM_Optimization": "NONPROD_RAM_Rightsizing",
+    "NONPROD_RAM_Recommendation": "NONPROD_RAM_Rightsizing",
 }
 RS3_DOWNLOAD_SHEET_KEYS = tuple(
     RS3_SCREEN_FILTER_OPTIONS["CPU"] + RS3_SCREEN_FILTER_OPTIONS["RAM"]
@@ -325,13 +350,32 @@ def _is_rs3_recommendation_filter(filter_value):
     return str(filter_value or "").endswith("_Recommendation")
 
 
+def _normalize_rs3_filter_value(workload, filter_value):
+    normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    value = str(filter_value or "").strip()
+    if normalized_workload == "CPU":
+        return RS3_CPU_FILTER_ALIASES.get(value, value)
+    if normalized_workload == "RAM":
+        return RS3_RAM_FILTER_ALIASES.get(value, value)
+    return value
+
+
 def _get_rs3_filter_field(filter_value):
+    if str(filter_value or "").endswith("_Rightsizing"):
+        return "Env_Type"
     return "Recommendation_Type" if _is_rs3_recommendation_filter(filter_value) else "Optimization_Type"
 
 
 def _filter_rs3_records(records, filter_value):
     if not filter_value:
         return list(records or [])
+    if str(filter_value or "").endswith("_Rightsizing"):
+        env_type = "NON-PROD" if str(filter_value).startswith("NONPROD_") else "PROD"
+        return [
+            record
+            for record in (records or [])
+            if str(record.get("Env_Type") or "") == env_type
+        ]
     filter_field = _get_rs3_filter_field(filter_value)
     return [
         record
@@ -343,11 +387,15 @@ def _filter_rs3_records(records, filter_value):
 def _get_rs3_columns(workload, filter_value):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
     if normalized_workload == "RAM":
+        if str(filter_value or "").endswith("_Rightsizing"):
+            return RS3_RAM_RIGHTSIZING_COLUMNS
         return (
             RS3_RAM_RECOMMENDATION_COLUMNS
             if _is_rs3_recommendation_filter(filter_value)
             else RS3_RAM_OPTIMIZATION_COLUMNS
         )
+    if str(filter_value or "").endswith("_Rightsizing"):
+        return RS3_CPU_RIGHTSIZING_COLUMNS
     return (
         RS3_CPU_RECOMMENDATION_COLUMNS
         if _is_rs3_recommendation_filter(filter_value)
@@ -357,11 +405,13 @@ def _get_rs3_columns(workload, filter_value):
 
 def _get_rs3_filter_options(rs, workload):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    if normalized_workload == "CPU":
+        return list(RS3_SCREEN_FILTER_OPTIONS["CPU"])
+    if normalized_workload == "RAM":
+        return list(RS3_SCREEN_FILTER_OPTIONS["RAM"])
     generic_options = (rs.get("screen_filter_options") or {}).get(normalized_workload)
     if generic_options:
         return list(generic_options)
-    if normalized_workload == "RAM":
-        return list(rs.get("ram_filter_options") or RS3_SCREEN_FILTER_OPTIONS["RAM"])
     return list(rs.get("cpu_filter_options") or RS3_SCREEN_FILTER_OPTIONS["CPU"])
 
 
@@ -370,6 +420,7 @@ def _get_rs3_default_filter(rs, workload):
     defaults = rs.get("default_filter_by_workload") or RS3_DEFAULT_FILTER_BY_WORKLOAD
     fallback = defaults.get(normalized_workload) or RS3_DEFAULT_FILTER_BY_WORKLOAD.get(normalized_workload, "")
     options = _get_rs3_filter_options(rs, normalized_workload)
+    fallback = _normalize_rs3_filter_value(normalized_workload, fallback)
     if fallback in options:
         return fallback
     return options[0] if options else fallback
@@ -377,6 +428,7 @@ def _get_rs3_default_filter(rs, workload):
 
 def _get_rs3_summary(rs, workload, filter_value, records):
     normalized_workload = str(workload or RS3_WORKLOAD_DEFAULT).upper()
+    filter_value = _normalize_rs3_filter_value(normalized_workload, filter_value)
     summaries = ((rs.get("screen_summaries") or {}).get(normalized_workload) or {})
     summary = summaries.get(filter_value)
     if summary:
@@ -404,7 +456,8 @@ def _get_rs3_workload_for_filter(filter_value):
 
 
 def _format_rs3_sheet_label(filter_value):
-    parts = [segment.capitalize() for segment in str(filter_value or "").split("_") if segment]
+    normalized_filter = RS3_CPU_FILTER_ALIASES.get(str(filter_value or ""), str(filter_value or ""))
+    parts = [segment.capitalize() for segment in str(normalized_filter or "").split("_") if segment]
     return " ".join(parts)
 
 
@@ -735,9 +788,11 @@ def results(request):
     if rs3_workload not in rs3_workload_options:
         rs3_workload = rs3_workload_options[0] if rs3_workload_options else RS3_WORKLOAD_DEFAULT
 
-    rs3_filter_options = _get_rs3_filter_options(rs, rs3_workload)
-    rs3_default_filter = _get_rs3_default_filter(rs, rs3_workload)
-    rs3_filter = request.GET.get("rs3_filter") or rs3_default_filter
+    requested_rs3_filter = request.GET.get("rs3_filter") or ""
+    rs3_filter_workload = rs3_workload if rs3_workload in ("CPU", "RAM") else _get_rs3_workload_for_filter(requested_rs3_filter or _get_rs3_default_filter(rs, "CPU"))
+    rs3_filter_options = _get_rs3_filter_options(rs, rs3_filter_workload)
+    rs3_default_filter = _get_rs3_default_filter(rs, rs3_filter_workload)
+    rs3_filter = _normalize_rs3_filter_value(rs3_filter_workload, requested_rs3_filter or rs3_default_filter)
     if rs3_filter not in rs3_filter_options:
         rs3_filter = rs3_default_filter
 
@@ -759,10 +814,20 @@ def results(request):
     rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
 
-    cpu_keys = [key for key in RS3_CPU_OPTIMIZATION_COLUMNS if any(key in row for row in cpu_full)]
-    ram_keys = [key for key in RS3_RAM_OPTIMIZATION_COLUMNS if any(key in row for row in ram_full)]
-    cpu_slice = cpu_full[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
-    ram_slice = ram_full[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
+    cpu_initial_filter = _normalize_rs3_filter_value("CPU", rs3_filter if rs3_workload in ("ALL", "CPU") else _get_rs3_default_filter(rs, "CPU"))
+    cpu_initial_records = _filter_rs3_records(cpu_full, cpu_initial_filter)
+    cpu_initial_columns = _get_rs3_columns("CPU", cpu_initial_filter)
+    ram_initial_filter = _normalize_rs3_filter_value("RAM", rs3_filter if rs3_workload in ("ALL", "RAM") else _get_rs3_default_filter(rs, "RAM"))
+    cpu_keys = [key for key in cpu_initial_columns if any(key in row for row in cpu_initial_records)]
+    ram_initial_records = _filter_rs3_records(ram_full, ram_initial_filter)
+    ram_initial_columns = _get_rs3_columns("RAM", ram_initial_filter)
+    ram_keys = [key for key in ram_initial_columns if any(key in row for row in ram_initial_records)]
+    total_rs_cpu_pages = max(1, (len(cpu_initial_records) + per_page - 1) // per_page)
+    total_rs_ram_pages = max(1, (len(ram_initial_records) + per_page - 1) // per_page)
+    rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
+    rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
+    cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
+    ram_slice = ram_initial_records[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
 
     render_context.update({
         "rightsizing": rs,
@@ -788,6 +853,10 @@ def results(request):
         "rs3_selected_workload": rs3_workload,
         "rs3_filter_options": rs3_filter_options,
         "rs3_selected_filter": rs3_filter,
+        "rs3_cpu_filter_options": _get_rs3_filter_options(rs, "CPU"),
+        "rs3_cpu_selected_filter": cpu_initial_filter,
+        "rs3_ram_filter_options": _get_rs3_filter_options(rs, "RAM"),
+        "rs3_ram_selected_filter": ram_initial_filter,
         "rs3_selected_summary": rs3_summary,
         "rightsizing_cpu_data_json": cpu_full,
         "rightsizing_ram_data_json": ram_full,

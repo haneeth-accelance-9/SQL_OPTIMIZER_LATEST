@@ -152,31 +152,31 @@
                             <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">PAYG</span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-4xl font-extrabold tracking-tight text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
                         </div>
                         <div class="mt-6 space-y-4">
                             <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-lg font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
-                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ total_demand_quantity }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Candidates</p>
-                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_count }}</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-lg font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">PAYG Candidates</p>
-                                    <p class="mt-1 text-lg font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_count }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
@@ -278,6 +278,9 @@
                     <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ azure_payg_count }}</span>
+                        <button id="rule1-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
+                            Send Email
+                        </button>
                         {% if total_rule1_pages > 1 and rr.azure_payg %}
                         <nav class="flex items-center gap-1" aria-label="Rule 1 pagination" data-rule="1" data-current-page="{{ rule1_page }}" data-total-pages="{{ total_rule1_pages }}" data-other-page="{{ rule2_page }}">
                             <a id="rule1-prev" href="?rule1_page={{ rule1_prev }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
@@ -302,6 +305,9 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white sticky top-0 z-10">
                             <tr>
+                                <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
+                                    <input id="rule1-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
+                                </th>
                                 {% for key in rule1_keys %}
                                 <th
                                     class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
@@ -315,11 +321,14 @@
                         <tbody id="rule1-tbody" class="bg-white divide-y divide-slate-100">
                             {% for row in azure_payg_page %}
                             <tr class="hover:bg-sky-50/60 transition-colors">
+                                <td class="px-4 py-3 text-center whitespace-nowrap">
+                                    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" disabled>
+                                </td>
                                 {% for val in row %}
                                 <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                 {% endfor %}
                                 <td class="px-4 py-3 whitespace-nowrap">
-                                    <button type="button" class="inline-flex items-center rounded-full bg-sky-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">
+                                    <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">
                                         Send Trigger
                                     </button>
                                 </td>
@@ -378,26 +387,26 @@
                             <!-- <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-4xl font-extrabold tracking-tight text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
                         </div>
                         <div class="mt-6 space-y-4 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-sm font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-sm font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Retired Devices</p>
-                                    <p class="mt-1 text-sm font-bold text-slate-900">{{ retired_count }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Retired Devices</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_count }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Export</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
                                     {% if rr.retired_devices %}
                                     <a href="{% url 'optimizer:download_rule_data' 'rule2' %}" class="mt-1 inline-flex text-sm font-bold text-sky-600 hover:text-sky-700">Download</a>
                                     {% else %}
@@ -429,6 +438,9 @@
                     <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ retired_count }}</span>
+                        <button id="rule2-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
+                            Send Email
+                        </button>
                         {% if total_rule2_pages > 1 and rr.retired_devices %}
                         <nav class="flex items-center gap-1" aria-label="Rule 2 pagination" data-rule="2" data-current-page="{{ rule2_page }}" data-total-pages="{{ total_rule2_pages }}" data-other-page="{{ rule1_page }}">
                             <a id="rule2-prev" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_prev }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
@@ -453,6 +465,9 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white sticky top-0 z-10">
                             <tr>
+                                <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
+                                    <input id="rule2-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
+                                </th>
                                 {% for key in rule2_keys %}
                                 <th
                                     class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
@@ -466,11 +481,14 @@
                         <tbody id="rule2-tbody" class="bg-white divide-y divide-slate-100">
                             {% for row in retired_devices_page %}
                             <tr class="hover:bg-sky-50/60 transition-colors">
+                                <td class="px-4 py-3 text-center whitespace-nowrap">
+                                    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" disabled>
+                                </td>
                                 {% for val in row %}
                                 <td class="px-6 py-3.5 text-sm text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                 {% endfor %}
                                 <td class="px-4 py-3 whitespace-nowrap">
-                                    <button type="button" class="inline-flex items-center rounded-full bg-sky-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">
+                                    <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">
                                         Send Trigger
                                     </button>
                                 </td>
@@ -979,31 +997,52 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p id="rs3-cpu-metric-label" class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">CPU Optimization</p>
-                            <span id="rs3-cpu-uc-badge" class="inline-flex items-center rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-700">UC 3.1</span>
+                            <!-- <span id="rs3-cpu-uc-badge" class="inline-flex items-center rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-700">UC 3.1</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-4xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-lg font-semibold text-slate-500">CPUs</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-xl font-semibold text-slate-500">CPUs</span></p>
                         </div>
                         <p id="rs3-cpu-metric-description" class="mt-1 text-xs text-slate-500">Potential CPU reduction across all optimizations</p>
                         <div class="mt-6 space-y-3 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">PROD Optimizations</p>
-                                    <p id="rs3-cpu-prod-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.cpu_prod_count|default:0 }}</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-[11px] uppercase tracking-wide text-slate-400">PROD Optimizations</p>
+                                        <div class="group relative">
+                                            <span class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#00BCFF] text-[10px] font-bold text-white shadow-sm">i</span>
+                                            <div class="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden w-64 -translate-y-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium leading-5 text-slate-600 shadow-[0_14px_30px_rgba(15,23,42,0.12)] group-hover:block">
+                                                Avg_CPU_12m &lt; 15%<br>
+                                                Peak_CPU_12m &lt;= 70%<br>
+                                                Current vCPU &gt;= 4
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p id="rs3-cpu-prod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_prod_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">NON-PROD Optimizations</p>
-                                    <p id="rs3-cpu-nonprod-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.cpu_nonprod_count|default:0 }}</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-[11px] uppercase tracking-wide text-slate-400">NON-PROD Optimizations</p>
+                                        <div class="group relative">
+                                            <span class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#89D329] text-[10px] font-bold text-white shadow-sm">i</span>
+                                            <div class="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium leading-5 text-slate-600 shadow-[0_14px_30px_rgba(15,23,42,0.12)] group-hover:block">
+                                                Non - Production VM<br>
+                                                Avg_CPU_12m &lt; 15%<br>
+                                                Peak_CPU_12m &lt;= 80%<br>
+                                                Current vCPU &gt;= 4
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p id="rs3-cpu-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_nonprod_count|default:0 }}</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Total CPU Optimizations</p>
-                                    <p id="rs3-cpu-total-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.cpu_count|default:0 }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total CPU Optimizations</p>
+                                    <p id="rs3-cpu-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">CPU Reduction</p>
-                                    <p class="mt-1 text-sm font-bold text-emerald-700">-<span id="rs3-cpu-reduction-value">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">CPU Reduction</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-cpu-reduction-value">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
                                 </div>
                             </div>
                         </div>
@@ -1011,7 +1050,7 @@
                     <!-- CPU chart -->
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
-                            <h3 id="rs3-cpu-chart-title" class="chart-card-title">Average vs Peak CPU Utilisation (%)</h3>
+                            <h3 id="rs3-cpu-chart-title" class="chart-card-title">Top 10 Servers - Average vs Peak CPU Utilisation (%)</h3>
                             <div class="chart-legend-hint">
                                 <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-cpu-legend-1">Avg CPU%</span>
                                 <span class="chart-dot" style="background:#89D329"></span><span id="rs3-cpu-legend-2">Peak CPU%</span>
@@ -1030,8 +1069,9 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <label for="rs3-cpu-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                             <select id="rs3-cpu-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                                <option value="PROD_CPU_Optimization" {% if rs3_selected_workload == "CPU" and rs3_selected_filter == "PROD_CPU_Optimization" %}selected{% endif %}>PROD CPU Optimization</option>
-                                <option value="NONPROD_CPU_Optimization" {% if rs3_selected_workload == "CPU" and rs3_selected_filter == "NONPROD_CPU_Optimization" %}selected{% endif %}>NON-PROD CPU Optimization</option>
+                                {% for option in rs3_cpu_filter_options %}
+                                <option value="{{ option }}" {% if rs3_cpu_selected_filter == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
                             </select>
                             <span id="rs3-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.cpu_count|default:0 }}</span>
                             {% if total_rs3_cpu_pages > 1 and rs.cpu_optimizations %}
@@ -1101,31 +1141,53 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p id="rs3-ram-metric-label" class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">RAM Optimization</p>
-                            <span id="rs3-ram-uc-badge" class="inline-flex items-center rounded-full bg-lime-100 px-2 py-1 text-[10px] font-bold text-lime-700">UC 3.2</span>
+                            <!-- <span id="rs3-ram-uc-badge" class="inline-flex items-center rounded-full bg-lime-100 px-2 py-1 text-[10px] font-bold text-lime-700">UC 3.2</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-4xl font-extrabold tracking-tight text-slate-900"><span id="rs3-ram-reduction-total">{{ rs.total_ram_reduction_gib|default:0 }}</span> <span class="text-lg font-semibold text-slate-500">GiB</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-ram-reduction-total">{{ rs.total_ram_reduction_gib|default:0 }}</span> <span class="text-xl font-semibold text-slate-500">GiB</span></p>
                         </div>
                         <p id="rs3-ram-metric-description" class="mt-1 text-xs text-slate-500">Potential RAM reduction across all optimizations</p>
                         <div class="mt-6 space-y-3 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">PROD Optimizations</p>
-                                    <p id="rs3-ram-prod-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.ram_prod_count|default:0 }}</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-[11px] uppercase tracking-wide text-slate-400">PROD Optimizations</p>
+                                        <div class="group relative">
+                                            <span class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#00BCFF] text-[10px] font-bold text-white shadow-sm">i</span>
+                                            <div class="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden w-64 -translate-y-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium leading-5 text-slate-600 shadow-[0_14px_30px_rgba(15,23,42,0.12)] group-hover:block">
+                                                Production VM<br>
+                                                Avg_FreeMem_12m &gt;= 35%<br>
+                                                Min_FreeMem_12m &gt;= 20%<br>
+                                                Current RAM &gt; 8 GiB
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p id="rs3-ram-prod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_prod_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">NON-PROD Optimizations</p>
-                                    <p id="rs3-ram-nonprod-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.ram_nonprod_count|default:0 }}</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-[11px] uppercase tracking-wide text-slate-400">NON-PROD Optimizations</p>
+                                        <div class="group relative">
+                                            <span class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#89D329] text-[10px] font-bold text-white shadow-sm">i</span>
+                                            <div class="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium leading-5 text-slate-600 shadow-[0_14px_30px_rgba(15,23,42,0.12)] group-hover:block">
+                                                Non - Production VM<br>
+                                                Avg_FreeMem_12m &gt;= 30%<br>
+                                                Min_FreeMem_12m &gt;= 15%<br>
+                                                Current RAM &gt; 4 GiB
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p id="rs3-ram-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_nonprod_count|default:0 }}</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">Total RAM Optimizations</p>
-                                    <p id="rs3-ram-total-count" class="mt-1 text-sm font-bold text-slate-900">{{ rs.ram_count|default:0 }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total RAM Optimizations</p>
+                                    <p id="rs3-ram-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="uppercase tracking-wide text-slate-400">RAM Reduction</p>
-                                    <p class="mt-1 text-sm font-bold text-emerald-700">-<span id="rs3-ram-reduction-value">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">RAM Reduction</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-ram-reduction-value">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB</p>
                                 </div>
                             </div>
                         </div>
@@ -1133,10 +1195,10 @@
                     <!-- RAM chart -->
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
-                            <h3 id="rs3-ram-chart-title" class="chart-card-title">Average vs Min Free Memory (%)</h3>
+                            <h3 id="rs3-ram-chart-title" class="chart-card-title">Top 10 Servers - Average vs Min Free Memory (%)</h3>
                             <div class="chart-legend-hint">
                                 <span class="chart-dot" style="background:#84D329"></span><span id="rs3-ram-legend-1">Avg Free Mem%</span>
-                                <span class="chart-dot" style="background:#F59E0B"></span><span id="rs3-ram-legend-2">Min Free Mem%</span>
+                                <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-ram-legend-2">Min Free Mem%</span>
                             </div>
                         </div>
                         <div class="chart-container chart-height-reference">
@@ -1152,8 +1214,9 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <label for="rs3-ram-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                             <select id="rs3-ram-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                                <option value="PROD_RAM_Optimization" {% if rs3_selected_workload == "RAM" and rs3_selected_filter == "PROD_RAM_Optimization" %}selected{% endif %}>PROD RAM Optimization</option>
-                                <option value="NONPROD_RAM_Optimization" {% if rs3_selected_workload == "RAM" and rs3_selected_filter == "NONPROD_RAM_Optimization" %}selected{% endif %}>NON-PROD RAM Optimization</option>
+                                {% for option in rs3_ram_filter_options %}
+                                <option value="{{ option }}" {% if rs3_ram_selected_filter == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
                             </select>
                             <span id="rs3-ram-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.ram_count|default:0 }}</span>
                             {% if total_rs3_ram_pages > 1 and rs.ram_optimizations %}
@@ -1202,8 +1265,8 @@
             <!-- ── UC 3.3: CRITICALITY-AWARE CPU OPTIMIZATION ─────────────────── -->
             <div class="mb-8">
                 <div class="flex items-center gap-3 mb-4">
-                    <h2 class="text-xl font-extrabold text-slate-900">Criticality-Aware CPU Optimization</h2>
-                    <span class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">UC 3.3</span>
+                    <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware CPU Optimization</h2>
+                    <!-- <span class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">UC 3.3</span> -->
                     <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
                 </div>
                 <p class="text-sm text-slate-500 mb-4">Applies to all environments and criticality levels. Flags under-utilised (&lt;10% avg CPU), over-utilised (&gt;80%), or high-peak (&gt;95%) critical systems.</p>
@@ -1214,7 +1277,7 @@
                             <thead class="bg-slate-50">
                                 <tr>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <!-- <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th> -->
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg CPU%</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Peak CPU%</th>
@@ -1228,9 +1291,9 @@
                                 {% for row in rs.crit_cpu_optimizations|slice:":50" %}
                                 <tr class="hover:bg-orange-50/40 transition-colors">
                                     <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
-                                    <td class="px-4 py-3 whitespace-nowrap">
+                                    <!-- <td class="px-4 py-3 whitespace-nowrap">
                                         {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
-                                    </td>
+                                    </td> -->
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Avg_CPU_12m|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Peak_CPU_12m|default:"—" }}</td>
@@ -1247,7 +1310,7 @@
                     </div>
                     {% else %}
                     <div class="p-8 text-center text-slate-400">
-                        <p class="font-semibold text-slate-500">No criticality-aware CPU candidates found.</p>
+                        <p class="font-semibold text-slate-500">No critically-aware CPU candidates found.</p>
                     </div>
                     {% endif %}
                 </div>
@@ -1256,8 +1319,8 @@
             <!-- ── UC 3.4: CRITICALITY-AWARE RAM OPTIMIZATION ─────────────────── -->
             <div class="mb-8">
                 <div class="flex items-center gap-3 mb-4">
-                    <h2 class="text-xl font-extrabold text-slate-900">Criticality-Aware RAM Optimization</h2>
-                    <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-[10px] font-bold text-purple-700">UC 3.4</span>
+                    <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware RAM Optimization</h2>
+                    <!-- <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-[10px] font-bold text-purple-700">UC 3.4</span> -->
                     <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_ram_count|default:0 }} systems</span>
                 </div>
                 <p class="text-sm text-slate-500 mb-4">Flags systems with very high free memory (&gt;80%) for cautious downsize, low free memory (&lt;20%) for upsize review, or critically low minimum memory (&lt;5%).</p>
@@ -1268,7 +1331,7 @@
                             <thead class="bg-slate-50">
                                 <tr>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Critically</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg Free Mem%</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Min Free Mem%</th>
@@ -1282,9 +1345,9 @@
                                 {% for row in rs.crit_ram_optimizations|slice:":50" %}
                                 <tr class="hover:bg-purple-50/40 transition-colors">
                                     <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
-                                    <td class="px-4 py-3 whitespace-nowrap">
+                                    <!-- <td class="px-4 py-3 whitespace-nowrap">
                                         {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
-                                    </td>
+                                    </td> -->
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Avg_FreeMem_12m|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Min_FreeMem_12m|default:"—" }}</td>
@@ -1301,14 +1364,14 @@
                     </div>
                     {% else %}
                     <div class="p-8 text-center text-slate-400">
-                        <p class="font-semibold text-slate-500">No criticality-aware RAM candidates found.</p>
+                        <p class="font-semibold text-slate-500">No critically-aware RAM candidates found.</p>
                     </div>
                     {% endif %}
                 </div>
             </div>
 
             <!-- ── LIFECYCLE RISK FLAGS ──────────────────────────────────────── -->
-            <div class="mb-8">
+            <!-- <div class="mb-8">
                 <div class="flex items-center gap-3 mb-4">
                     <h2 class="text-xl font-extrabold text-slate-900">Lifecycle Risk Flags</h2>
                     <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Human Review</span>
@@ -1355,7 +1418,7 @@
                     </div>
                     {% endif %}
                 </div>
-            </div>
+            </div> -->
 
             <!-- ── PHYSICAL SYSTEMS FLAGS ────────────────────────────────────── -->
             <div class="mb-4">
@@ -1373,7 +1436,7 @@
                                 <tr>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th>
+                                    <!-- <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th> -->
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">IsVirtual Status</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Human Review</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Reason</th>
@@ -1384,9 +1447,9 @@
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
-                                    <td class="px-4 py-3 whitespace-nowrap">
+                                    <!-- <td class="px-4 py-3 whitespace-nowrap">
                                         {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
-                                    </td>
+                                    </td> -->
                                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">{{ row.IsVirtual_Status|default:"Physical" }}</span></td>
                                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Human_Review_Required|default:"Yes – Physical System" }}</span></td>
                                     <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.Review_Reason|default:"Physical system detected." }}</td>
@@ -1603,8 +1666,34 @@
     {% endwith %}
 </div>
 
+<div id="rule-email-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-slate-900/40 px-4 py-6">
+    <div class="w-full max-w-6xl rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.2)]">
+        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div>
+                <h3 id="rule-email-modal-title" class="text-lg font-bold text-slate-900">Send Email</h3>
+                <p class="mt-1 text-sm text-slate-500">Review the selected candidate rows before opening your email draft.</p>
+            </div>
+            <button id="rule-email-modal-close" type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancel</button>
+        </div>
+        <div class="max-h-[60vh] overflow-auto px-6 py-5">
+            <table class="min-w-full divide-y divide-slate-200 text-left">
+                <thead class="sticky top-0 z-10 bg-slate-50">
+                    <tr id="rule-email-modal-head"></tr>
+                </thead>
+                <tbody id="rule-email-modal-body" class="divide-y divide-slate-100 bg-white"></tbody>
+            </table>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <button id="rule-email-modal-cancel" type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Cancel</button>
+            <button id="rule-email-modal-send" type="button" class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700">Send Email</button>
+        </div>
+    </div>
+</div>
+
 {{ rule1_data_json|json_script:"rule1-data" }}
 {{ rule2_data_json|json_script:"rule2-data" }}
+{{ rule1_keys|json_script:"rule1-keys" }}
+{{ rule2_keys|json_script:"rule2-keys" }}
 {{ rightsizing_cpu_data_json|json_script:"rs3-cpu-data" }}
 {{ rightsizing_ram_data_json|json_script:"rs3-ram-data" }}
 {{ rightsizing.cpu_chart_data|json_script:"rs3-cpu-chart" }}
@@ -2138,7 +2227,7 @@
                     });
                     Plotly.newPlot(ramEl, [
                         { x: rLabels, y: avgFreeVals, type: 'bar', name: 'Avg Free Mem %', marker: { color: '#84cc16' } },
-                        { x: rLabels, y: minFreeVals, type: 'bar', name: 'Min Free Mem %', marker: { color: '#6366f1' } }
+                        { x: rLabels, y: minFreeVals, type: 'bar', name: 'Min Free Mem %', marker: { color: '#00BCFF' } }
                     ], ramLayout, plotlyConfig);
                 }
             } catch (e) { console.warn('RS3 RAM chart:', e); }
@@ -2239,7 +2328,7 @@
                         y: filtered.map(function(d) { return d.min_free; }),
                         type: 'bar',
                         name: 'Min Free Mem %',
-                        marker: { color: '#f59e0b' }
+                        marker: { color: '#00BCFF' }
                     }
                 ], buildRs3Layout('Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
             }
@@ -2311,8 +2400,12 @@
         var PER_PAGE = 6;
         var rule1DataEl = document.getElementById('rule1-data');
         var rule2DataEl = document.getElementById('rule2-data');
+        var rule1KeysEl = document.getElementById('rule1-keys');
+        var rule2KeysEl = document.getElementById('rule2-keys');
         var rule1Data = rule1DataEl ? JSON.parse(rule1DataEl.textContent) : [];
         var rule2Data = rule2DataEl ? JSON.parse(rule2DataEl.textContent) : [];
+        var rule1Keys = rule1KeysEl ? JSON.parse(rule1KeysEl.textContent) : [];
+        var rule2Keys = rule2KeysEl ? JSON.parse(rule2KeysEl.textContent) : [];
         var nav1 = document.querySelector('nav[data-rule="1"]');
         var nav2 = document.querySelector('nav[data-rule="2"]');
         var rule1Page = nav1 ? parseInt(nav1.getAttribute('data-current-page'), 10) : 1;
@@ -2320,6 +2413,10 @@
         var totalRule1Pages = nav1 ? parseInt(nav1.getAttribute('data-total-pages'), 10) : 1;
         var totalRule2Pages = nav2 ? parseInt(nav2.getAttribute('data-total-pages'), 10) : 1;
         var basePath = window.location.pathname;
+        var ruleSelections = {
+            rule1: new Set(),
+            rule2: new Set(),
+        };
 
         function safeText(val) {
             if (val === null || val === undefined || val === '') return '—';
@@ -2332,19 +2429,46 @@
             return div.innerHTML;
         }
 
+        function formatCandidateHeader(value) {
+            return String(value || '')
+                .replace(/_/g, ' ')
+                .toLowerCase()
+                .replace(/\b\w/g, function(c) { return c.toUpperCase(); })
+                .trim();
+        }
+
         function getActionCellHtml() {
-            return '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full bg-blue-600 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2">Send Trigger</button></td>';
+            return '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button></td>';
+        }
+
+        function getRuleMeta(tbodyId) {
+            if (tbodyId === 'rule1-tbody') {
+                return { key: 'rule1', selectAllId: 'rule1-select-all', sendEmailBtnId: 'rule1-send-email-btn', page: rule1Page, data: rule1Data, keys: rule1Keys };
+            }
+            if (tbodyId === 'rule2-tbody') {
+                return { key: 'rule2', selectAllId: 'rule2-select-all', sendEmailBtnId: 'rule2-send-email-btn', page: rule2Page, data: rule2Data, keys: rule2Keys };
+            }
+            return null;
+        }
+
+        function getSelectionCellHtml(ruleKey, rowIndex, checked) {
+            return '<td class="px-4 py-3 text-center whitespace-nowrap"><input type="checkbox" class="rule-row-checkbox h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" data-rule="' + ruleKey + '" data-index="' + rowIndex + '"' + (checked ? ' checked' : '') + '></td>';
         }
 
         function renderTableBody(tbodyId, data, page, rowClass) {
             var tbody = document.getElementById(tbodyId);
             if (!tbody) return;
+            var ruleMeta = getRuleMeta(tbodyId);
             var start = (page - 1) * PER_PAGE;
             var slice = data.slice(start, start + PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
+                var rowIndex = start + i;
                 html += '<tr class="' + rowClass + '">';
+                if (ruleMeta) {
+                    html += getSelectionCellHtml(ruleMeta.key, rowIndex, ruleSelections[ruleMeta.key].has(rowIndex));
+                }
                 for (var j = 0; j < row.length; j++) {
                     html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[j])) + '</td>';
                 }
@@ -2354,6 +2478,45 @@
                 html += '</tr>';
             }
             tbody.innerHTML = html;
+            if (ruleMeta) updateRuleSelectionUi(ruleMeta.key);
+        }
+
+        function updateSelectAllState(ruleKey) {
+            var selectAll = document.getElementById(ruleKey + '-select-all');
+            var page = ruleKey === 'rule1' ? rule1Page : rule2Page;
+            var data = ruleKey === 'rule1' ? rule1Data : rule2Data;
+            if (!selectAll) return;
+            var start = (page - 1) * PER_PAGE;
+            var end = Math.min(start + PER_PAGE, data.length);
+            var totalOnPage = Math.max(0, end - start);
+            var checkedOnPage = 0;
+            for (var i = start; i < end; i++) {
+                if (ruleSelections[ruleKey].has(i)) checkedOnPage += 1;
+            }
+            selectAll.checked = totalOnPage > 0 && checkedOnPage === totalOnPage;
+            selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < totalOnPage;
+        }
+
+        function updateSendEmailButtonState(ruleKey) {
+            var btn = document.getElementById(ruleKey + '-send-email-btn');
+            if (btn) btn.disabled = ruleSelections[ruleKey].size === 0;
+        }
+
+        function updateRuleSelectionUi(ruleKey) {
+            updateSelectAllState(ruleKey);
+            updateSendEmailButtonState(ruleKey);
+        }
+
+        function togglePageSelection(ruleKey, checked) {
+            var page = ruleKey === 'rule1' ? rule1Page : rule2Page;
+            var data = ruleKey === 'rule1' ? rule1Data : rule2Data;
+            var start = (page - 1) * PER_PAGE;
+            var end = Math.min(start + PER_PAGE, data.length);
+            for (var i = start; i < end; i++) {
+                if (checked) ruleSelections[ruleKey].add(i);
+                else ruleSelections[ruleKey].delete(i);
+            }
+            renderTableBody(ruleKey + '-tbody', data, page, ruleKey === 'rule1' ? 'hover:bg-sky-50/60 transition-colors' : 'hover:bg-slate-50 transition-colors');
         }
 
         function updatePagination(rule, page, totalPages, otherPage) {
@@ -2383,6 +2546,78 @@
             if (history.replaceState) history.replaceState(null, '', basePath + q);
         }
 
+        var ruleEmailModal = document.getElementById('rule-email-modal');
+        var ruleEmailModalTitle = document.getElementById('rule-email-modal-title');
+        var ruleEmailModalHead = document.getElementById('rule-email-modal-head');
+        var ruleEmailModalBody = document.getElementById('rule-email-modal-body');
+        var activeEmailRule = null;
+
+        function getRuleConfig(ruleKey) {
+            return ruleKey === 'rule1'
+                ? { title: 'Rule 1 Selected Candidates', data: rule1Data, keys: rule1Keys }
+                : { title: 'Rule 2 Selected Candidates', data: rule2Data, keys: rule2Keys };
+        }
+
+        function renderRuleEmailModal(ruleKey) {
+            var config = getRuleConfig(ruleKey);
+            var selectedIndexes = Array.from(ruleSelections[ruleKey]);
+            if (!config || !selectedIndexes.length || !ruleEmailModalHead || !ruleEmailModalBody) return;
+
+            ruleEmailModalTitle.textContent = config.title;
+            var headHtml = '<th class="px-4 py-3 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Remove</th>';
+            for (var i = 0; i < config.keys.length; i++) {
+                headHtml += '<th class="px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 whitespace-nowrap">' + escapeHtml(formatCandidateHeader(config.keys[i])) + '</th>';
+            }
+            ruleEmailModalHead.innerHTML = headHtml;
+
+            var bodyHtml = '';
+            for (var j = 0; j < selectedIndexes.length; j++) {
+                var rowIndex = selectedIndexes[j];
+                var row = config.data[rowIndex] || [];
+                bodyHtml += '<tr>';
+                bodyHtml += '<td class="px-4 py-3 text-center"><button type="button" class="rule-email-remove inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-base font-bold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600" data-rule="' + ruleKey + '" data-index="' + rowIndex + '">-</button></td>';
+                for (var k = 0; k < config.keys.length; k++) {
+                    bodyHtml += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[k])) + '</td>';
+                }
+                bodyHtml += '</tr>';
+            }
+            ruleEmailModalBody.innerHTML = bodyHtml;
+        }
+
+        function openRuleEmailModal(ruleKey) {
+            activeEmailRule = ruleKey;
+            renderRuleEmailModal(ruleKey);
+            if (ruleEmailModal) {
+                ruleEmailModal.classList.remove('hidden');
+                ruleEmailModal.classList.add('flex');
+            }
+        }
+
+        function closeRuleEmailModal() {
+            activeEmailRule = null;
+            if (ruleEmailModal) {
+                ruleEmailModal.classList.add('hidden');
+                ruleEmailModal.classList.remove('flex');
+            }
+        }
+
+        function buildMailtoBody(ruleKey) {
+            var config = getRuleConfig(ruleKey);
+            var selectedIndexes = Array.from(ruleSelections[ruleKey]);
+            var lines = [];
+            lines.push(config.title);
+            lines.push('');
+            for (var i = 0; i < selectedIndexes.length; i++) {
+                var row = config.data[selectedIndexes[i]] || [];
+                lines.push('Row ' + (i + 1));
+                for (var j = 0; j < config.keys.length; j++) {
+                    lines.push(formatCandidateHeader(config.keys[j]) + ': ' + safeText(row[j]));
+                }
+                lines.push('');
+            }
+            return lines.join('\n');
+        }
+
         function onRule1Prev(e) { e.preventDefault(); if (rule1Page <= 1) return; rule1Page--; renderTableBody('rule1-tbody', rule1Data, rule1Page, 'hover:bg-sky-50/60 transition-colors'); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
         function onRule1Next(e) { e.preventDefault(); if (rule1Page >= totalRule1Pages) return; rule1Page++; renderTableBody('rule1-tbody', rule1Data, rule1Page, 'hover:bg-sky-50/60 transition-colors'); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
         function onRule2Prev(e) { e.preventDefault(); if (rule2Page <= 1) return; rule2Page--; renderTableBody('rule2-tbody', rule2Data, rule2Page, 'hover:bg-slate-50 transition-colors'); updatePagination(2, rule2Page, totalRule2Pages, rule1Page); updateUrl(); }
@@ -2391,14 +2626,14 @@
         // ── Strategy 3 pagination ─────────────────────────────────────────────
         var rs3FilterConfig = {
             cpu: {
-                defaultFilter: 'PROD_CPU_Optimization',
-                optimizationColumns: ['server_name', 'Environment', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Potential_vCPU_Reduction'],
-                recommendationColumns: ['server_name', 'Environment', 'Env_Type', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation'],
+                defaultFilter: 'PROD_CPU_Rightsizing',
+                optimizationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation'],
+                recommendationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation'],
                 reductionKey: 'Potential_vCPU_Reduction',
                 chartFieldMap: { avg: 'avg', peak: 'peak' },
                 chartLabels: ['Avg CPU %', 'Peak CPU %'],
                 chartColors: ['#1ea7e1', '#84cc16'],
-                chartTitle: 'Average vs Peak CPU Utilisation (%)',
+                chartTitle: 'Top 10 Servers - Average vs Peak CPU Utilisation (%)',
                 chartAxisTitle: 'CPU %',
                 metricText: 'vCPU reduction',
                 titleText: 'CPU Right-Sizing',
@@ -2407,14 +2642,14 @@
                 emptyText: 'No records match the selected CPU screen.'
             },
             ram: {
-                defaultFilter: 'PROD_RAM_Optimization',
-                optimizationColumns: ['server_name', 'Environment', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Potential_RAM_Reduction_GiB'],
-                recommendationColumns: ['server_name', 'Environment', 'Env_Type', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation'],
+                defaultFilter: 'PROD_RAM_Rightsizing',
+                optimizationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation'],
+                recommendationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation'],
                 reductionKey: 'Potential_RAM_Reduction_GiB',
                 chartFieldMap: { avg: 'avg_free', peak: 'min_free' },
                 chartLabels: ['Avg Free Mem %', 'Min Free Mem %'],
-                chartColors: ['#84cc16', '#f59e0b'],
-                chartTitle: 'Average vs Min Free Memory (%)',
+                chartColors: ['#84cc16', '#00BCFF'],
+                chartTitle: 'Top 10 Servers - Average vs Min Free Memory (%)',
                 chartAxisTitle: 'Free Mem %',
                 metricText: 'RAM reduction',
                 titleText: 'RAM Right-Sizing',
@@ -2453,6 +2688,18 @@
                 filter: ''
             }
         };
+        var rs3CpuRightsizingFilterMap = {
+            PROD_CPU_Optimization: 'PROD_CPU_Rightsizing',
+            PROD_CPU_Recommendation: 'PROD_CPU_Rightsizing',
+            NONPROD_CPU_Optimization: 'NONPROD_CPU_Rightsizing',
+            NONPROD_CPU_Recommendation: 'NONPROD_CPU_Rightsizing'
+        };
+        var rs3RamRightsizingFilterMap = {
+            PROD_RAM_Optimization: 'PROD_RAM_Rightsizing',
+            PROD_RAM_Recommendation: 'PROD_RAM_Rightsizing',
+            NONPROD_RAM_Optimization: 'NONPROD_RAM_Rightsizing',
+            NONPROD_RAM_Recommendation: 'NONPROD_RAM_Rightsizing'
+        };
 
         function formatRs3Display(value) {
             var text = String(value || '')
@@ -2468,6 +2715,7 @@
             text = text.replace(/\bNon Prod\b/g, 'NON-PROD');
             text = text.replace(/\bAvg Free Mem\b/g, 'Avg Free Mem');
             text = text.replace(/\bMin Free Mem\b/g, 'Min Free Mem');
+            text = text.replace(/\bRightsizing\b/g, 'Right-Sizing');
 
             return text;
         }
@@ -2495,6 +2743,10 @@
             var table = tbody.closest('table');
             if (!table) return;
             table.querySelectorAll('thead th').forEach(function(th) {
+                if (th.querySelector('input[type="checkbox"]')) {
+                    th.style.textTransform = 'none';
+                    return;
+                }
                 var text = th.textContent.trim();
                 if (text.toLowerCase() !== 'actions') {
                     th.textContent = text.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); }).trim();
@@ -2508,13 +2760,15 @@
         }
 
         function normalizeRs3CpuFilter(value) {
-            var allowed = ['PROD_CPU_Optimization', 'NONPROD_CPU_Optimization'];
-            return allowed.indexOf(String(value || '')) !== -1 ? String(value) : 'PROD_CPU_Optimization';
+            var normalized = String(value || '').trim();
+            normalized = rs3CpuRightsizingFilterMap[normalized] || normalized;
+            return normalized || (rs3DefaultFilters.CPU || rs3FilterConfig.cpu.defaultFilter);
         }
 
         function normalizeRs3RamFilter(value) {
-            var allowed = ['PROD_RAM_Optimization', 'NONPROD_RAM_Optimization'];
-            return allowed.indexOf(String(value || '')) !== -1 ? String(value) : 'PROD_RAM_Optimization';
+            var normalized = String(value || '').trim();
+            normalized = rs3RamRightsizingFilterMap[normalized] || normalized;
+            return normalized || (rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter);
         }
 
         function setText(id, value) {
@@ -2524,15 +2778,30 @@
 
         function getRs3Columns(type, filterValue) {
             var config = rs3FilterConfig[type];
+            if (type === 'cpu' && /_Rightsizing$/.test(filterValue || '')) return config.optimizationColumns;
+            if (type === 'ram' && /_Rightsizing$/.test(filterValue || '')) return config.optimizationColumns;
             return /_Recommendation$/.test(filterValue || '') ? config.recommendationColumns : config.optimizationColumns;
         }
 
         function getRs3FilterField(filterValue) {
+            if (/_Rightsizing$/.test(filterValue || '')) return 'Env_Type';
             return /_Recommendation$/.test(filterValue || '') ? 'Recommendation_Type' : 'Optimization_Type';
         }
 
         function getRs3FilteredRecords(type) {
             var state = rs3State[type];
+            if (type === 'cpu' && /_Rightsizing$/.test(state.filter || '')) {
+                var envType = /^NONPROD_/.test(state.filter || '') ? 'NON-PROD' : 'PROD';
+                return (state.data || []).filter(function(record) {
+                    return String(record.Env_Type || '') === envType;
+                });
+            }
+            if (type === 'ram' && /_Rightsizing$/.test(state.filter || '')) {
+                var ramEnvType = /^NONPROD_/.test(state.filter || '') ? 'NON-PROD' : 'PROD';
+                return (state.data || []).filter(function(record) {
+                    return String(record.Env_Type || '') === ramEnvType;
+                });
+            }
             var filterField = getRs3FilterField(state.filter);
             return (state.data || []).filter(function(record) {
                 return String(record[filterField] || '') === String(state.filter || '');
@@ -2541,6 +2810,18 @@
 
         function getRs3FilteredChartRecords(type) {
             var state = rs3State[type];
+            if (type === 'cpu' && /_Rightsizing$/.test(state.filter || '')) {
+                var chartFilterValue = /^NONPROD_/.test(state.filter || '') ? 'NONPROD_CPU_Optimization' : 'PROD_CPU_Optimization';
+                return (state.chartData || []).filter(function(record) {
+                    return String(record.optimization_type || '') === chartFilterValue;
+                });
+            }
+            if (type === 'ram' && /_Rightsizing$/.test(state.filter || '')) {
+                var ramChartFilterValue = /^NONPROD_/.test(state.filter || '') ? 'NONPROD_RAM_Optimization' : 'PROD_RAM_Optimization';
+                return (state.chartData || []).filter(function(record) {
+                    return String(record.optimization_type || '') === ramChartFilterValue;
+                });
+            }
             var filterField = /_Recommendation$/.test(state.filter || '') ? 'recommendation_type' : 'optimization_type';
             return (state.chartData || []).filter(function(record) {
                 return String(record[filterField] || '') === String(state.filter || '');
@@ -2577,6 +2858,29 @@
             headRow.innerHTML = html;
         }
 
+        function renderRs3RecommendationCell(columnName, value) {
+            var text = safeText(value);
+            if (columnName !== 'CPU_Recommendation' && columnName !== 'RAM_Recommendation') {
+                return '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(text) + '</td>';
+            }
+
+            var raw = String(value || '').trim();
+            var isReduced = /^(reduce|reduced)\b/i.test(raw);
+            var isIncreased = /^(increase|increased)\b/i.test(raw);
+            var arrowHtml = '';
+            var textClass = 'text-slate-700';
+
+            if (isReduced) {
+                arrowHtml = '<span class="mr-2 text-sm font-bold" style="color:#FF0000;">&darr;</span>';
+                textClass = '';
+            } else if (isIncreased) {
+                arrowHtml = '<span class="mr-2 text-sm font-bold text-emerald-600">&uarr;</span>';
+                textClass = 'text-emerald-600';
+            }
+
+            return '<td class="px-4 py-3 text-xs font-semibold whitespace-nowrap ' + textClass + '"' + (isReduced ? ' style="color:#FF0000;"' : '') + '>' + arrowHtml + escapeHtml(text) + '</td>';
+        }
+
         function renderRs3TableBody(type, records, columns, page) {
             var tbody = document.getElementById('rs3-' + type + '-tbody');
             if (!tbody) return;
@@ -2586,7 +2890,7 @@
             for (var i = 0; i < slice.length; i++) {
                 html += '<tr class="hover:bg-slate-50 transition-colors">';
                 for (var j = 0; j < columns.length; j++) {
-                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(slice[i][columns[j]])) + '</td>';
+                    html += renderRs3RecommendationCell(columns[j], slice[i][columns[j]]);
                 }
                 html += '</tr>';
             }
@@ -2632,7 +2936,9 @@
         function updateRs3Summary(type, summary) {
             var config = rs3FilterConfig[type];
             var prettyFilter = humanizeRs3Filter(rs3State[type].filter);
-            var detailLabel = type.toUpperCase() + (/_Recommendation$/.test(rs3State[type].filter || '') ? ' Recommendation' : ' Optimization');
+            var detailLabel = /_Rightsizing$/.test(rs3State[type].filter || '')
+                ? (type === 'cpu' ? 'CPU Rightsizing' : 'RAM Rightsizing')
+                : type.toUpperCase() + (/_Recommendation$/.test(rs3State[type].filter || '') ? ' Recommendation' : ' Optimization');
             setText('rs3-' + type + '-hero-label', prettyFilter + ' total');
             setText('rs3-' + type + '-hero-total', summary.count);
             setText('rs3-' + type + '-hero-breakdown', 'PROD: ' + summary.prod_count + ' | NON-PROD: ' + summary.nonprod_count);
@@ -2662,18 +2968,52 @@
             var chartEl = document.getElementById('chart-rs3-' + type);
             if (!chartEl) return;
             var filteredChartRecords = getRs3FilteredChartRecords(type);
-            var labels = filteredChartRecords.map(function(record) { return record.name; });
             var avgField = config.chartFieldMap.avg;
             var peakField = config.chartFieldMap.peak;
-            var avgValues = filteredChartRecords.map(function(record) { return record[avgField]; });
-            var peakValues = filteredChartRecords.map(function(record) { return record[peakField]; });
+            var topRecords = filteredChartRecords
+                .map(function(record) {
+                    var avgValue = Number(record[avgField] || 0);
+                    var peakValue = Number(record[peakField] || 0);
+                    return {
+                        name: record.name,
+                        avg: isNaN(avgValue) ? 0 : avgValue,
+                        peak: isNaN(peakValue) ? 0 : peakValue,
+                        sortValue: Math.max(isNaN(avgValue) ? 0 : avgValue, isNaN(peakValue) ? 0 : peakValue)
+                    };
+                })
+                .sort(function(a, b) { return b.sortValue - a.sortValue; })
+                .slice(0, 10);
+            var labels = topRecords.map(function(record) { return record.name; });
+            var avgValues = topRecords.map(function(record) { return record.avg; });
+            var peakValues = topRecords.map(function(record) { return record.peak; });
             var layout = Object.assign({}, rs3LayoutBase, {
                 title: { text: config.chartTitle, font: { size: 13, color: '#0f172a' } },
+                xaxis: Object.assign({}, rs3LayoutBase.xaxis, {
+                    type: 'category',
+                    tickangle: -35,
+                    automargin: true
+                }),
                 yaxis: Object.assign({}, rs3LayoutBase.yaxis, { title: { text: config.chartAxisTitle } })
             });
             Plotly.react(chartEl, [
-                { x: labels, y: avgValues, type: 'bar', name: config.chartLabels[0], marker: { color: config.chartColors[0] } },
-                { x: labels, y: peakValues, type: 'bar', name: config.chartLabels[1], marker: { color: config.chartColors[1] } }
+                {
+                    x: labels,
+                    y: avgValues,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: config.chartLabels[0],
+                    line: { color: config.chartColors[0], width: 2 },
+                    marker: { color: config.chartColors[0], size: 7 }
+                },
+                {
+                    x: labels,
+                    y: peakValues,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: config.chartLabels[1],
+                    line: { color: config.chartColors[1], width: 2 },
+                    marker: { color: config.chartColors[1], size: 7 }
+                }
             ], layout, rs3PlotlyConfig);
         }
 
@@ -2751,16 +3091,75 @@
         var r1Next = document.getElementById('rule1-next');
         var r2Prev = document.getElementById('rule2-prev');
         var r2Next = document.getElementById('rule2-next');
+        var rule1SelectAll = document.getElementById('rule1-select-all');
+        var rule2SelectAll = document.getElementById('rule2-select-all');
+        var rule1SendEmailBtn = document.getElementById('rule1-send-email-btn');
+        var rule2SendEmailBtn = document.getElementById('rule2-send-email-btn');
+        var ruleEmailModalClose = document.getElementById('rule-email-modal-close');
+        var ruleEmailModalCancel = document.getElementById('rule-email-modal-cancel');
+        var ruleEmailModalSend = document.getElementById('rule-email-modal-send');
         var r3CpuPrev = document.getElementById('rs3-cpu-prev');
         var r3CpuNext = document.getElementById('rs3-cpu-next');
         var r3RamPrev = document.getElementById('rs3-ram-prev');
         var r3RamNext = document.getElementById('rs3-ram-next');
         var r3CpuFilter = document.getElementById('rs3-cpu-filter');
         var r3RamFilter = document.getElementById('rs3-ram-filter');
+        var rule1Tbody = document.getElementById('rule1-tbody');
+        var rule2Tbody = document.getElementById('rule2-tbody');
         if (r1Prev) r1Prev.addEventListener('click', onRule1Prev);
         if (r1Next) r1Next.addEventListener('click', onRule1Next);
         if (r2Prev) r2Prev.addEventListener('click', onRule2Prev);
         if (r2Next) r2Next.addEventListener('click', onRule2Next);
+        if (rule1SelectAll) rule1SelectAll.addEventListener('change', function(e) { togglePageSelection('rule1', e.target.checked); });
+        if (rule2SelectAll) rule2SelectAll.addEventListener('change', function(e) { togglePageSelection('rule2', e.target.checked); });
+        if (rule1SendEmailBtn) rule1SendEmailBtn.addEventListener('click', function() { openRuleEmailModal('rule1'); });
+        if (rule2SendEmailBtn) rule2SendEmailBtn.addEventListener('click', function() { openRuleEmailModal('rule2'); });
+        if (ruleEmailModalClose) ruleEmailModalClose.addEventListener('click', closeRuleEmailModal);
+        if (ruleEmailModalCancel) ruleEmailModalCancel.addEventListener('click', closeRuleEmailModal);
+        if (ruleEmailModal) {
+            ruleEmailModal.addEventListener('click', function(e) {
+                if (e.target === ruleEmailModal) closeRuleEmailModal();
+            });
+        }
+        if (ruleEmailModalBody) {
+            ruleEmailModalBody.addEventListener('click', function(e) {
+                var removeBtn = e.target.closest('.rule-email-remove');
+                if (!removeBtn) return;
+                var ruleKey = removeBtn.getAttribute('data-rule');
+                var rowIndex = parseInt(removeBtn.getAttribute('data-index'), 10);
+                if (!isNaN(rowIndex) && ruleSelections[ruleKey]) {
+                    ruleSelections[ruleKey].delete(rowIndex);
+                    updateRuleSelectionUi(ruleKey);
+                    renderTableBody(ruleKey + '-tbody', ruleKey === 'rule1' ? rule1Data : rule2Data, ruleKey === 'rule1' ? rule1Page : rule2Page, ruleKey === 'rule1' ? 'hover:bg-sky-50/60 transition-colors' : 'hover:bg-slate-50 transition-colors');
+                    if (ruleSelections[ruleKey].size) renderRuleEmailModal(ruleKey);
+                    else closeRuleEmailModal();
+                }
+            });
+        }
+        if (ruleEmailModalSend) {
+            ruleEmailModalSend.addEventListener('click', function() {
+                if (!activeEmailRule || !ruleSelections[activeEmailRule].size) return;
+                var subject = encodeURIComponent((activeEmailRule === 'rule1' ? 'Rule 1' : 'Rule 2') + ' Selected Candidates');
+                var body = encodeURIComponent(buildMailtoBody(activeEmailRule));
+                window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
+                closeRuleEmailModal();
+            });
+        }
+        [rule1Tbody, rule2Tbody].forEach(function(tbody) {
+            if (!tbody) return;
+            tbody.addEventListener('change', function(e) {
+                var checkbox = e.target.closest('.rule-row-checkbox');
+                if (!checkbox) return;
+                var ruleKey = checkbox.getAttribute('data-rule');
+                var rowIndex = parseInt(checkbox.getAttribute('data-index'), 10);
+                if (isNaN(rowIndex) || !ruleSelections[ruleKey]) return;
+                if (checkbox.checked) ruleSelections[ruleKey].add(rowIndex);
+                else ruleSelections[ruleKey].delete(rowIndex);
+                updateRuleSelectionUi(ruleKey);
+            });
+        });
+        renderTableBody('rule1-tbody', rule1Data, rule1Page, 'hover:bg-sky-50/60 transition-colors');
+        renderTableBody('rule2-tbody', rule2Data, rule2Page, 'hover:bg-slate-50 transition-colors');
         if (r3CpuPrev) r3CpuPrev.addEventListener('click', function(e) { onRs3Prev('cpu', e); });
         if (r3CpuNext) r3CpuNext.addEventListener('click', function(e) { onRs3Next('cpu', e); });
         if (r3RamPrev) r3RamPrev.addEventListener('click', function(e) { onRs3Prev('ram', e); });
