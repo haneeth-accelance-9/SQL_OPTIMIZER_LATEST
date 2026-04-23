@@ -5,6 +5,7 @@ Produces a professional optimization report from rule results and license metric
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from optimizer.services.report_export import format_currency, normalize_report_content_text
@@ -13,6 +14,122 @@ logger = logging.getLogger(__name__)
 
 
 _azure_client = None
+
+AGENT_RULES_CONFIG_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "agent"
+    / "liscence-optimizer"
+    / "configs"
+    / "rules.base.yaml"
+)
+
+LOCAL_AGENT_RULE_SPECS: list[dict[str, Any]] = [
+    {
+        "storage_rule_code": "uc_1_1",
+        "report_rule_id": "uc_1_1_azure_byol_to_payg",
+        "description": "Azure BYOL to PAYG optimization eligibility",
+        "rule_type": "filter",
+        "source": "rule_results.azure_payg",
+        "recommendation_field": None,
+        "default_reasons": [
+            "Hosted in an Azure-compatible zone and not marked as License Included.",
+        ],
+        "default_recommendation": "Review Azure BYOL to PAYG migration eligibility.",
+    },
+    {
+        "storage_rule_code": "uc_1_2",
+        "report_rule_id": "uc_1_2_retired_device_installs",
+        "description": "Software on retired devices",
+        "rule_type": "filter",
+        "source": "rule_results.retired_devices",
+        "recommendation_field": None,
+        "default_reasons": [
+            "Device appears retired but still reports SQL-related installation data.",
+        ],
+        "default_recommendation": "Validate retirement status and decommission or reconcile the installation record.",
+    },
+    {
+        "storage_rule_code": "uc_3_1",
+        "report_rule_id": "uc_3_1_cpu_rightsizing",
+        "description": "CPU rightsizing (PROD vs non-PROD)",
+        "rule_type": "recommendation",
+        "source": "rightsizing.cpu_candidates",
+        "recommendation_field": "CPU_Recommendation",
+        "default_reasons": [
+            "CPU utilisation is below the configured rightsizing threshold.",
+        ],
+        "default_recommendation": "Review CPU rightsizing recommendation.",
+    },
+    {
+        "storage_rule_code": "uc_3_2",
+        "report_rule_id": "uc_3_2_ram_rightsizing",
+        "description": "RAM reduction (PROD vs non-PROD)",
+        "rule_type": "recommendation",
+        "source": "rightsizing.ram_candidates",
+        "recommendation_field": "RAM_Recommendation",
+        "default_reasons": [
+            "Memory headroom is above the configured rightsizing threshold.",
+        ],
+        "default_recommendation": "Review RAM rightsizing recommendation.",
+    },
+    {
+        "storage_rule_code": "uc_3_3",
+        "report_rule_id": "uc_3_3_criticality_cpu_optimization",
+        "description": "Criticality-aware CPU optimization",
+        "rule_type": "recommendation",
+        "source": "rightsizing.crit_cpu_optimizations",
+        "recommendation_field": "CPU_Recommendation",
+        "default_reasons": [
+            "Criticality-aware CPU optimization requires human review before change.",
+        ],
+        "default_recommendation": "Review criticality-aware CPU recommendation.",
+    },
+    {
+        "storage_rule_code": "uc_3_4",
+        "report_rule_id": "uc_3_4_criticality_ram_optimization",
+        "description": "Criticality-aware RAM optimization",
+        "rule_type": "recommendation",
+        "source": "rightsizing.crit_ram_optimizations",
+        "recommendation_field": "RAM_Recommendation",
+        "default_reasons": [
+            "Criticality-aware RAM optimization requires human review before change.",
+        ],
+        "default_recommendation": "Review criticality-aware RAM recommendation.",
+    },
+    {
+        "storage_rule_code": "uc_3_5",
+        "report_rule_id": "uc_3_5_lifecycle_risk_flags",
+        "description": "Lifecycle risk flags for high CPU peaks, low minimum memory, or critical systems",
+        "rule_type": "filter",
+        "source": "rightsizing.lifecycle_risk_flags",
+        "recommendation_field": "Lifecycle_Risk_Reasons",
+        "default_reasons": [
+            "Lifecycle review is required before automated optimization is attempted.",
+        ],
+        "default_recommendation": "Review lifecycle risk flags before applying optimization changes.",
+    },
+    {
+        "storage_rule_code": "uc_3_6",
+        "report_rule_id": "uc_3_6_physical_system_review",
+        "description": "Physical systems require human review before rightsizing",
+        "rule_type": "filter",
+        "source": "rightsizing.physical_system_flags",
+        "recommendation_field": "Review_Reason",
+        "default_reasons": [
+            "Physical systems should be reviewed manually before rightsizing action is taken.",
+        ],
+        "default_recommendation": "Route physical systems to human review before changing CPU or RAM allocations.",
+    },
+]
+
+REPORT_RULE_ID_BY_STORAGE_CODE = {
+    spec["storage_rule_code"]: spec["report_rule_id"]
+    for spec in LOCAL_AGENT_RULE_SPECS
+}
+STORAGE_RULE_CODE_BY_REPORT_ID = {
+    spec["report_rule_id"]: spec["storage_rule_code"]
+    for spec in LOCAL_AGENT_RULE_SPECS
+}
 
 
 def _get_client():
@@ -158,6 +275,510 @@ Use only the numbers provided. Be specific and practical. Keep each section to a
         return None
 
 
+def _normalize_agent_storage_rule_code(rule_code: Any) -> str:
+    normalized = str(rule_code or "").strip()
+    if not normalized:
+        return ""
+    if normalized in STORAGE_RULE_CODE_BY_REPORT_ID:
+        return STORAGE_RULE_CODE_BY_REPORT_ID[normalized]
+    for storage_code in REPORT_RULE_ID_BY_STORAGE_CODE:
+        if normalized == storage_code or normalized.startswith(f"{storage_code}_"):
+            return storage_code
+    return normalized
+
+
+def _normalize_agent_report_rule_id(rule_code: Any) -> str:
+    normalized = str(rule_code or "").strip()
+    if not normalized:
+        return ""
+    if normalized in REPORT_RULE_ID_BY_STORAGE_CODE.values():
+        return normalized
+    storage_code = _normalize_agent_storage_rule_code(normalized)
+    return REPORT_RULE_ID_BY_STORAGE_CODE.get(storage_code, normalized)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        if value is None:
+            return 0
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        if value is None:
+            return 0.0
+        if isinstance(value, bool):
+            return float(int(value))
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _load_agent_rules_docs() -> list[dict[str, Any]]:
+    try:
+        import yaml
+
+        if AGENT_RULES_CONFIG_PATH.exists():
+            with AGENT_RULES_CONFIG_PATH.open("r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle) or {}
+            rules = data.get("rules") if isinstance(data, dict) else None
+            if isinstance(rules, list):
+                loaded = [rule for rule in rules if isinstance(rule, dict) and rule.get("id")]
+                if loaded:
+                    return loaded
+    except Exception:
+        logger.exception("Failed to load agent rules config from %s", AGENT_RULES_CONFIG_PATH)
+
+    return [
+        {
+            "id": spec["report_rule_id"],
+            "type": spec["rule_type"],
+            "description": spec["description"],
+        }
+        for spec in LOCAL_AGENT_RULE_SPECS
+    ]
+
+
+def _load_agent_rules_doc_by_id() -> dict[str, dict[str, Any]]:
+    return {
+        str(rule.get("id") or "").strip(): rule
+        for rule in _load_agent_rules_docs()
+        if str(rule.get("id") or "").strip()
+    }
+
+
+def _normalize_strategy_results_payload(strategy_results: Any) -> dict[str, Any]:
+    if strategy_results is None:
+        return {}
+    if isinstance(strategy_results, dict):
+        if isinstance(strategy_results.get("strategy_results"), dict):
+            return strategy_results["strategy_results"]
+        if isinstance(strategy_results.get("result"), dict):
+            return strategy_results["result"]
+        if isinstance(strategy_results.get("data"), dict):
+            return strategy_results["data"]
+        return strategy_results
+    return {}
+
+
+def _extract_rules_summary(rules_evaluation: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(rules_evaluation, dict):
+        return None
+    summary = rules_evaluation.get("summary")
+    if isinstance(summary, dict) and isinstance(summary.get("rules"), list):
+        return summary
+    return None
+
+
+def _extract_evaluation_payload(rules_evaluation: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(rules_evaluation, dict):
+        return None
+    if isinstance(rules_evaluation.get("evaluation"), dict):
+        return rules_evaluation["evaluation"]
+    if "matched_counts" in rules_evaluation and "per_rule" in rules_evaluation:
+        return rules_evaluation
+    return None
+
+
+def _extract_matched_counts(rules_evaluation: dict[str, Any] | None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    summary = _extract_rules_summary(rules_evaluation)
+    if isinstance(summary, dict):
+        for row in summary.get("rules") or []:
+            if not isinstance(row, dict):
+                continue
+            report_rule_id = _normalize_agent_report_rule_id(row.get("id"))
+            if report_rule_id:
+                counts[report_rule_id] = _safe_int(row.get("matched_count"))
+        if counts:
+            return counts
+
+    evaluation = _extract_evaluation_payload(rules_evaluation)
+    matched_counts = evaluation.get("matched_counts") if isinstance(evaluation, dict) else None
+    if isinstance(matched_counts, dict):
+        for rule_id, value in matched_counts.items():
+            report_rule_id = _normalize_agent_report_rule_id(rule_id)
+            if report_rule_id:
+                counts[report_rule_id] = _safe_int(value)
+    return counts
+
+
+def _extract_example_hosts(
+    rules_evaluation: dict[str, Any] | None,
+    *,
+    rule_id: str,
+    limit: int = 3,
+) -> list[str]:
+    normalized_rule_id = _normalize_agent_report_rule_id(rule_id)
+    if not normalized_rule_id:
+        return []
+
+    hosts: list[str] = []
+    summary = _extract_rules_summary(rules_evaluation)
+    if isinstance(summary, dict):
+        for row in summary.get("rules") or []:
+            if not isinstance(row, dict):
+                continue
+            if _normalize_agent_report_rule_id(row.get("id")) != normalized_rule_id:
+                continue
+            for example in row.get("examples") or []:
+                if not isinstance(example, dict):
+                    continue
+                record = example.get("record") if isinstance(example.get("record"), dict) else {}
+                host = str(record.get("hostname") or record.get("server_name") or "").strip()
+                if host and host not in hosts:
+                    hosts.append(host)
+                if len(hosts) >= limit:
+                    return hosts
+
+    evaluation = _extract_evaluation_payload(rules_evaluation)
+    per_rule = evaluation.get("per_rule") if isinstance(evaluation, dict) else None
+    if isinstance(per_rule, dict):
+        for key, rows in per_rule.items():
+            if _normalize_agent_report_rule_id(key) != normalized_rule_id or not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                result = row.get("result") if isinstance(row.get("result"), dict) else {}
+                if not result.get("matched"):
+                    continue
+                record = row.get("record") if isinstance(row.get("record"), dict) else {}
+                host = str(record.get("hostname") or record.get("server_name") or "").strip()
+                if host and host not in hosts:
+                    hosts.append(host)
+                if len(hosts) >= limit:
+                    return hosts
+    return hosts
+
+
+def _summarize_expr(expr: Any) -> list[str]:
+    if not isinstance(expr, dict):
+        return []
+    if isinstance(expr.get("all"), list):
+        items: list[str] = []
+        for sub in expr["all"]:
+            items.extend(_summarize_expr(sub))
+        return items
+    if isinstance(expr.get("any"), list):
+        parts: list[str] = []
+        for sub in expr["any"]:
+            parts.extend(_summarize_expr(sub))
+        return [f"Any of: {', '.join(parts)}"] if parts else []
+
+    op = str(expr.get("op") or "").strip()
+    col = str(expr.get("col") or "").strip()
+    if op == "in_ci":
+        values = expr.get("values") if isinstance(expr.get("values"), list) else []
+        return [f"`{col}` is one of {values}"]
+    if op in {"eq", "eq_ci", "ne_ci", "not_eq_ci", "lt", "lte", "gt", "gte"}:
+        return [f"`{col}` {op} `{expr.get('value')}`"]
+    return [f"`{col}` {op} ..."] if col else []
+
+
+def _strategy_sections_for_rule(rule_id: str) -> list[str]:
+    normalized = _normalize_agent_report_rule_id(rule_id)
+    if normalized.startswith("uc_1_1"):
+        return ["strategy_1_azure_byol_payg"]
+    if normalized.startswith("uc_1_2"):
+        return ["strategy_2_retired_devices"]
+    if normalized.startswith("uc_3_"):
+        return ["strategy_3_rightsizing"]
+    return []
+
+
+def _collect_host_evidence_from_strategy(strategy_results: dict[str, Any]) -> dict[str, list[str]]:
+    evidence: dict[str, list[str]] = {}
+
+    def _add(section: str, line: str) -> None:
+        text = str(line or "").strip()
+        if not text:
+            return
+        evidence.setdefault(section, [])
+        if text not in evidence[section]:
+            evidence[section].append(text)
+
+    for section_key, section_value in (strategy_results or {}).items():
+        if not isinstance(section_value, dict):
+            continue
+        for bucket, rows in section_value.items():
+            if not isinstance(rows, list):
+                continue
+            bucket_key = f"{section_key}.{bucket}"
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                host = str(
+                    row.get("hostname")
+                    or row.get("server_name")
+                    or row.get("Server name")
+                    or ""
+                ).strip()
+                recommendation = str(
+                    row.get("CPU_Recommendation")
+                    or row.get("RAM_Recommendation")
+                    or row.get("Lifecycle_Risk_Reasons")
+                    or row.get("Review_Reason")
+                    or row.get("Recommendation")
+                    or row.get("recommendation")
+                    or ""
+                ).strip()
+                if host and recommendation:
+                    _add(bucket_key, f"- `{host}`: {recommendation}")
+                elif host:
+                    _add(bucket_key, f"- `{host}`")
+                elif recommendation:
+                    _add(bucket_key, f"- {recommendation}")
+
+    for key in list(evidence.keys()):
+        evidence[key] = evidence[key][:6]
+    return evidence
+
+
+def build_agent_strategy_results_payload(
+    native_context: Dict[str, Any],
+    strategy_results_override: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    rule_results = dict(native_context.get("rule_results") or {})
+    rightsizing = dict(native_context.get("rightsizing") or {})
+
+    base = {
+        "strategy_1_azure_byol_payg": {
+            "candidates": rule_results.get("azure_payg") or [],
+            "candidate_count": _safe_int(rule_results.get("azure_payg_count")),
+            "estimated_savings_eur": _safe_float(native_context.get("azure_payg_savings")),
+            "zone_breakdown": rule_results.get("payg_zone_breakdown") or {},
+        },
+        "strategy_2_retired_devices": {
+            "candidates": rule_results.get("retired_devices") or [],
+            "candidate_count": _safe_int(rule_results.get("retired_count")),
+            "estimated_savings_eur": _safe_float(native_context.get("retired_devices_savings")),
+        },
+        "strategy_3_rightsizing": {
+            "cpu_candidates": rightsizing.get("cpu_optimizations") or rightsizing.get("cpu_candidates") or [],
+            "ram_candidates": rightsizing.get("ram_optimizations") or rightsizing.get("ram_candidates") or [],
+            "crit_cpu_optimizations": rightsizing.get("crit_cpu_optimizations") or [],
+            "crit_ram_optimizations": rightsizing.get("crit_ram_optimizations") or [],
+            "lifecycle_risk_flags": rightsizing.get("lifecycle_risk_flags") or [],
+            "physical_system_flags": rightsizing.get("physical_system_flags") or [],
+            "total_vcpu_reduction": _safe_int(rightsizing.get("total_vcpu_reduction")),
+            "total_ram_reduction_gib": round(_safe_float(rightsizing.get("total_ram_reduction_gib")), 1),
+            "cpu_candidate_count": _safe_int(rightsizing.get("cpu_count")),
+            "ram_candidate_count": _safe_int(rightsizing.get("ram_count")),
+            "crit_cpu_count": _safe_int(rightsizing.get("crit_cpu_count")),
+            "crit_ram_count": _safe_int(rightsizing.get("crit_ram_count")),
+            "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
+            "physical_count": _safe_int(rightsizing.get("physical_count")),
+        },
+    }
+
+    override_payload = _normalize_strategy_results_payload(strategy_results_override)
+    if isinstance(override_payload, dict):
+        for key, value in override_payload.items():
+            if key == "strategy_3_rightsizing" and isinstance(value, dict):
+                merged = dict(base.get(key) or {})
+                merged.update(value)
+                base[key] = merged
+            elif isinstance(value, dict):
+                merged = dict(base.get(key) or {})
+                merged.update(value)
+                base[key] = merged
+            else:
+                base[key] = value
+    return base
+
+
+def _build_agent_report_summary_context(
+    native_context: Dict[str, Any],
+    strategy_results: Dict[str, Any],
+) -> Dict[str, Any]:
+    license_metrics = native_context.get("license_metrics") or {}
+    rightsizing = strategy_results.get("strategy_3_rightsizing") if isinstance(strategy_results, dict) else {}
+    return {
+        "total_demand_quantity": _safe_int(license_metrics.get("total_demand_quantity")),
+        "total_license_cost": _safe_float(license_metrics.get("total_license_cost")),
+        "azure_payg_count": _safe_int((strategy_results.get("strategy_1_azure_byol_payg") or {}).get("candidate_count")),
+        "retired_count": _safe_int((strategy_results.get("strategy_2_retired_devices") or {}).get("candidate_count")),
+        "azure_payg_savings": _safe_float(native_context.get("azure_payg_savings")),
+        "retired_devices_savings": _safe_float(native_context.get("retired_devices_savings")),
+        "cpu_count": _safe_int(rightsizing.get("cpu_candidate_count")),
+        "ram_count": _safe_int(rightsizing.get("ram_candidate_count")),
+        "crit_cpu_count": _safe_int(rightsizing.get("crit_cpu_count")),
+        "crit_ram_count": _safe_int(rightsizing.get("crit_ram_count")),
+        "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
+        "physical_count": _safe_int(rightsizing.get("physical_count")),
+        "total_vcpu_reduction": _safe_int(rightsizing.get("total_vcpu_reduction")),
+        "total_ram_reduction_gib": round(_safe_float(rightsizing.get("total_ram_reduction_gib")), 1),
+        "total_savings": _safe_float(native_context.get("total_savings")),
+    }
+
+
+def _render_local_agent_report_markdown(
+    *,
+    usecase_id: str,
+    strategy_results: Dict[str, Any],
+    rules_evaluation: Dict[str, Any],
+    summary_context: Dict[str, Any],
+    notes: Optional[str] = None,
+) -> str:
+    rules_docs = _load_agent_rules_docs()
+    rules_meta = {
+        str(rule.get("id") or "").strip(): rule
+        for rule in rules_docs
+        if str(rule.get("id") or "").strip()
+    }
+    matched_counts = _extract_matched_counts(rules_evaluation)
+    strategy_evidence = _collect_host_evidence_from_strategy(strategy_results)
+    ordered_rule_ids = [
+        str(rule.get("id") or "").strip()
+        for rule in rules_docs
+        if str(rule.get("id") or "").strip()
+    ]
+
+    lines: list[str] = ["# Agent Report", ""]
+    lines.extend(["## Executive Summary", ""])
+    lines.append(
+        f"- Estimated combined opportunity across licensing and rightsizing: **{format_currency(summary_context.get('total_savings', 0))}**."
+    )
+    lines.append(
+        f"- Licensing opportunities include **{summary_context.get('azure_payg_count', 0)}** Azure BYOL to PAYG candidates and **{summary_context.get('retired_count', 0)}** retired-but-reporting devices."
+    )
+    lines.append(
+        f"- Rightsizing opportunities include **{summary_context.get('cpu_count', 0)}** CPU candidates, **{summary_context.get('ram_count', 0)}** RAM candidates, **{summary_context.get('crit_cpu_count', 0)}** criticality-aware CPU flags, and **{summary_context.get('crit_ram_count', 0)}** criticality-aware RAM flags."
+    )
+    if summary_context.get("lifecycle_count") or summary_context.get("physical_count"):
+        lines.append(
+            f"- Guardrail review is required for **{summary_context.get('lifecycle_count', 0)}** lifecycle-risk systems and **{summary_context.get('physical_count', 0)}** physical systems before automated changes."
+        )
+    lines.append("")
+
+    lines.extend(["## Portfolio Snapshot", ""])
+    lines.append(f"- **Use case id**: `{usecase_id}`")
+    lines.append(f"- **Total demand quantity**: {summary_context.get('total_demand_quantity', 0)}")
+    lines.append(f"- **Total license cost**: {format_currency(summary_context.get('total_license_cost', 0))}")
+    lines.append(f"- **CPU reduction potential**: {summary_context.get('total_vcpu_reduction', 0)} vCPU")
+    lines.append(f"- **RAM reduction potential**: {summary_context.get('total_ram_reduction_gib', 0):.1f} GiB")
+    if notes and str(notes).strip():
+        lines.append(f"- **Notes**: {str(notes).strip()}")
+    lines.append("")
+
+    lines.extend(["## Rule Coverage", ""])
+    lines.append("| Rule id | Matched count |")
+    lines.append("|---|---:|")
+    for rule_id in ordered_rule_ids:
+        lines.append(f"| `{rule_id}` | {matched_counts.get(rule_id, 0)} |")
+    lines.append("")
+
+    lines.extend(["## Rule Results", ""])
+    for rule_id in ordered_rule_ids:
+        meta = rules_meta.get(rule_id) or {}
+        lines.append(f"### `{rule_id}`")
+        lines.append("")
+        if meta.get("description"):
+            lines.append(f"- **Purpose**: {meta['description']}")
+        if meta.get("type"):
+            lines.append(f"- **Rule type**: `{meta['type']}`")
+
+        logic_lines: list[str] = []
+        if meta.get("type") == "filter":
+            logic_lines = _summarize_expr(meta.get("when"))
+        elif meta.get("type") == "recommendation":
+            logic_lines = _summarize_expr(meta.get("applies_when"))
+            for branch in meta.get("branches") or []:
+                if not isinstance(branch, dict):
+                    continue
+                branch_id = str(branch.get("id") or "").strip()
+                branch_lines = _summarize_expr(branch.get("when")) + _summarize_expr(branch.get("candidate_when"))
+                if branch_id and branch_lines:
+                    logic_lines.append(f"Branch `{branch_id}`:")
+                    logic_lines.extend([f"  - {line}" for line in branch_lines])
+        if logic_lines:
+            lines.append("- **Rule logic (high level)**:")
+            for line in logic_lines[:12]:
+                lines.append(line if line.startswith("  - ") else f"  - {line}")
+
+        lines.append(f"- **Matched records**: {matched_counts.get(rule_id, 0)}")
+        example_hosts = _extract_example_hosts(rules_evaluation, rule_id=rule_id, limit=3)
+        if example_hosts:
+            lines.append(f"- **Example host(s)**: {', '.join([f'`{host}`' for host in example_hosts])}")
+
+        relevant_evidence: list[str] = []
+        for strategy_section in _strategy_sections_for_rule(rule_id):
+            for evidence_key, evidence_rows in strategy_evidence.items():
+                if evidence_key == strategy_section or evidence_key.startswith(f"{strategy_section}."):
+                    relevant_evidence.extend(evidence_rows)
+        if relevant_evidence:
+            lines.append("- **Evidence / recommendations**:")
+            for evidence_line in relevant_evidence[:6]:
+                lines.append(f"  {evidence_line}")
+        lines.append("")
+
+    lines.extend(["## Recommended Actions", ""])
+    lines.append("- Prioritize licensing actions with direct savings impact first: BYOL to PAYG migration and retired-device cleanup.")
+    lines.append("- Validate CPU and RAM recommendations against change windows, application owners, and current performance baselines.")
+    lines.append("- Route lifecycle-risk and physical-system findings through human review before approving rightsizing changes.")
+    lines.append("")
+
+    lines.extend(["## Risks / Caveats", ""])
+    lines.append("- Rightsizing recommendations depend on the 12-month utilization rollups and environment classification being accurate.")
+    lines.append("- Physical and critical systems should not be changed automatically without owner validation.")
+    lines.append("- Savings figures for licensing strategies are proportional estimates based on current demand and rule filters.")
+    lines.append("")
+
+    return normalize_report_content_text("\n".join(lines).strip())
+
+
+def build_live_agent_report_preview(
+    *,
+    usecase_id: str = "uc_1_2_3",
+    strategy_results_override: Optional[Dict[str, Any]] = None,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    from optimizer.services.db_analysis_service import compute_db_metrics
+
+    native_context = compute_db_metrics()
+    rule_results = native_context.get("rule_results") or {}
+    rightsizing = dict(native_context.get("rightsizing") or {})
+    strategy_results = build_agent_strategy_results_payload(
+        native_context,
+        strategy_results_override=strategy_results_override,
+    )
+
+    # Keep rightsizing aligned with any caller-provided overrides before building rule summaries.
+    merged_rightsizing = dict(rightsizing)
+    merged_rightsizing.update(strategy_results.get("strategy_3_rightsizing") or {})
+
+    rules_evaluation = _build_local_rules_evaluation(
+        rule_results=rule_results,
+        rightsizing=merged_rightsizing,
+    )
+    summary_context = _build_agent_report_summary_context(native_context, strategy_results)
+    report_markdown = _render_local_agent_report_markdown(
+        usecase_id=usecase_id,
+        strategy_results=strategy_results,
+        rules_evaluation=rules_evaluation,
+        summary_context=summary_context,
+        notes=notes,
+    )
+
+    return {
+        "native_context": native_context,
+        "strategy_results": strategy_results,
+        "rules_evaluation": rules_evaluation,
+        "summary_context": summary_context,
+        "report_markdown": report_markdown,
+    }
+
+
 def _build_local_rule_rows(
     *,
     rule_id: str,
@@ -232,66 +853,27 @@ def _build_local_rules_evaluation(
     per_rule: dict[str, list[dict[str, Any]]] = {}
     summary_rules: list[dict[str, Any]] = []
 
-    rule_specs = [
-        {
-            "rule_id": "uc_1_1",
-            "source_rows": rule_results.get("azure_payg") or [],
-            "default_reasons": [
-                "Hosted in an Azure-compatible zone and not marked as License Included.",
-            ],
-            "default_recommendation": "Review Azure BYOL to PAYG migration eligibility.",
-            "recommendation_field": None,
-        },
-        {
-            "rule_id": "uc_1_2",
-            "source_rows": rule_results.get("retired_devices") or [],
-            "default_reasons": [
-                "Device appears retired but still reports SQL-related installation data.",
-            ],
-            "default_recommendation": "Validate retirement status and decommission or reconcile the installation record.",
-            "recommendation_field": None,
-        },
-        {
-            "rule_id": "uc_3_1",
-            "source_rows": rightsizing.get("cpu_candidates") or [],
-            "default_reasons": [
-                "CPU utilisation is below the configured rightsizing threshold.",
-            ],
-            "default_recommendation": "Review CPU rightsizing recommendation.",
-            "recommendation_field": "CPU_Recommendation",
-        },
-        {
-            "rule_id": "uc_3_2",
-            "source_rows": rightsizing.get("ram_candidates") or [],
-            "default_reasons": [
-                "Memory headroom is above the configured rightsizing threshold.",
-            ],
-            "default_recommendation": "Review RAM rightsizing recommendation.",
-            "recommendation_field": "RAM_Recommendation",
-        },
-        {
-            "rule_id": "uc_3_3",
-            "source_rows": rightsizing.get("crit_cpu_optimizations") or [],
-            "default_reasons": [
-                "Criticality-aware CPU optimization requires human review before change.",
-            ],
-            "default_recommendation": "Review criticality-aware CPU recommendation.",
-            "recommendation_field": "CPU_Recommendation",
-        },
-        {
-            "rule_id": "uc_3_4",
-            "source_rows": rightsizing.get("crit_ram_optimizations") or [],
-            "default_reasons": [
-                "Criticality-aware RAM optimization requires human review before change.",
-            ],
-            "default_recommendation": "Review criticality-aware RAM recommendation.",
-            "recommendation_field": "RAM_Recommendation",
-        },
-    ]
+    source_rows_by_path = {
+        "rule_results.azure_payg": rule_results.get("azure_payg") or [],
+        "rule_results.retired_devices": rule_results.get("retired_devices") or [],
+        "rightsizing.cpu_candidates": rightsizing.get("cpu_candidates") or rightsizing.get("cpu_optimizations") or [],
+        "rightsizing.ram_candidates": rightsizing.get("ram_candidates") or rightsizing.get("ram_optimizations") or [],
+        "rightsizing.crit_cpu_optimizations": rightsizing.get("crit_cpu_optimizations") or [],
+        "rightsizing.crit_ram_optimizations": rightsizing.get("crit_ram_optimizations") or [],
+        "rightsizing.lifecycle_risk_flags": rightsizing.get("lifecycle_risk_flags") or [],
+        "rightsizing.physical_system_flags": rightsizing.get("physical_system_flags") or [],
+    }
 
-    for spec in rule_specs:
-        rows, summary = _build_local_rule_rows(**spec)
-        per_rule[spec["rule_id"]] = rows
+    for spec in LOCAL_AGENT_RULE_SPECS:
+        report_rule_id = spec["report_rule_id"]
+        rows, summary = _build_local_rule_rows(
+            rule_id=report_rule_id,
+            source_rows=source_rows_by_path.get(spec["source"]) or [],
+            default_reasons=spec["default_reasons"],
+            default_recommendation=spec["default_recommendation"],
+            recommendation_field=spec["recommendation_field"],
+        )
+        per_rule[report_rule_id] = rows
         summary_rules.append(summary)
 
     matched_counts = {rule_id: len(rows) for rule_id, rows in per_rule.items()}
@@ -320,52 +902,25 @@ def _build_local_agent_report_response(
     In-process fallback used when the external A2A server is unavailable or
     clearly points back at the local Django dev server.
     """
-    from optimizer.services.db_analysis_service import compute_db_metrics
-
-    native_context = compute_db_metrics()
-    rule_results = native_context.get("rule_results") or {}
-    license_metrics = native_context.get("license_metrics") or {}
-
-    rightsizing = dict(native_context.get("rightsizing") or {})
-    if isinstance(strategy_results, dict):
-        rs_override = strategy_results.get("strategy_3_rightsizing")
-        if isinstance(rs_override, dict):
-            rightsizing.update(rs_override)
-
-    report_context = {
-        "azure_payg_count": rule_results.get("azure_payg_count", 0),
-        "retired_count": rule_results.get("retired_count", 0),
-        "total_demand_quantity": license_metrics.get("total_demand_quantity", 0),
-        "total_license_cost": license_metrics.get("total_license_cost", 0),
-        "by_product": license_metrics.get("by_product", []),
-        "demand_row_count": license_metrics.get("demand_row_count", 0),
-    }
-
-    deterministic_md = get_fallback_report(report_context)
-    final_md = deterministic_md
-    llm_used = False
-    llm_error = None
-
-    if llm_first:
-        llm_md = generate_report_text(report_context)
-        if llm_md:
-            final_md = llm_md
-            llm_used = True
-        else:
-            llm_error = "Local fallback used deterministic report because Azure OpenAI report generation was unavailable."
-
-    rules_evaluation = _build_local_rules_evaluation(
-        rule_results=rule_results,
-        rightsizing=rightsizing,
+    preview = build_live_agent_report_preview(
+        usecase_id=usecase_id,
+        strategy_results_override=strategy_results,
+        notes=notes,
     )
+    deterministic_md = preview.get("report_markdown") or ""
+    rules_evaluation = preview.get("rules_evaluation") or {}
 
     return {
         "success": True,
         "usecase_id": usecase_id,
         "rules_evaluation": rules_evaluation,
-        "report_markdown": final_md,
-        "llm_used": llm_used,
-        "llm_error": llm_error,
+        "report_markdown": deterministic_md,
+        "llm_used": False,
+        "llm_error": (
+            "Django fallback generated a deterministic agent report based on the live DB rules and strategy outputs."
+            if llm_first
+            else None
+        ),
         "llm_meta": None,
         "deterministic_report_markdown": deterministic_md,
         "agent_endpoint_used": "django-native-fallback",
@@ -551,12 +1106,13 @@ def generate_and_store_agentic_report(
     for rule_code, row_list in per_rule.items():
         if not isinstance(row_list, list):
             continue
+        storage_rule_code = _normalize_agent_storage_rule_code(rule_code)
         # Lazy-load the LicenseRule row (may not exist for every rule id)
-        if rule_code not in rule_cache:
-            rule_cache[rule_code] = LicenseRule.objects.filter(
-                tenant=tenant, rule_code=rule_code
+        if storage_rule_code not in rule_cache:
+            rule_cache[storage_rule_code] = LicenseRule.objects.filter(
+                tenant=tenant, rule_code=storage_rule_code
             ).first()
-        rule_obj = rule_cache[rule_code]
+        rule_obj = rule_cache[storage_rule_code]
 
         for row in row_list:
             if not isinstance(row, dict):
@@ -590,14 +1146,19 @@ def generate_and_store_agentic_report(
                         rule=rule_obj,
                         defaults={
                             "use_case": rule_obj.use_case,
-                            "recommendation": recommendation_text[:255] or f"{rule_code} matched",
+                            "recommendation": recommendation_text[:255] or f"{storage_rule_code} matched",
                             "rationale": rationale_text,
                             "estimated_saving_eur": rule_obj.cost_per_core_pair_eur,
                         },
                     )
                     candidate_rows_created += 1
                 except Exception as exc_inner:
-                    logger.warning("Failed to create OptimizationCandidate for %s/%s: %s", rule_code, server_name, exc_inner)
+                    logger.warning(
+                        "Failed to create OptimizationCandidate for %s/%s: %s",
+                        storage_rule_code,
+                        server_name,
+                        exc_inner,
+                    )
 
     run.status = AgentRun.STATUS_COMPLETED
     run.report_markdown = report_md

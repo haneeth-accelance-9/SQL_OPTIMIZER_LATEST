@@ -113,7 +113,7 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center flex-shrink-0 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Executive Summary Report</h1>
-            <p class="text-sm text-slate-500 mt-1">AI-generated analysis of optimization potential and compliance risks.</p>
+            <p class="text-sm text-slate-500 mt-1">Agent-generated analysis of optimization potential, rightsizing actions, and review risks.</p>
         </div>
         <div class="flex flex-nowrap gap-3 items-center">
             <a href="{% url 'optimizer:dashboard' %}"
@@ -179,22 +179,18 @@
     <!-- ── Tab bar ────────────────────────────────────────────────────────── -->
     <div class="flex gap-2 mb-4 flex-shrink-0">
         <button type="button" class="tab-btn active px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
-                data-tab="tab-ai-report">AI Report</button>
+                data-tab="tab-agent-report">Agent Report</button>
         <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
                 data-tab="tab-agentic">
             Agentic Analysis
             {% if has_agentic_data %}<span class="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-xs font-bold">{{ agentic.candidates_total }}</span>{% endif %}
         </button>
-        {% if has_agentic_data and agentic.agent_run.report_markdown %}
-        <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
-                data-tab="tab-agent-report">Agent Report</button>
-        {% endif %}
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         TAB 1: AI Report (existing Azure OpenAI report)
+         TAB 1: Agent-generated markdown report
     ══════════════════════════════════════════════════════════════════════════ -->
-    <div id="tab-ai-report" class="tab-panel active flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8" style="border-color:#e2e8f0;">
+    <div id="tab-agent-report" class="tab-panel active flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8" style="border-color:#e2e8f0;">
         <div id="report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
     </div>
 
@@ -354,21 +350,9 @@
         {% endif %}
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════════════════
-         TAB 3: Agent-generated markdown report (stored in AgentRun.report_markdown)
-    ══════════════════════════════════════════════════════════════════════════ -->
-    {% if has_agentic_data and agentic.agent_run.report_markdown %}
-    <div id="tab-agent-report" class="tab-panel flex-1 min-h-0 border rounded-2xl bg-white overflow-y-auto shadow-sm p-4 md:p-8" style="border-color:#e2e8f0;">
-        <div id="agent-report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
-    </div>
-    {% endif %}
-
 </div><!-- /max-w-6xl -->
 
 {{ report_text|default:""|json_script:"report-text" }}
-{% if has_agentic_data and agentic.agent_run.report_markdown %}
-{{ agentic.agent_run.report_markdown|json_script:"agent-report-text" }}
-{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -402,28 +386,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    /* ── Render AI report markdown ─────────────────────────────────────── */
-    var aiEl = document.getElementById('report-text');
-    var aiRaw = '';
-    if (aiEl) try { aiRaw = JSON.parse(aiEl.textContent || '""'); } catch(e) { aiRaw = aiEl.textContent || ''; }
-    var aiContent = document.getElementById('report-content');
-    if (typeof marked !== 'undefined' && aiRaw && aiContent) {
-        aiContent.innerHTML = (marked.parse || marked)(aiRaw, { gfm: true });
-    } else if (aiContent) {
-        aiContent.textContent = aiRaw || 'No report generated or available in current context.';
-        aiContent.classList.remove('report-body');
-        aiContent.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
-    }
-
-    /* ── Render agent report markdown ──────────────────────────────────── */
-    var agEl = document.getElementById('agent-report-text');
-    if (agEl) {
-        var agRaw = '';
-        try { agRaw = JSON.parse(agEl.textContent || '""'); } catch(e) { agRaw = agEl.textContent || ''; }
-        var agContent = document.getElementById('agent-report-content');
-        if (typeof marked !== 'undefined' && agRaw && agContent) {
-            agContent.innerHTML = (marked.parse || marked)(agRaw, { gfm: true });
-        }
+    /* ── Render report markdown ────────────────────────────────────────── */
+    var reportEl = document.getElementById('report-text');
+    var reportRaw = '';
+    if (reportEl) try { reportRaw = JSON.parse(reportEl.textContent || '""'); } catch(e) { reportRaw = reportEl.textContent || ''; }
+    var reportContent = document.getElementById('report-content');
+    if (typeof marked !== 'undefined' && reportRaw && reportContent) {
+        reportContent.innerHTML = (marked.parse || marked)(reportRaw, { gfm: true });
+    } else if (reportContent) {
+        reportContent.textContent = reportRaw || 'No report generated or available in current context.';
+        reportContent.classList.remove('report-body');
+        reportContent.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
     }
 
     /* ── Export dropdown ────────────────────────────────────────────────── */

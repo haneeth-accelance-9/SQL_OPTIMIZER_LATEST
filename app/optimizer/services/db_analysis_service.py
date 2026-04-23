@@ -556,6 +556,8 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "Comments for Usage (GB)": "",
                 "Decom check": "",
                 "server_name": server.server_name or "",
+                "hosting_zone": server.hosting_zone or "",
+                "installed_status_usu": server.installed_status_usu or "",
             })
             server_records[server.id] = record
 
@@ -696,6 +698,8 @@ def compute_rightsizing_metrics() -> dict:
     # ── Column subsets for display ─────────────────────────────────────────────
     _CPU_COLS = [
         "server_name",
+        "hosting_zone",
+        "installed_status_usu",
         "is_virtual",
         "Environment",
         "Env_Type",
@@ -710,6 +714,8 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _RAM_COLS = [
         "server_name",
+        "hosting_zone",
+        "installed_status_usu",
         "is_virtual",
         "Environment",
         "Env_Type",
@@ -1210,6 +1216,26 @@ def compute_live_db_metrics() -> dict:
         prices_df if not prices_df.empty else pd.DataFrame(),
     )
 
+    # Strategy 3: run rightsizing first so we can include its savings in the totals
+    rightsizing = compute_rightsizing_metrics()
+
+    # Derive avg cost per core pair from the active LicenseRule prices
+    avg_cost_per_core_pair_eur = 0.0
+    if not prices_df.empty and "price" in prices_df.columns:
+        valid_prices = prices_df["price"].dropna()
+        if not valid_prices.empty:
+            avg_cost_per_core_pair_eur = round(float(valid_prices.mean()), 2)
+
+    rightsizing["avg_cost_per_core_pair_eur"] = avg_cost_per_core_pair_eur
+
+    rightsizing_for_savings = {
+        "total_vcpu_reduction": rightsizing.get("total_vcpu_reduction") or 0,
+        "total_ram_reduction_gib": rightsizing.get("total_ram_reduction_gib") or 0,
+        "cpu_count": rightsizing.get("cpu_count") or 0,
+        "ram_count": rightsizing.get("ram_count") or 0,
+        "avg_cost_per_core_pair_eur": avg_cost_per_core_pair_eur,
+    }
+
     context = {
         "rule_results": rule_results,
         "license_metrics": license_metrics,
@@ -1222,6 +1248,6 @@ def compute_live_db_metrics() -> dict:
         "data_source": "database",
         "data_refreshed_at": timezone.now(),
     }
-    context.update(_calculate_savings(rule_results, license_metrics))
-    context["rightsizing"] = compute_rightsizing_metrics()
+    context.update(_calculate_savings(rule_results, license_metrics, rightsizing=rightsizing_for_savings))
+    context["rightsizing"] = rightsizing
     return context

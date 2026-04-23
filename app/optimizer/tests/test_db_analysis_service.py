@@ -67,6 +67,35 @@ def test_compute_rightsizing_metrics_builds_workload_screen_metadata(monkeypatch
     assert result["ram_chart_data"][1]["recommendation_type"] == "NONPROD_RAM_Recommendation"
 
 
+def test_compute_rightsizing_metrics_retains_hosting_zone_and_installed_status_for_api(monkeypatch):
+    source_df = pd.DataFrame([
+        {
+            "server_name": "prod-sql-01",
+            "hosting_zone": "Public Cloud",
+            "installed_status_usu": "Installed",
+            "Environment": "Production",
+            "Avg_CPU_12m": 8,
+            "Peak_CPU_12m": 55,
+            "Avg_FreeMem_12m": 45,
+            "Min_FreeMem_12m": 30,
+            "Current_vCPU": 8,
+            "Current_RAM_GiB": 32,
+        },
+    ])
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service._build_rightsizing_df",
+        lambda: source_df,
+    )
+
+    result = compute_rightsizing_metrics()
+
+    assert result["cpu_optimizations"][0]["hosting_zone"] == "Public Cloud"
+    assert result["cpu_optimizations"][0]["installed_status_usu"] == "Installed"
+    assert result["ram_optimizations"][0]["hosting_zone"] == "Public Cloud"
+    assert result["ram_optimizations"][0]["installed_status_usu"] == "Installed"
+
+
 def test_build_rightsizing_sheet_export_matches_report_columns(monkeypatch):
     source_df = pd.DataFrame([
         {

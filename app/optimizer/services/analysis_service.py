@@ -31,26 +31,59 @@ def get_sheet_config() -> Dict[str, str]:
     }
 
 
-def _calculate_savings(rule_results: Dict[str, Any], license_metrics: Dict[str, Any]) -> Dict[str, Any]:
+def _calculate_savings(
+    rule_results: Dict[str, Any],
+    license_metrics: Dict[str, Any],
+    rightsizing: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
-    Calculate rule-wise, scenario-wise, and total savings.
+    Calculate rule-wise, scenario-wise, and total savings for all three strategies.
+
+    Strategy 1 – BYOL to PAYG:       total_license_cost × (payg_count / demand_qty) × 0.28
+    Strategy 2 – Retired But Reporting: total_license_cost × (retired_count / demand_qty) × 0.05
+    Strategy 3 – CPU Right-Sizing:    (vcpu_reduction / 2) × avg_cost_per_core_pair_eur
     """
     azure_payg_count = int(rule_results.get("azure_payg_count", 0) or 0)
     retired_count = int(rule_results.get("retired_count", 0) or 0)
     total_demand_quantity = int(license_metrics.get("total_demand_quantity", 0) or 0)
     total_license_cost = float(license_metrics.get("total_license_cost", 0) or 0)
 
+    # Strategy 3 inputs (zero if rightsizing data not provided)
+    rs_vcpu_reduction = 0
+    rs_avg_cost_per_core_pair = 0.0
+    rs_cpu_count = 0
+    rs_ram_count = 0
+    rs_total_ram_reduction_gib = 0.0
+    if rightsizing:
+        rs_vcpu_reduction = int(rightsizing.get("total_vcpu_reduction") or 0)
+        rs_avg_cost_per_core_pair = float(rightsizing.get("avg_cost_per_core_pair_eur") or 0)
+        rs_cpu_count = int(rightsizing.get("cpu_count") or 0)
+        rs_ram_count = int(rightsizing.get("ram_count") or 0)
+        rs_total_ram_reduction_gib = float(rightsizing.get("total_ram_reduction_gib") or 0)
+
+    # Strategy 3 savings: each core pair saved × cost per core pair
+    rightsizing_savings = round((rs_vcpu_reduction / 2) * rs_avg_cost_per_core_pair, 2) if rs_avg_cost_per_core_pair > 0 else 0.0
+
     if total_demand_quantity <= 0 or total_license_cost <= 0:
         return {
             "rule_wise_savings": {
                 "azure_payg": 0.0,
                 "retired_devices": 0.0,
+                "rightsizing": rightsizing_savings,
             },
             "scenario_wise_savings": {
                 "cloud_licensing_optimization": 0.0,
                 "inactive_asset_reclamation": 0.0,
+                "workload_rightsizing": rightsizing_savings,
             },
-            "total_savings": 0.0,
+            "rightsizing_meta": {
+                "cpu_count": rs_cpu_count,
+                "ram_count": rs_ram_count,
+                "total_vcpu_reduction": rs_vcpu_reduction,
+                "total_ram_reduction_gib": rs_total_ram_reduction_gib,
+                "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
+            },
+            "total_savings": rightsizing_savings,
         }
 
     payg_share = azure_payg_count / total_demand_quantity
@@ -62,19 +95,29 @@ def _calculate_savings(rule_results: Dict[str, Any], license_metrics: Dict[str, 
     scenario_wise_savings = {
         "cloud_licensing_optimization": azure_payg_savings,
         "inactive_asset_reclamation": retired_devices_savings,
+        "workload_rightsizing": rightsizing_savings,
     }
     total_savings = round(sum(scenario_wise_savings.values()), 2)
 
     logger.info(f"Azure PAYG savings: {azure_payg_savings}")
     logger.info(f"Retired devices savings: {retired_devices_savings}")
+    logger.info(f"Rightsizing savings: {rightsizing_savings} (vcpu_reduction={rs_vcpu_reduction}, avg_cost={rs_avg_cost_per_core_pair})")
     logger.info(f"Scenario wise savings: {scenario_wise_savings}")
     logger.info(f"Total savings: {total_savings}")
     return {
         "rule_wise_savings": {
             "azure_payg": azure_payg_savings,
             "retired_devices": retired_devices_savings,
+            "rightsizing": rightsizing_savings,
         },
         "scenario_wise_savings": scenario_wise_savings,
+        "rightsizing_meta": {
+            "cpu_count": rs_cpu_count,
+            "ram_count": rs_ram_count,
+            "total_vcpu_reduction": rs_vcpu_reduction,
+            "total_ram_reduction_gib": rs_total_ram_reduction_gib,
+            "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
+        },
         "total_savings": total_savings,
     }
 
@@ -223,11 +266,21 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
     out["total_demand_quantity"] = int(lm.get("total_demand_quantity", 0) or 0)
     out["total_license_cost"] = lm.get("total_license_cost") or 0
     out["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
-    savings = _calculate_savings(rr, lm)
+    rs_ctx = context.get("rightsizing") or {}
+    rightsizing_for_savings = {
+        "total_vcpu_reduction": rs_ctx.get("total_vcpu_reduction") or 0,
+        "total_ram_reduction_gib": rs_ctx.get("total_ram_reduction_gib") or 0,
+        "cpu_count": rs_ctx.get("cpu_count") or 0,
+        "ram_count": rs_ctx.get("ram_count") or 0,
+        "avg_cost_per_core_pair_eur": rs_ctx.get("avg_cost_per_core_pair_eur") or 0,
+    } if rs_ctx else None
+    savings = _calculate_savings(rr, lm, rightsizing=rightsizing_for_savings)
     out["rule_wise_savings"] = context.get("rule_wise_savings") or savings["rule_wise_savings"]
     out["scenario_wise_savings"] = context.get("scenario_wise_savings") or savings["scenario_wise_savings"]
+    out["rightsizing_meta"] = context.get("rightsizing_meta") or savings.get("rightsizing_meta") or {}
     out["azure_payg_savings"] = float(out["rule_wise_savings"].get("azure_payg", 0) or 0)
     out["retired_devices_savings"] = float(out["rule_wise_savings"].get("retired_devices", 0) or 0)
+    out["rightsizing_savings"] = float(out["rule_wise_savings"].get("rightsizing", 0) or 0)
     out["total_savings"] = float(context.get("total_savings", savings["total_savings"]) or 0)
     out["potential_savings"] = out["total_savings"]
     out["price_distribution"] = lm.get("price_distribution") or []

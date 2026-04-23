@@ -87,16 +87,25 @@ def test_build_local_rules_evaluation_includes_counts_and_hostnames():
         rightsizing={
             "cpu_candidates": [{"server_name": "sql-03", "CPU_Recommendation": "Reduce vCPU by ~50% -> 4"}],
             "ram_candidates": [{"server_name": "sql-04", "RAM_Recommendation": "Reduce RAM by ~25% -> 32"}],
-            "crit_cpu_optimizations": [],
-            "crit_ram_optimizations": [],
+            "crit_cpu_optimizations": [{"server_name": "sql-05", "CPU_Recommendation": "Critical review"}],
+            "crit_ram_optimizations": [{"server_name": "sql-06", "RAM_Recommendation": "Critical RAM review"}],
+            "lifecycle_risk_flags": [{"server_name": "sql-07", "Lifecycle_Risk_Reasons": "High Peak CPU (>95%)"}],
+            "physical_system_flags": [{"server_name": "sql-08", "Review_Reason": "Physical system review required"}],
         },
     )
 
     evaluation = result["evaluation"]
+    summary_rules = {row["id"]: row for row in result["summary"]["rules"]}
 
-    assert evaluation["matched_counts"]["uc_1_1"] == 1
-    assert evaluation["matched_counts"]["uc_1_2"] == 1
-    assert evaluation["matched_counts"]["uc_3_1"] == 1
-    assert evaluation["matched_counts"]["uc_3_2"] == 1
-    assert evaluation["per_rule"]["uc_1_1"][0]["record"]["hostname"] == "sql-01"
-    assert evaluation["per_rule"]["uc_1_2"][0]["record"]["server_name"] == "sql-02"
+    assert evaluation["matched_counts"]["uc_1_1_azure_byol_to_payg"] == 1
+    assert evaluation["matched_counts"]["uc_1_2_retired_device_installs"] == 1
+    assert evaluation["matched_counts"]["uc_3_1_cpu_rightsizing"] == 1
+    assert evaluation["matched_counts"]["uc_3_2_ram_rightsizing"] == 1
+    assert evaluation["matched_counts"]["uc_3_3_criticality_cpu_optimization"] == 1
+    assert evaluation["matched_counts"]["uc_3_4_criticality_ram_optimization"] == 1
+    assert evaluation["matched_counts"]["uc_3_5_lifecycle_risk_flags"] == 1
+    assert evaluation["matched_counts"]["uc_3_6_physical_system_review"] == 1
+    assert evaluation["per_rule"]["uc_1_1_azure_byol_to_payg"][0]["record"]["hostname"] == "sql-01"
+    assert evaluation["per_rule"]["uc_1_2_retired_device_installs"][0]["record"]["server_name"] == "sql-02"
+    assert summary_rules["uc_3_5_lifecycle_risk_flags"]["examples"][0]["record"]["hostname"] == "sql-07"
+    assert summary_rules["uc_3_6_physical_system_review"]["examples"][0]["record"]["hostname"] == "sql-08"

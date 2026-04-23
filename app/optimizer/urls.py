@@ -20,6 +20,10 @@ urlpatterns = [
     path("report/download/<str:format_type>/", views.report_download, name="report_download"),
     path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
     path("rightsizing/download/<str:sheet_key>/", views.download_rightsizing_sheet, name="download_rightsizing_sheet"),
+    path("api/strategy3-rightsizing/", views.api_strategy3_rightsizing, name="api_strategy3_rightsizing"),
+    # ── Summary / BI API endpoints ────────────────────────────────────────────
+    # GET  /api/savings-summary/             → all three strategies + totals (PowerBI)
+    path("api/savings-summary/", views.api_savings_summary, name="api_savings_summary"),
     # ── Agentic AI API endpoints ───────────────────────────────────────────────
     # GET  /api/agent-runs/                  → list recent agent runs
     # POST /api/agent-runs/trigger/          → trigger a new agent run

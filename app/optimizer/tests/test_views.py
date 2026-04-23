@@ -6,7 +6,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from optimizer.models import AnalysisSession, UserProfile
+from optimizer.models import AgentRun, AnalysisSession, Tenant, UserProfile
 
 
 @pytest.mark.django_db
@@ -301,6 +301,260 @@ def test_results_applies_rs3_workload_and_screen_selection(client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="api-rs3-cpu", password="secret123")
+    client.force_login(user)
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.compute_rightsizing_metrics",
+        lambda: {
+            "cpu_optimizations": [
+                {
+                    "server_name": "prod-sql-02",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Public Cloud",
+                    "installed_status_usu": "Installed",
+                    "Avg_CPU_12m": 4.1,
+                    "Peak_CPU_12m": 35.0,
+                    "Current_vCPU": 16,
+                    "Recommended_vCPU": 8,
+                    "Potential_vCPU_Reduction": 8,
+                    "CPU_Recommendation": "Reduce vCPU by ~50% -> 8",
+                    "Optimization_Type": "PROD_CPU_Optimization",
+                    "Recommendation_Type": "PROD_CPU_Recommendation",
+                },
+                {
+                    "server_name": "prod-sql-01",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Public Cloud",
+                    "installed_status_usu": "Installed",
+                    "Avg_CPU_12m": 2.5,
+                    "Peak_CPU_12m": 25.0,
+                    "Current_vCPU": 8,
+                    "Recommended_vCPU": 4,
+                    "Potential_vCPU_Reduction": 4,
+                    "CPU_Recommendation": "Reduce vCPU by ~50% -> 4",
+                    "Optimization_Type": "PROD_CPU_Optimization",
+                    "Recommendation_Type": "PROD_CPU_Recommendation",
+                },
+                {
+                    "server_name": "retired-sql-01",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Private Cloud",
+                    "installed_status_usu": "Retired",
+                    "Avg_CPU_12m": 1.0,
+                    "Peak_CPU_12m": 15.0,
+                    "Current_vCPU": 8,
+                    "Recommended_vCPU": 4,
+                    "Potential_vCPU_Reduction": 4,
+                    "CPU_Recommendation": "Reduce vCPU by ~50% -> 4",
+                    "Optimization_Type": "PROD_CPU_Optimization",
+                    "Recommendation_Type": "PROD_CPU_Recommendation",
+                },
+            ],
+            "ram_optimizations": [],
+            "cpu_candidates": [],
+            "ram_candidates": [],
+            "cpu_filter_options": [
+                "PROD_CPU_Optimization",
+                "PROD_CPU_Recommendation",
+                "NONPROD_CPU_Optimization",
+                "NONPROD_CPU_Recommendation",
+            ],
+            "ram_filter_options": [
+                "PROD_RAM_Optimization",
+                "PROD_RAM_Recommendation",
+                "NONPROD_RAM_Optimization",
+                "NONPROD_RAM_Recommendation",
+            ],
+            "workload_options": ["CPU", "RAM"],
+            "default_workload": "CPU",
+            "default_filter_by_workload": {
+                "CPU": "PROD_CPU_Optimization",
+                "RAM": "PROD_RAM_Optimization",
+            },
+            "screen_filter_options": {
+                "CPU": [
+                    "PROD_CPU_Optimization",
+                    "PROD_CPU_Recommendation",
+                    "NONPROD_CPU_Optimization",
+                    "NONPROD_CPU_Recommendation",
+                ],
+                "RAM": [
+                    "PROD_RAM_Optimization",
+                    "PROD_RAM_Recommendation",
+                    "NONPROD_RAM_Optimization",
+                    "NONPROD_RAM_Recommendation",
+                ],
+            },
+            "error": None,
+        },
+    )
+
+    response = client.get(
+        reverse("optimizer:api_strategy3_rightsizing"),
+        {
+            "workload": "CPU",
+            "screen_filter": "PROD_CPU_Optimization",
+            "hosting_zone": "Public Cloud",
+            "installed_status_usu": "Installed",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["result"]
+    assert payload["workload"] == "CPU"
+    assert payload["screen_filter"] == "PROD_CPU_Optimization"
+    assert payload["summary"] == {
+        "count": 2,
+        "prod_count": 2,
+        "nonprod_count": 0,
+        "reduction_total": 12.0,
+    }
+    assert [item["server_name"] for item in payload["items"]] == [
+        "prod-sql-02",
+        "prod-sql-01",
+    ]
+    assert payload["items"][0]["potential_vcpu_reduction"] == 8
+    assert payload["filters"] == {
+        "hosting_zone": ["Public Cloud"],
+        "installed_status_usu": ["Installed"],
+    }
+
+
+@pytest.mark.django_db
+def test_api_strategy3_rightsizing_filters_and_sorts_ram_records(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="api-rs3-ram", password="secret123")
+    client.force_login(user)
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.compute_rightsizing_metrics",
+        lambda: {
+            "cpu_optimizations": [],
+            "ram_optimizations": [
+                {
+                    "server_name": "ram-sql-02",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Private Cloud AVS",
+                    "installed_status_usu": "Installed",
+                    "Avg_FreeMem_12m": 78.9,
+                    "Min_FreeMem_12m": 63.3,
+                    "Current_RAM_GiB": 32,
+                    "Recommended_RAM_GiB": 16,
+                    "Potential_RAM_Reduction_GiB": 16,
+                    "RAM_Recommendation": "Reduce RAM by ~40-50% -> 16 GiB",
+                    "Optimization_Type": "PROD_RAM_Optimization",
+                    "Recommendation_Type": "PROD_RAM_Recommendation",
+                },
+                {
+                    "server_name": "ram-sql-01",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Private Cloud AVS",
+                    "installed_status_usu": "Installed",
+                    "Avg_FreeMem_12m": 65.8,
+                    "Min_FreeMem_12m": 45.1,
+                    "Current_RAM_GiB": 16,
+                    "Recommended_RAM_GiB": 8,
+                    "Potential_RAM_Reduction_GiB": 8,
+                    "RAM_Recommendation": "Reduce RAM by ~40-50% -> 8 GiB",
+                    "Optimization_Type": "PROD_RAM_Optimization",
+                    "Recommendation_Type": "PROD_RAM_Recommendation",
+                },
+                {
+                    "server_name": "remote-sql-01",
+                    "Environment": "Production",
+                    "Env_Type": "PROD",
+                    "hosting_zone": "Remote Site",
+                    "installed_status_usu": "Installed",
+                    "Avg_FreeMem_12m": 82.0,
+                    "Min_FreeMem_12m": 67.0,
+                    "Current_RAM_GiB": 32,
+                    "Recommended_RAM_GiB": 16,
+                    "Potential_RAM_Reduction_GiB": 16,
+                    "RAM_Recommendation": "Reduce RAM by ~40-50% -> 16 GiB",
+                    "Optimization_Type": "PROD_RAM_Optimization",
+                    "Recommendation_Type": "PROD_RAM_Recommendation",
+                },
+            ],
+            "cpu_candidates": [],
+            "ram_candidates": [],
+            "cpu_filter_options": [
+                "PROD_CPU_Optimization",
+                "PROD_CPU_Recommendation",
+                "NONPROD_CPU_Optimization",
+                "NONPROD_CPU_Recommendation",
+            ],
+            "ram_filter_options": [
+                "PROD_RAM_Optimization",
+                "PROD_RAM_Recommendation",
+                "NONPROD_RAM_Optimization",
+                "NONPROD_RAM_Recommendation",
+            ],
+            "workload_options": ["CPU", "RAM"],
+            "default_workload": "CPU",
+            "default_filter_by_workload": {
+                "CPU": "PROD_CPU_Optimization",
+                "RAM": "PROD_RAM_Optimization",
+            },
+            "screen_filter_options": {
+                "CPU": [
+                    "PROD_CPU_Optimization",
+                    "PROD_CPU_Recommendation",
+                    "NONPROD_CPU_Optimization",
+                    "NONPROD_CPU_Recommendation",
+                ],
+                "RAM": [
+                    "PROD_RAM_Optimization",
+                    "PROD_RAM_Recommendation",
+                    "NONPROD_RAM_Optimization",
+                    "NONPROD_RAM_Recommendation",
+                ],
+            },
+            "error": None,
+        },
+    )
+
+    response = client.get(
+        reverse("optimizer:api_strategy3_rightsizing"),
+        {
+            "screen_filter": "PROD_RAM_Optimization",
+            "hosting_zone": "Private Cloud AVS",
+            "installed_status_usu": "Installed",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["result"]
+    assert payload["workload"] == "RAM"
+    assert payload["screen_filter"] == "PROD_RAM_Optimization"
+    assert payload["summary"] == {
+        "count": 2,
+        "prod_count": 2,
+        "nonprod_count": 0,
+        "reduction_total": 24.0,
+    }
+    assert [item["server_name"] for item in payload["items"]] == [
+        "ram-sql-02",
+        "ram-sql-01",
+    ]
+    assert payload["items"][0]["potential_ram_reduction_gib"] == 16
+    assert [column["key"] for column in payload["columns"]] == [
+        "server_name",
+        "env_type",
+        "avg_free_mem_12m",
+        "min_free_mem_12m",
+        "current_ram_gib",
+        "recommended_ram_gib",
+        "ram_recommendation",
+    ]
+
+
+@pytest.mark.django_db
 def test_download_rightsizing_sheet_exports_selected_screen(client, monkeypatch):
     user = get_user_model().objects.create_user(username="sheetdl", password="secret123")
     client.force_login(user)
@@ -410,6 +664,31 @@ The organization manages 20568 licenses at a total annual cost of $6,504,721.08.
     assert f"BYOL to PAYG Savings: {euro}55,433.08" in response.context["report_text"]
     assert f"Retired but reporting Savings: {euro}347.88" in response.context["report_text"]
     assert "$6,504,721.08" not in response.context["report_text"]
+
+
+@pytest.mark.django_db
+def test_report_page_prefers_latest_agent_report_and_hides_ai_tab(client):
+    user = get_user_model().objects.create_user(username="agentreport", password="secret123")
+    tenant = Tenant.objects.create(name="Agent Tenant")
+    agent_report = "# Agent Report\n\n## Updated Rules\n\n- Includes Strategy 1, Strategy 2, and Strategy 3 findings."
+    AgentRun.objects.create(
+        tenant=tenant,
+        run_label="agentic-uc_1_2_3-20260423-120000",
+        triggered_by=user.username,
+        status=AgentRun.STATUS_COMPLETED,
+        report_markdown=agent_report,
+        servers_evaluated=12,
+        candidates_found=0,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("optimizer:report"))
+
+    assert response.status_code == 200
+    assert response.context["report_text"] == agent_report
+    body = response.content.decode("utf-8")
+    assert "Agent Report" in body
+    assert "AI Report" not in body
 
 
 @pytest.mark.django_db

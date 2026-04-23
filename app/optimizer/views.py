@@ -310,6 +310,35 @@ RS3_SCREEN_FILTER_OPTIONS = {
 RS3_DOWNLOAD_SHEET_KEYS = tuple(
     RS3_SCREEN_FILTER_OPTIONS["CPU"] + RS3_SCREEN_FILTER_OPTIONS["RAM"]
 )
+RS3_API_HOSTING_ZONE_OPTIONS = [
+    "Functional Site",
+    "none",
+    "Private Cloud",
+    "Private Cloud AVS",
+    "Public Cloud",
+    "Remote Site",
+]
+RS3_API_INSTALLED_STATUS_USU_OPTIONS = ["Installed", "Retired"]
+RS3_API_DEFAULT_PAGE_SIZE = 25
+RS3_API_MAX_PAGE_SIZE = 200
+RS3_API_CPU_COLUMNS = [
+    {"key": "server_name", "label": "Server Name"},
+    {"key": "env_type", "label": "Env Type"},
+    {"key": "avg_cpu_12m", "label": "Avg CPU 12m"},
+    {"key": "peak_cpu_12m", "label": "Peak CPU 12m"},
+    {"key": "current_vcpu", "label": "Current VCPU"},
+    {"key": "recommended_vcpu", "label": "Recommended VCPU"},
+    {"key": "cpu_recommendation", "label": "CPU Recommendation"},
+]
+RS3_API_RAM_COLUMNS = [
+    {"key": "server_name", "label": "Server Name"},
+    {"key": "env_type", "label": "Env Type"},
+    {"key": "avg_free_mem_12m", "label": "Avg Freemem 12m"},
+    {"key": "min_free_mem_12m", "label": "Min Freemem 12m"},
+    {"key": "current_ram_gib", "label": "Current RAM GiB"},
+    {"key": "recommended_ram_gib", "label": "Recommended RAM GiB"},
+    {"key": "ram_recommendation", "label": "RAM Recommendation"},
+]
 
 
 def _is_rs3_recommendation_filter(filter_value):
@@ -427,6 +456,154 @@ def _build_rs3_download_dataframe(rightsizing, filter_value):
         for record in filtered_records
     ]
     return pd.DataFrame(rows, columns=columns)
+
+
+def _parse_rs3_multi_value_query_param(request, param_name):
+    values = []
+    for raw_value in request.GET.getlist(param_name):
+        if raw_value is None:
+            continue
+        parts = [part.strip() for part in str(raw_value).split(",")]
+        values.extend(part for part in parts if part)
+    return values
+
+
+def _normalize_rs3_hosting_zone_value(value):
+    normalized = str(value or "").strip()
+    return normalized or "none"
+
+
+def _normalize_rs3_installed_status_value(value):
+    return str(value or "").strip()
+
+
+def _canonicalize_rs3_filter_values(values, allowed_options, normalizer):
+    allowed_map = {str(option).strip().lower(): option for option in allowed_options}
+    canonical = []
+    invalid = []
+    for value in values:
+        normalized = normalizer(value)
+        canonical_value = allowed_map.get(str(normalized).lower())
+        if canonical_value is None:
+            invalid.append(normalized)
+            continue
+        if canonical_value not in canonical:
+            canonical.append(canonical_value)
+    return canonical, invalid
+
+
+def _filter_rs3_api_records(records, hosting_zones=None, installed_statuses=None):
+    hosting_zone_filter = set(hosting_zones or [])
+    installed_status_filter = set(installed_statuses or [])
+    filtered = []
+    for record in records or []:
+        record_hosting_zone = _normalize_rs3_hosting_zone_value(record.get("hosting_zone"))
+        record_installed_status = _normalize_rs3_installed_status_value(record.get("installed_status_usu"))
+        if hosting_zone_filter and record_hosting_zone not in hosting_zone_filter:
+            continue
+        if installed_status_filter and record_installed_status not in installed_status_filter:
+            continue
+        filtered.append(record)
+    return filtered
+
+
+def _coerce_float(value):
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _get_rs3_api_sort_field(workload):
+    return "Potential_RAM_Reduction_GiB" if str(workload or "").upper() == "RAM" else "Potential_vCPU_Reduction"
+
+
+def _sort_rs3_api_records(records, workload):
+    reduction_key = _get_rs3_api_sort_field(workload)
+    current_key = "Current_RAM_GiB" if str(workload or "").upper() == "RAM" else "Current_vCPU"
+    metric_key = "Avg_FreeMem_12m" if str(workload or "").upper() == "RAM" else "Avg_CPU_12m"
+
+    return sorted(
+        records or [],
+        key=lambda record: (
+            -_coerce_float(record.get(reduction_key)),
+            -_coerce_float(record.get(current_key)),
+            -_coerce_float(record.get(metric_key)) if str(workload or "").upper() == "RAM" else _coerce_float(record.get(metric_key)),
+            str(record.get("server_name") or "").lower(),
+        ),
+    )
+
+
+def _build_rs3_api_summary(records, workload):
+    reduction_key = _get_rs3_api_sort_field(workload)
+    reduction_total = 0.0
+    for record in records or []:
+        reduction_total += _coerce_float(record.get(reduction_key))
+    return {
+        "count": len(records or []),
+        "prod_count": sum(str(record.get("Env_Type") or "") == "PROD" for record in (records or [])),
+        "nonprod_count": sum(str(record.get("Env_Type") or "") == "NON-PROD" for record in (records or [])),
+        "reduction_total": round(reduction_total, 1),
+    }
+
+
+def _get_rs3_api_page_size(request):
+    try:
+        page_size = int(request.GET.get("page_size", RS3_API_DEFAULT_PAGE_SIZE))
+    except (TypeError, ValueError):
+        page_size = RS3_API_DEFAULT_PAGE_SIZE
+    return max(1, min(page_size, RS3_API_MAX_PAGE_SIZE))
+
+
+def _get_rs3_api_columns(workload):
+    return RS3_API_RAM_COLUMNS if str(workload or "").upper() == "RAM" else RS3_API_CPU_COLUMNS
+
+
+def _serialize_rs3_api_record(record, workload):
+    serialized = {
+        "server_name": record.get("server_name"),
+        "environment": record.get("Environment"),
+        "env_type": record.get("Env_Type"),
+        "hosting_zone": _normalize_rs3_hosting_zone_value(record.get("hosting_zone")),
+        "installed_status_usu": _normalize_rs3_installed_status_value(record.get("installed_status_usu")),
+        "is_virtual": record.get("is_virtual"),
+        "optimization_type": record.get("Optimization_Type"),
+        "recommendation_type": record.get("Recommendation_Type"),
+    }
+    if str(workload or "").upper() == "RAM":
+        serialized.update({
+            "avg_free_mem_12m": record.get("Avg_FreeMem_12m"),
+            "min_free_mem_12m": record.get("Min_FreeMem_12m"),
+            "current_ram_gib": record.get("Current_RAM_GiB"),
+            "recommended_ram_gib": record.get("Recommended_RAM_GiB"),
+            "potential_ram_reduction_gib": record.get("Potential_RAM_Reduction_GiB"),
+            "ram_recommendation": record.get("RAM_Recommendation"),
+        })
+    else:
+        serialized.update({
+            "avg_cpu_12m": record.get("Avg_CPU_12m"),
+            "peak_cpu_12m": record.get("Peak_CPU_12m"),
+            "current_vcpu": record.get("Current_vCPU"),
+            "recommended_vcpu": record.get("Recommended_vCPU"),
+            "potential_vcpu_reduction": record.get("Potential_vCPU_Reduction"),
+            "cpu_recommendation": record.get("CPU_Recommendation"),
+        })
+    return _make_json_serializable(serialized)
+
+
+def _format_rs3_api_screen_label(filter_value):
+    normalized = str(filter_value or "").strip().upper()
+    mapping = {
+        "PROD_CPU_OPTIMIZATION": "PROD CPU Right-Sizing",
+        "NONPROD_CPU_OPTIMIZATION": "Nonprod CPU Right-Sizing",
+        "PROD_CPU_RECOMMENDATION": "PROD CPU Recommendation",
+        "NONPROD_CPU_RECOMMENDATION": "Nonprod CPU Recommendation",
+        "PROD_RAM_OPTIMIZATION": "PROD RAM Right-Sizing",
+        "NONPROD_RAM_OPTIMIZATION": "Nonprod RAM Right-Sizing",
+        "PROD_RAM_RECOMMENDATION": "PROD RAM Recommendation",
+        "NONPROD_RAM_RECOMMENDATION": "Nonprod RAM Recommendation",
+    }
+    return mapping.get(normalized, _format_rs3_sheet_label(filter_value))
 
 
 def _build_table_rows(records, columns):
@@ -1075,20 +1252,65 @@ def alerts(request):
     return render(request, "optimizer/alerts.html", context)
 
 
+def _build_legacy_report_markdown(context):
+    report_text = context.get("report_text")
+    if not report_text:
+        return ""
+    return build_report_markdown(
+        report_text,
+        report_context=_build_report_render_context(context),
+    )
+
+
+def _resolve_report_markdown(context, agentic=None):
+    agentic = agentic or {}
+    latest_agent_report = (
+        (agentic.get("agent_run") or {}).get("report_markdown")
+        if isinstance(agentic, dict)
+        else ""
+    )
+    if latest_agent_report:
+        return normalize_report_content_text(latest_agent_report)
+
+    try:
+        from optimizer.services.ai_report_generator import build_live_agent_report_preview
+
+        preview = build_live_agent_report_preview(usecase_id="uc_1_2_3")
+        preview_markdown = preview.get("report_markdown") or ""
+        preview_summary = preview.get("summary_context") or {}
+        has_live_signal = any(
+            [
+                preview_summary.get("total_demand_quantity"),
+                preview_summary.get("total_license_cost"),
+                preview_summary.get("total_savings"),
+                preview_summary.get("azure_payg_count"),
+                preview_summary.get("retired_count"),
+                preview_summary.get("cpu_count"),
+                preview_summary.get("ram_count"),
+                preview_summary.get("crit_cpu_count"),
+                preview_summary.get("crit_ram_count"),
+                preview_summary.get("lifecycle_count"),
+                preview_summary.get("physical_count"),
+            ]
+        )
+        if preview_markdown and has_live_signal:
+            return normalize_report_content_text(preview_markdown)
+    except Exception as exc:
+        logger.exception("Failed to build live agent report preview for /report/: %s", exc)
+
+    return _build_legacy_report_markdown(context)
+
+
 @require_GET
 @login_required
 def report_page(request):
     """Report page: live data from DB, rendered as structured markdown."""
     context = _get_db_context_for_report()
-    if context.get("report_text"):
-        context["report_text"] = build_report_markdown(
-            context["report_text"],
-            report_context=_build_report_render_context(context),
-        )
 
     # Merge in the latest agentic run data (agent report + candidates)
     from optimizer.services.db_analysis_service import get_latest_agentic_context
     agentic = get_latest_agentic_context()
+    context["report_text"] = _resolve_report_markdown(context, agentic=agentic)
     context["agentic"] = agentic
     context["has_agentic_data"] = agentic.get("has_agentic_data", False)
 
@@ -1103,7 +1325,10 @@ def report_download(request, format_type):
     if normalized_format not in ALLOWED_REPORT_FORMATS:
         return HttpResponse("Invalid format.", status=400)
     context = _get_db_context_for_report()
-    report_text = normalize_report_content_text(context.get("report_text") or "")
+    from optimizer.services.db_analysis_service import get_latest_agentic_context
+
+    report_text = _resolve_report_markdown(context, agentic=get_latest_agentic_context())
+    report_text = normalize_report_content_text(report_text or "")
     report_export_context = _build_report_render_context(context)
     generated_at = timezone.localtime()
     base_name = "sql_license_optimization_report_db"
@@ -1139,6 +1364,236 @@ def report_download(request, format_type):
 def analysis_logs(request):
     """Return all persisted analysis logs for the authenticated user."""
     return JsonResponse({"logs": get_user_analysis_logs(request.user)})
+
+
+@require_GET
+@login_required
+def api_strategy3_rightsizing(request):
+    """
+    API: Filtered Strategy 3 table data for CPU or RAM right-sizing.
+
+    GET /api/strategy3-rightsizing/
+
+    Query params:
+    - workload=CPU|RAM (optional when screen_filter is provided)
+    - screen_filter=PROD_CPU_Optimization|NONPROD_CPU_Optimization|PROD_CPU_Recommendation|...
+    - hosting_zone=Public Cloud (repeat or comma-separate for multiple values)
+    - installed_status_usu=Installed (repeat or comma-separate for multiple values)
+    - page=1
+    - page_size=25
+    """
+    from optimizer.services.db_analysis_service import compute_rightsizing_metrics
+
+    requested_screen_filter = request.GET.get("screen_filter") or request.GET.get("filter") or ""
+    requested_workload = str(request.GET.get("workload") or "").strip().upper()
+
+    if requested_workload and requested_workload not in {"CPU", "RAM"}:
+        return JsonResponse({
+            "status": "failed",
+            "error": "Invalid workload. Use CPU or RAM.",
+        }, status=400)
+
+    if requested_screen_filter:
+        workload = _get_rs3_workload_for_filter(requested_screen_filter)
+    else:
+        workload = requested_workload or "CPU"
+
+    rightsizing = compute_rightsizing_metrics()
+    filter_options = _get_rs3_filter_options(rightsizing, workload)
+    screen_filter = requested_screen_filter or _get_rs3_default_filter(rightsizing, workload)
+    if screen_filter not in filter_options:
+        return JsonResponse({
+            "status": "failed",
+            "error": f"Invalid screen_filter. Allowed values: {filter_options}",
+        }, status=400)
+
+    requested_hosting_zones = _parse_rs3_multi_value_query_param(request, "hosting_zone")
+    requested_installed_statuses = _parse_rs3_multi_value_query_param(request, "installed_status_usu")
+
+    hosting_zones, invalid_hosting_zones = _canonicalize_rs3_filter_values(
+        requested_hosting_zones,
+        RS3_API_HOSTING_ZONE_OPTIONS,
+        _normalize_rs3_hosting_zone_value,
+    )
+    installed_statuses, invalid_installed_statuses = _canonicalize_rs3_filter_values(
+        requested_installed_statuses,
+        RS3_API_INSTALLED_STATUS_USU_OPTIONS,
+        _normalize_rs3_installed_status_value,
+    )
+    if invalid_hosting_zones or invalid_installed_statuses:
+        errors = {}
+        if invalid_hosting_zones:
+            errors["hosting_zone"] = {
+                "invalid": invalid_hosting_zones,
+                "allowed": RS3_API_HOSTING_ZONE_OPTIONS,
+            }
+        if invalid_installed_statuses:
+            errors["installed_status_usu"] = {
+                "invalid": invalid_installed_statuses,
+                "allowed": RS3_API_INSTALLED_STATUS_USU_OPTIONS,
+            }
+        return JsonResponse({
+            "status": "failed",
+            "error": "Invalid filter values supplied.",
+            "details": errors,
+        }, status=400)
+
+    source_records = (
+        rightsizing.get("ram_optimizations") or rightsizing.get("ram_candidates") or []
+        if workload == "RAM"
+        else rightsizing.get("cpu_optimizations") or rightsizing.get("cpu_candidates") or []
+    )
+    screen_records = _filter_rs3_records(source_records, screen_filter)
+    filtered_records = _filter_rs3_api_records(
+        screen_records,
+        hosting_zones=hosting_zones,
+        installed_statuses=installed_statuses,
+    )
+    sorted_records = _sort_rs3_api_records(filtered_records, workload)
+
+    page = _get_page_number(request, "page")
+    page_size = _get_rs3_api_page_size(request)
+    total_records = len(sorted_records)
+    total_pages = max(1, (total_records + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paged_records = sorted_records[start:end]
+
+    return JsonResponse({
+        "request_id": str(uuid.uuid4()),
+        "status": "completed",
+        "result": {
+            "workload": workload,
+            "screen_filter": screen_filter,
+            "screen_label": _format_rs3_api_screen_label(screen_filter),
+            "columns": _get_rs3_api_columns(workload),
+            "filters": {
+                "hosting_zone": hosting_zones,
+                "installed_status_usu": installed_statuses,
+            },
+            "available_filters": {
+                "screen_filter": filter_options,
+                "hosting_zone": RS3_API_HOSTING_ZONE_OPTIONS,
+                "installed_status_usu": RS3_API_INSTALLED_STATUS_USU_OPTIONS,
+            },
+            "summary": _build_rs3_api_summary(sorted_records, workload),
+            "total": total_records,
+            "sort": {
+                "field": _get_rs3_api_sort_field(workload),
+                "order": "desc",
+            },
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_records": total_records,
+                "total_pages": total_pages,
+            },
+            "items": [
+                _serialize_rs3_api_record(record, workload)
+                for record in paged_records
+            ],
+            "error": rightsizing.get("error"),
+        },
+    })
+
+
+@require_GET
+@login_required
+def api_savings_summary(request):
+    """
+    API: Potential savings summary for all three strategies.
+
+    GET /api/savings-summary/
+
+    Response shape:
+      {
+        "request_id": str,
+        "status": "completed",
+        "result": {
+          "strategies": [
+            {
+              "id": "byol_to_payg",
+              "name": "BYOL to PAYG",
+              "candidates": int,          <- azure_payg_count
+              "label": "candidates",
+              "savings_eur": float
+            },
+            {
+              "id": "retired_but_reporting",
+              "name": "Retired But Reporting",
+              "candidates": int,          <- retired_count
+              "label": "devices",
+              "savings_eur": float
+            },
+            {
+              "id": "rightsizing",
+              "name": "CPU Right-Sizing",
+              "candidates": int,          <- cpu_count (servers eligible)
+              "label": "servers",
+              "savings_eur": float,
+              "vcpu_reduction": int,      <- total vCPUs that can be removed
+              "ram_reduction_gib": float, <- total GiB RAM that can be freed
+              "avg_cost_per_core_pair_eur": float
+            }
+          ],
+          "total_savings_eur": float,
+          "data_refreshed_at": str (ISO-8601)
+        }
+      }
+
+    Intended for PowerBI and other BI consumers. Authentication required.
+    """
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+
+    ctx = compute_live_db_metrics()
+
+    rr = ctx.get("rule_results") or {}
+    rws = ctx.get("rule_wise_savings") or {}
+    rs_meta = ctx.get("rightsizing_meta") or {}
+    rs = ctx.get("rightsizing") or {}
+
+    refreshed_at = ctx.get("data_refreshed_at")
+    refreshed_at_str = refreshed_at.isoformat() if refreshed_at else None
+
+    strategies = [
+        {
+            "id": "byol_to_payg",
+            "name": "BYOL to PAYG",
+            "candidates": int(rr.get("azure_payg_count") or 0),
+            "label": "candidates",
+            "savings_eur": float(rws.get("azure_payg") or 0),
+        },
+        {
+            "id": "retired_but_reporting",
+            "name": "Retired But Reporting",
+            "candidates": int(rr.get("retired_count") or 0),
+            "label": "devices",
+            "savings_eur": float(rws.get("retired_devices") or 0),
+        },
+        {
+            "id": "rightsizing",
+            "name": "CPU Right-Sizing",
+            "candidates": int(rs_meta.get("cpu_count") or rs.get("cpu_count") or 0),
+            "label": "servers",
+            "savings_eur": float(rws.get("rightsizing") or 0),
+            "vcpu_reduction": int(rs_meta.get("total_vcpu_reduction") or rs.get("total_vcpu_reduction") or 0),
+            "ram_reduction_gib": float(rs_meta.get("total_ram_reduction_gib") or rs.get("total_ram_reduction_gib") or 0),
+            "avg_cost_per_core_pair_eur": float(rs_meta.get("avg_cost_per_core_pair_eur") or rs.get("avg_cost_per_core_pair_eur") or 0),
+        },
+    ]
+
+    total_savings_eur = round(sum(s["savings_eur"] for s in strategies), 2)
+
+    return JsonResponse({
+        "request_id": str(uuid.uuid4()),
+        "status": "completed",
+        "result": {
+            "strategies": strategies,
+            "total_savings_eur": total_savings_eur,
+            "data_refreshed_at": refreshed_at_str,
+        },
+    })
 
 
 @require_GET
@@ -1272,8 +1727,11 @@ def api_trigger_agent_run(request):
     import json as _json
     import time
 
-    from optimizer.services.db_analysis_service import _build_installations_df, compute_rightsizing_metrics
-    from optimizer.services.ai_report_generator import generate_and_store_agentic_report
+    from optimizer.services.db_analysis_service import _build_installations_df, compute_db_metrics
+    from optimizer.services.ai_report_generator import (
+        build_agent_strategy_results_payload,
+        generate_and_store_agentic_report,
+    )
 
     # Parse optional body
     body = {}
@@ -1296,17 +1754,9 @@ def api_trigger_agent_run(request):
         logger.exception("Failed to build installation records for agent run: %s", exc)
         records = []
 
-    # Also add rightsizing data as strategy_results context
+    # Also add the strategy outputs used by the agent report.
     try:
-        rs = compute_rightsizing_metrics()
-        strategy_results = {
-            "strategy_3_rightsizing": {
-                "cpu_candidates": rs.get("cpu_optimizations") or [],
-                "ram_candidates": rs.get("ram_optimizations") or [],
-                "total_vcpu_reduction": rs.get("total_vcpu_reduction"),
-                "total_ram_reduction_gib": rs.get("total_ram_reduction_gib"),
-            }
-        }
+        strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
     except Exception:
         strategy_results = {}
 
