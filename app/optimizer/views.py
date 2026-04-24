@@ -204,10 +204,11 @@ def _get_db_context_for_report():
 
     context = compute_live_db_metrics()
 
-    # Flatten savings so _build_report_render_context can read them
+    # Flatten savings so _build_report_render_context and agent payload builder can read them
     dash = build_dashboard_context(context)
     context["azure_payg_savings"] = dash.get("azure_payg_savings", 0)
     context["retired_devices_savings"] = dash.get("retired_devices_savings", 0)
+    context["rightsizing_savings"] = dash.get("rightsizing_savings", 0)
 
     rr = context.get("rule_results", {})
     lm = context.get("license_metrics", {})
@@ -359,6 +360,7 @@ RS3_API_CPU_COLUMNS = [
     {"key": "current_vcpu", "label": "Current VCPU"},
     {"key": "recommended_vcpu", "label": "Recommended VCPU"},
     {"key": "cpu_recommendation", "label": "CPU Recommendation"},
+    {"key": "cost_savings_eur", "label": "Cost Savings Eur"},
 ]
 RS3_API_RAM_COLUMNS = [
     {"key": "server_name", "label": "Server Name"},
@@ -368,7 +370,49 @@ RS3_API_RAM_COLUMNS = [
     {"key": "current_ram_gib", "label": "Current RAM GiB"},
     {"key": "recommended_ram_gib", "label": "Recommended RAM GiB"},
     {"key": "ram_recommendation", "label": "RAM Recommendation"},
+    {"key": "cost_savings_eur", "label": "Cost Savings Eur"},
 ]
+RS3_API_CPU_SORT_FIELD_MAP = {
+    "server_name": "server_name",
+    "environment": "Environment",
+    "env_type": "Env_Type",
+    "hosting_zone": "hosting_zone",
+    "installed_status_usu": "installed_status_usu",
+    "avg_cpu_12m": "Avg_CPU_12m",
+    "peak_cpu_12m": "Peak_CPU_12m",
+    "current_vcpu": "Current_vCPU",
+    "recommended_vcpu": "Recommended_vCPU",
+    "potential_vcpu_reduction": "Potential_vCPU_Reduction",
+    "cpu_recommendation": "CPU_Recommendation",
+    "cost_savings_eur": "Cost_Savings_EUR",
+}
+RS3_API_RAM_SORT_FIELD_MAP = {
+    "server_name": "server_name",
+    "environment": "Environment",
+    "env_type": "Env_Type",
+    "hosting_zone": "hosting_zone",
+    "installed_status_usu": "installed_status_usu",
+    "avg_free_mem_12m": "Avg_FreeMem_12m",
+    "min_free_mem_12m": "Min_FreeMem_12m",
+    "current_ram_gib": "Current_RAM_GiB",
+    "recommended_ram_gib": "Recommended_RAM_GiB",
+    "potential_ram_reduction_gib": "Potential_RAM_Reduction_GiB",
+    "ram_recommendation": "RAM_Recommendation",
+    "cost_savings_eur": "Cost_Savings_EUR",
+}
+RS3_API_NUMERIC_SORT_FIELDS = {
+    "avg_cpu_12m",
+    "peak_cpu_12m",
+    "current_vcpu",
+    "recommended_vcpu",
+    "potential_vcpu_reduction",
+    "avg_free_mem_12m",
+    "min_free_mem_12m",
+    "current_ram_gib",
+    "recommended_ram_gib",
+    "potential_ram_reduction_gib",
+    "cost_savings_eur",
+}
 
 
 def _is_rs3_recommendation_filter(filter_value):
@@ -576,19 +620,39 @@ def _get_rs3_api_sort_field(workload):
     return "Potential_RAM_Reduction_GiB" if str(workload or "").upper() == "RAM" else "Potential_vCPU_Reduction"
 
 
-def _sort_rs3_api_records(records, workload):
-    reduction_key = _get_rs3_api_sort_field(workload)
-    current_key = "Current_RAM_GiB" if str(workload or "").upper() == "RAM" else "Current_vCPU"
-    metric_key = "Avg_FreeMem_12m" if str(workload or "").upper() == "RAM" else "Avg_CPU_12m"
+def _get_rs3_api_sort_field_map(workload):
+    return RS3_API_RAM_SORT_FIELD_MAP if str(workload or "").upper() == "RAM" else RS3_API_CPU_SORT_FIELD_MAP
 
+
+def _get_rs3_api_sort_params(request, workload):
+    sort_order = str(request.GET.get("sort_order") or "desc").strip().lower()
+    if sort_order not in {"asc", "desc"}:
+        sort_order = "desc"
+    requested_sort_field = str(request.GET.get("sort_field") or "").strip().lower()
+    sort_field_map = _get_rs3_api_sort_field_map(workload)
+    default_sort_field = "potential_ram_reduction_gib" if str(workload or "").upper() == "RAM" else "potential_vcpu_reduction"
+    if requested_sort_field not in sort_field_map:
+        requested_sort_field = default_sort_field
+    return requested_sort_field, sort_order
+
+
+def _get_rs3_api_sort_value(record, record_field, sort_field):
+    value = record.get(record_field)
+    if str(sort_field or "").strip().lower() in RS3_API_NUMERIC_SORT_FIELDS:
+        numeric_value = _coerce_float(value)
+        return (0, numeric_value)
+    return (1, str(value or "").lower())
+
+
+def _sort_rs3_api_records(records, workload, sort_field=None, sort_order="desc"):
+    sort_field_map = _get_rs3_api_sort_field_map(workload)
+    normalized_sort_field = str(sort_field or "").strip().lower()
+    record_field = sort_field_map.get(normalized_sort_field, _get_rs3_api_sort_field(workload))
+    reverse = str(sort_order or "desc").lower() == "desc"
     return sorted(
         records or [],
-        key=lambda record: (
-            -_coerce_float(record.get(reduction_key)),
-            -_coerce_float(record.get(current_key)),
-            -_coerce_float(record.get(metric_key)) if str(workload or "").upper() == "RAM" else _coerce_float(record.get(metric_key)),
-            str(record.get("server_name") or "").lower(),
-        ),
+        key=lambda record: (_get_rs3_api_sort_value(record, record_field, normalized_sort_field), str(record.get("server_name") or "").lower()),
+        reverse=reverse,
     )
 
 
@@ -603,6 +667,25 @@ def _build_rs3_api_summary(records, workload):
         "nonprod_count": sum(str(record.get("Env_Type") or "") == "NON-PROD" for record in (records or [])),
         "reduction_total": round(reduction_total, 1),
     }
+
+
+def _enrich_rs3_api_records_with_cost_savings(records, workload, rightsizing_meta=None):
+    rightsizing_meta = rightsizing_meta or {}
+    normalized_workload = str(workload or "").upper()
+    avg_cpu_cost = _coerce_float(rightsizing_meta.get("avg_cost_per_core_pair_eur"))
+    avg_ram_cost = _coerce_float(rightsizing_meta.get("avg_cost_per_gib_eur"))
+    enriched = []
+    for record in records or []:
+        next_record = dict(record)
+        if normalized_workload == "RAM":
+            reduction = _coerce_float(next_record.get("Potential_RAM_Reduction_GiB"))
+            savings = reduction * avg_ram_cost if avg_ram_cost > 0 else 0.0
+        else:
+            reduction = _coerce_float(next_record.get("Potential_vCPU_Reduction"))
+            savings = (reduction / 2) * avg_cpu_cost if avg_cpu_cost > 0 else 0.0
+        next_record["Cost_Savings_EUR"] = round(savings, 2)
+        enriched.append(next_record)
+    return enriched
 
 
 def _get_rs3_api_page_size(request):
@@ -636,6 +719,7 @@ def _serialize_rs3_api_record(record, workload):
             "recommended_ram_gib": record.get("Recommended_RAM_GiB"),
             "potential_ram_reduction_gib": record.get("Potential_RAM_Reduction_GiB"),
             "ram_recommendation": record.get("RAM_Recommendation"),
+            "cost_savings_eur": record.get("Cost_Savings_EUR"),
         })
     else:
         serialized.update({
@@ -645,6 +729,7 @@ def _serialize_rs3_api_record(record, workload):
             "recommended_vcpu": record.get("Recommended_vCPU"),
             "potential_vcpu_reduction": record.get("Potential_vCPU_Reduction"),
             "cpu_recommendation": record.get("CPU_Recommendation"),
+            "cost_savings_eur": record.get("Cost_Savings_EUR"),
         })
     return _make_json_serializable(serialized)
 
@@ -652,14 +737,16 @@ def _serialize_rs3_api_record(record, workload):
 def _format_rs3_api_screen_label(filter_value):
     normalized = str(filter_value or "").strip().upper()
     mapping = {
+        # Primary (new) filter keys
+        "PROD_CPU_RIGHTSIZING": "PROD CPU Right-Sizing",
+        "NONPROD_CPU_RIGHTSIZING": "Nonprod CPU Right-Sizing",
+        "PROD_RAM_RIGHTSIZING": "PROD RAM Right-Sizing",
+        "NONPROD_RAM_RIGHTSIZING": "Nonprod RAM Right-Sizing",
+        # Legacy aliases (kept for backward compatibility)
         "PROD_CPU_OPTIMIZATION": "PROD CPU Right-Sizing",
         "NONPROD_CPU_OPTIMIZATION": "Nonprod CPU Right-Sizing",
-        "PROD_CPU_RECOMMENDATION": "PROD CPU Recommendation",
-        "NONPROD_CPU_RECOMMENDATION": "Nonprod CPU Recommendation",
         "PROD_RAM_OPTIMIZATION": "PROD RAM Right-Sizing",
         "NONPROD_RAM_OPTIMIZATION": "Nonprod RAM Right-Sizing",
-        "PROD_RAM_RECOMMENDATION": "PROD RAM Recommendation",
-        "NONPROD_RAM_RECOMMENDATION": "Nonprod RAM Recommendation",
     }
     return mapping.get(normalized, _format_rs3_sheet_label(filter_value))
 
@@ -1001,6 +1088,14 @@ def results(request):
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
     cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
     ram_slice = ram_initial_records[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
+    requested_rs3_hosting_zone = str(request.GET.get("rs3_hosting_zone") or "").strip()
+    if requested_rs3_hosting_zone:
+        requested_rs3_hosting_zone = _normalize_rs3_hosting_zone_value(requested_rs3_hosting_zone)
+    if requested_rs3_hosting_zone not in RS3_API_HOSTING_ZONE_OPTIONS:
+        requested_rs3_hosting_zone = ""
+    requested_rs3_status = _normalize_rs3_installed_status_value(request.GET.get("rs3_status"))
+    if requested_rs3_status not in RS3_API_INSTALLED_STATUS_USU_OPTIONS:
+        requested_rs3_status = ""
 
     render_context.update({
         "rightsizing": rs,
@@ -1030,6 +1125,10 @@ def results(request):
         "rs3_cpu_selected_filter": cpu_initial_filter,
         "rs3_ram_filter_options": _get_rs3_filter_options(rs, "RAM"),
         "rs3_ram_selected_filter": ram_initial_filter,
+        "rs3_api_hosting_options": RS3_API_HOSTING_ZONE_OPTIONS,
+        "rs3_api_status_options": RS3_API_INSTALLED_STATUS_USU_OPTIONS,
+        "rs3_selected_hosting_zone": requested_rs3_hosting_zone,
+        "rs3_selected_status": requested_rs3_status,
         "rs3_selected_summary": rs3_summary,
         "rightsizing_cpu_data_json": cpu_full,
         "rightsizing_ram_data_json": ram_full,
@@ -1386,6 +1485,16 @@ def _build_legacy_report_markdown(context):
 
 
 def _resolve_report_markdown(context, agentic=None):
+    """
+    Resolve the best available report markdown in priority order:
+      1. Stored AgentRun.report_markdown (set after clicking "Run Agent")
+      2. Live agent preview from build_live_agent_report_preview()
+         — internally tries agent/liscence-optimizer/src/tools/report_generator.py first,
+           then falls back to Django-native renderer
+      3. Legacy fallback (Azure OpenAI text or static template) — only if step 2 completely fails
+
+    Step 2 is logged in detail; exceptions are never silently swallowed.
+    """
     agentic = agentic or {}
     latest_agent_report = (
         (agentic.get("agent_run") or {}).get("report_markdown")
@@ -1393,35 +1502,73 @@ def _resolve_report_markdown(context, agentic=None):
         else ""
     )
     if latest_agent_report:
+        logger.info("Using stored AgentRun.report_markdown for /report/.")
         return normalize_report_content_text(latest_agent_report)
 
+    # Priority 2: live agent preview (uses agent/liscence-optimizer tool or Django fallback)
+    preview_markdown = ""
     try:
         from optimizer.services.ai_report_generator import build_live_agent_report_preview
 
         preview = build_live_agent_report_preview(usecase_id="uc_1_2_3")
         preview_markdown = preview.get("report_markdown") or ""
         preview_summary = preview.get("summary_context") or {}
-        has_live_signal = any(
-            [
-                preview_summary.get("total_demand_quantity"),
-                preview_summary.get("total_license_cost"),
-                preview_summary.get("total_savings"),
+
+        # Accept the preview if the agent produced ANY text, even without live data —
+        # the agent renderer always generates structured markdown regardless of data size.
+        if preview_markdown:
+            logger.info(
+                "Using agent live preview report for /report/ (agent_payg=%s retired=%s cpu=%s ram=%s).",
                 preview_summary.get("azure_payg_count"),
                 preview_summary.get("retired_count"),
                 preview_summary.get("cpu_count"),
                 preview_summary.get("ram_count"),
-                preview_summary.get("crit_cpu_count"),
-                preview_summary.get("crit_ram_count"),
-                preview_summary.get("lifecycle_count"),
-                preview_summary.get("physical_count"),
-            ]
-        )
-        if preview_markdown and has_live_signal:
+            )
             return normalize_report_content_text(preview_markdown)
+        else:
+            logger.warning("build_live_agent_report_preview() returned empty markdown.")
     except Exception as exc:
-        logger.exception("Failed to build live agent report preview for /report/: %s", exc)
+        logger.exception(
+            "build_live_agent_report_preview() raised an exception for /report/ — "
+            "falling back to legacy report. Error: %s",
+            exc,
+        )
 
-    return _build_legacy_report_markdown(context)
+    # Priority 3: build agent-format report directly from the already-computed context
+    # (the context was built by _get_db_context_for_report which calls compute_live_db_metrics,
+    #  so the rule_results and rightsizing data are already available without extra DB queries)
+    logger.warning(
+        "build_live_agent_report_preview() failed — building agent-format report "
+        "directly from pre-computed context data (all 3 strategies)."
+    )
+    try:
+        from optimizer.services.ai_report_generator import (
+            build_agent_strategy_results_payload,
+            _build_local_rules_evaluation,
+            _build_agent_report_summary_context,
+            _render_local_agent_report_markdown,
+        )
+        strategy_results = build_agent_strategy_results_payload(context)
+        rules_evaluation = _build_local_rules_evaluation(
+            rule_results=context.get("rule_results") or {},
+            rightsizing=context.get("rightsizing") or {},
+        )
+        summary_context = _build_agent_report_summary_context(context, strategy_results)
+        md = _render_local_agent_report_markdown(
+            usecase_id="uc_1_2_3",
+            strategy_results=strategy_results,
+            rules_evaluation=rules_evaluation,
+            summary_context=summary_context,
+        )
+        if md:
+            logger.info("Agent-format report built directly from context (%d chars).", len(md))
+            return md
+    except Exception as exc2:
+        logger.exception("Direct agent-format report build from context also failed: %s", exc2)
+
+    # Absolute last resort: empty string so the template shows "No report generated"
+    logger.error("All report generation paths failed — returning empty report.")
+    return ""
 
 
 @require_GET
@@ -1502,10 +1649,12 @@ def api_strategy3_rightsizing(request):
     - screen_filter=PROD_CPU_Optimization|NONPROD_CPU_Optimization|PROD_CPU_Recommendation|...
     - hosting_zone=Public Cloud (repeat or comma-separate for multiple values)
     - installed_status_usu=Installed (repeat or comma-separate for multiple values)
+    - sort_field=server_name|avg_cpu_12m|current_ram_gib|...
+    - sort_order=asc|desc
     - page=1
     - page_size=25
     """
-    from optimizer.services.db_analysis_service import compute_rightsizing_metrics
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
 
     requested_screen_filter = request.GET.get("screen_filter") or request.GET.get("filter") or ""
     requested_workload = str(request.GET.get("workload") or "").strip().upper()
@@ -1520,8 +1669,11 @@ def api_strategy3_rightsizing(request):
         workload = _get_rs3_workload_for_filter(requested_screen_filter)
     else:
         workload = requested_workload or "CPU"
+    requested_screen_filter = _normalize_rs3_filter_value(workload, requested_screen_filter)
 
-    rightsizing = compute_rightsizing_metrics()
+    live_context = compute_live_db_metrics()
+    rightsizing = live_context.get("rightsizing") or {}
+    rightsizing_meta = live_context.get("rightsizing_meta") or {}
     filter_options = _get_rs3_filter_options(rightsizing, workload)
     screen_filter = requested_screen_filter or _get_rs3_default_filter(rightsizing, workload)
     if screen_filter not in filter_options:
@@ -1572,7 +1724,9 @@ def api_strategy3_rightsizing(request):
         hosting_zones=hosting_zones,
         installed_statuses=installed_statuses,
     )
-    sorted_records = _sort_rs3_api_records(filtered_records, workload)
+    enriched_records = _enrich_rs3_api_records_with_cost_savings(filtered_records, workload, rightsizing_meta=rightsizing_meta)
+    sort_field, sort_order = _get_rs3_api_sort_params(request, workload)
+    sorted_records = _sort_rs3_api_records(enriched_records, workload, sort_field=sort_field, sort_order=sort_order)
 
     page = _get_page_number(request, "page")
     page_size = _get_rs3_api_page_size(request)
@@ -1603,8 +1757,8 @@ def api_strategy3_rightsizing(request):
             "summary": _build_rs3_api_summary(sorted_records, workload),
             "total": total_records,
             "sort": {
-                "field": _get_rs3_api_sort_field(workload),
-                "order": "desc",
+                "field": sort_field,
+                "order": sort_order,
             },
             "pagination": {
                 "page": page,

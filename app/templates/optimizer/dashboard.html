@@ -964,11 +964,25 @@
 
             <!-- ── CPU RIGHT-SIZING ──────────────────────────────────────────── -->
             <div class="mb-4 flex justify-end">
-                <div class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                     <label for="rs3-workload-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Workload</label>
                     <select id="rs3-workload-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
                         {% for option in rs3_workload_options %}
                         <option value="{{ option }}" {% if option == rs3_selected_workload %}selected{% endif %}>{% if option == "ALL" %}Select All{% else %}{{ option }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="rs3-hosting-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting</label>
+                    <select id="rs3-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                        <option value="">All Hosting</option>
+                        {% for option in rs3_api_hosting_options %}
+                        <option value="{{ option }}" {% if rs3_selected_hosting_zone == option %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="rs3-status-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</label>
+                    <select id="rs3-status-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                        <option value="">All Status</option>
+                        {% for option in rs3_api_status_options %}
+                        <option value="{{ option }}" {% if rs3_selected_status == option %}selected{% endif %}>{{ option }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -1690,6 +1704,7 @@
 {{ rightsizing.screen_summaries|json_script:"rs3-screen-summaries" }}
 <script>
     window.rs3SavingsSummaryUrl = "{% url 'optimizer:api_savings_summary' %}";
+    window.rs3RightsizingApiUrl = "{% url 'optimizer:api_strategy3_rightsizing' %}";
 </script>
 {{ chart_specs|json_script:"chart-specs-data" }}
 {{ dq_usu_rows|json_script:"dq-usu-data" }}
@@ -2691,6 +2706,10 @@
         var rs3DefaultFilters = rs3DefaultFiltersEl ? JSON.parse(rs3DefaultFiltersEl.textContent || '{}') : {};
         var rs3State = {
             workload: rs3WorkloadFilter ? String(rs3WorkloadFilter.value || 'ALL').toLowerCase() : 'all',
+            shared: {
+                hostingZone: '',
+                installedStatus: ''
+            },
             savingsMeta: {
                 avgCostPerCorePairEur: 0,
                 avgCostPerGibEur: 0
@@ -2700,14 +2719,18 @@
                 chartData: rs3CpuChartDataEl ? JSON.parse(rs3CpuChartDataEl.textContent || '[]') : [],
                 page: rs3CpuNav ? parseInt(rs3CpuNav.getAttribute('data-current-page'), 10) : 1,
                 totalPages: rs3CpuNav ? parseInt(rs3CpuNav.getAttribute('data-total-pages'), 10) : 1,
-                filter: ''
+                filter: '',
+                sortField: 'potential_vcpu_reduction',
+                sortOrder: 'desc'
             },
             ram: {
                 data: rs3RamDataEl ? JSON.parse(rs3RamDataEl.textContent || '[]') : [],
                 chartData: rs3RamChartDataEl ? JSON.parse(rs3RamChartDataEl.textContent || '[]') : [],
                 page: rs3RamNav ? parseInt(rs3RamNav.getAttribute('data-current-page'), 10) : 1,
                 totalPages: rs3RamNav ? parseInt(rs3RamNav.getAttribute('data-total-pages'), 10) : 1,
-                filter: ''
+                filter: '',
+                sortField: 'potential_ram_reduction_gib',
+                sortOrder: 'desc'
             }
         };
         var rs3CpuRightsizingFilterMap = {
@@ -2798,6 +2821,51 @@
             if (el) el.textContent = value;
         }
 
+        function getRs3ApiFieldForColumn(type, columnName) {
+            var map = {
+                server_name: 'server_name',
+                Environment: 'environment',
+                Env_Type: 'env_type',
+                Avg_CPU_12m: 'avg_cpu_12m',
+                Peak_CPU_12m: 'peak_cpu_12m',
+                Current_vCPU: 'current_vcpu',
+                Recommended_vCPU: 'recommended_vcpu',
+                Potential_vCPU_Reduction: 'potential_vcpu_reduction',
+                CPU_Recommendation: 'cpu_recommendation',
+                Avg_FreeMem_12m: 'avg_free_mem_12m',
+                Min_FreeMem_12m: 'min_free_mem_12m',
+                Current_RAM_GiB: 'current_ram_gib',
+                Recommended_RAM_GiB: 'recommended_ram_gib',
+                Potential_RAM_Reduction_GiB: 'potential_ram_reduction_gib',
+                RAM_Recommendation: 'ram_recommendation',
+                Cost_Savings_EUR: 'cost_savings_eur'
+            };
+            return map[columnName] || '';
+        }
+
+        function mapRs3ApiItemToLocalRecord(type, item) {
+            return {
+                server_name: item.server_name,
+                Environment: item.environment,
+                Env_Type: item.env_type,
+                Avg_CPU_12m: item.avg_cpu_12m,
+                Peak_CPU_12m: item.peak_cpu_12m,
+                Current_vCPU: item.current_vcpu,
+                Recommended_vCPU: item.recommended_vcpu,
+                Potential_vCPU_Reduction: item.potential_vcpu_reduction,
+                CPU_Recommendation: item.cpu_recommendation,
+                Avg_FreeMem_12m: item.avg_free_mem_12m,
+                Min_FreeMem_12m: item.min_free_mem_12m,
+                Current_RAM_GiB: item.current_ram_gib,
+                Recommended_RAM_GiB: item.recommended_ram_gib,
+                Potential_RAM_Reduction_GiB: item.potential_ram_reduction_gib,
+                RAM_Recommendation: item.ram_recommendation,
+                Cost_Savings_EUR: item.cost_savings_eur,
+                hosting_zone: item.hosting_zone,
+                installed_status_usu: item.installed_status_usu
+            };
+        }
+
         function getRs3Columns(type, filterValue) {
             var config = rs3FilterConfig[type];
             if (type === 'cpu' && /_Rightsizing$/.test(filterValue || '')) return config.optimizationColumns;
@@ -2875,7 +2943,17 @@
             var html = '';
             for (var i = 0; i < columns.length; i++) {
                 var label = formatRs3Display(columns[i]);
-                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
+                var sortField = getRs3ApiFieldForColumn(type, columns[i]);
+                var isActive = sortField && rs3State[type].sortField === sortField;
+                var sortIndicator = '';
+                if (isActive) {
+                    sortIndicator = rs3State[type].sortOrder === 'asc' ? ' ^' : ' v';
+                }
+                if (sortField) {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50"><button type="button" class="inline-flex items-center gap-1 hover:text-slate-700" data-rs3-sort-type="' + escapeHtml(type) + '" data-rs3-sort-field="' + escapeHtml(sortField) + '">' + escapeHtml(label + sortIndicator) + '</button></th>';
+                } else {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
+                }
             }
             headRow.innerHTML = html;
         }
@@ -2961,6 +3039,59 @@
                 html += '</tr>';
             }
             tbody.innerHTML = html;
+        }
+
+        function requestRs3TableData(type, columns, fallbackRecords) {
+            var url = window.rs3RightsizingApiUrl;
+            if (!url || typeof fetch !== 'function') {
+                renderRs3TableBody(type, fallbackRecords, columns, rs3State[type].page);
+                setRs3EmptyState(type, fallbackRecords.length > 0);
+                updateRs3TotalBadge(type, fallbackRecords.length);
+                updateRs3Pagination(type, rs3State[type].page, Math.max(1, Math.ceil(fallbackRecords.length / PER_PAGE)), fallbackRecords.length);
+                return;
+            }
+
+            var requestUrl = new URL(url, window.location.origin);
+            requestUrl.searchParams.set('workload', type.toUpperCase());
+            requestUrl.searchParams.set('screen_filter', rs3State[type].filter);
+            requestUrl.searchParams.set('page', rs3State[type].page);
+            requestUrl.searchParams.set('page_size', PER_PAGE);
+            requestUrl.searchParams.set('sort_field', rs3State[type].sortField);
+            requestUrl.searchParams.set('sort_order', rs3State[type].sortOrder);
+            if (rs3State.shared.hostingZone) requestUrl.searchParams.set('hosting_zone', rs3State.shared.hostingZone);
+            if (rs3State.shared.installedStatus) requestUrl.searchParams.set('installed_status_usu', rs3State.shared.installedStatus);
+
+            fetch(requestUrl.toString(), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Failed to load right-sizing table');
+                    return response.json();
+                })
+                .then(function(payload) {
+                    var result = ((payload || {}).result) || {};
+                    var items = result.items || [];
+                    var pagination = result.pagination || {};
+                    var rows = items.map(function(item) { return mapRs3ApiItemToLocalRecord(type, item); });
+                    var totalRows = Number(pagination.total_records || rows.length || 0);
+                    var totalPages = Number(pagination.total_pages || 1);
+                    var page = Number(pagination.page || 1);
+                    rs3State[type].page = page;
+                    rs3State[type].totalPages = totalPages;
+                    renderRs3TableBody(type, rows, columns, 1);
+                    setRs3EmptyState(type, totalRows > 0);
+                    updateRs3TotalBadge(type, totalRows);
+                    updateRs3Pagination(type, page, totalPages, totalRows);
+                })
+                .catch(function() {
+                    var totalPages = Math.max(1, Math.ceil(fallbackRecords.length / PER_PAGE));
+                    renderRs3TableBody(type, fallbackRecords, columns, rs3State[type].page);
+                    setRs3EmptyState(type, fallbackRecords.length > 0);
+                    updateRs3TotalBadge(type, fallbackRecords.length);
+                    updateRs3Pagination(type, rs3State[type].page, totalPages, fallbackRecords.length);
+                });
         }
 
         function setRs3EmptyState(type, hasRows) {
@@ -3095,10 +3226,7 @@
             if (!filteredRecords.length) state.page = 1;
 
             renderRs3TableHead(type, columns);
-            renderRs3TableBody(type, filteredRecords, columns, state.page);
-            setRs3EmptyState(type, filteredRecords.length > 0);
-            updateRs3TotalBadge(type, filteredRecords.length);
-            updateRs3Pagination(type, state.page, totalPages, filteredRecords.length);
+            requestRs3TableData(type, columns, filteredRecords);
             updateRs3Summary(type, summary);
             updateRs3EmptyCopy(type);
             renderRs3Chart(type);
@@ -3111,6 +3239,10 @@
             url.searchParams.set('rs3_workload', rs3State.workload.toUpperCase());
             url.searchParams.set('rs3_filter', rs3State[selectedType] ? rs3State[selectedType].filter : '');
             url.searchParams.set('rs3_page', rs3State[selectedType] ? rs3State[selectedType].page : 1);
+            if (rs3State.shared.hostingZone) url.searchParams.set('rs3_hosting_zone', rs3State.shared.hostingZone);
+            else url.searchParams.delete('rs3_hosting_zone');
+            if (rs3State.shared.installedStatus) url.searchParams.set('rs3_status', rs3State.shared.installedStatus);
+            else url.searchParams.delete('rs3_status');
             history.replaceState(null, '', url.pathname + url.search + url.hash);
         }
 
@@ -3134,7 +3266,27 @@
             rs3State[type].filter = value;
             rs3State[type].page = 1;
             renderRs3Screen(type);
-            if (rs3State.workload === type) updateRs3Url(type);
+            if (rs3State.workload === type || rs3State.workload === 'all') updateRs3Url(type);
+        }
+
+        function onRs3SharedFilterChange() {
+            rs3State.cpu.page = 1;
+            rs3State.ram.page = 1;
+            renderRs3Screen('cpu');
+            renderRs3Screen('ram');
+            updateRs3Url(rs3State.workload);
+        }
+
+        function onRs3SortChange(type, sortField) {
+            if (rs3State[type].sortField === sortField) {
+                rs3State[type].sortOrder = rs3State[type].sortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                rs3State[type].sortField = sortField;
+                rs3State[type].sortOrder = 'asc';
+            }
+            rs3State[type].page = 1;
+            renderRs3Screen(type);
+            if (rs3State.workload === type || rs3State.workload === 'all') updateRs3Url(type);
         }
 
         function onRs3Prev(type, e) {
@@ -3142,7 +3294,7 @@
             if (rs3State[type].page <= 1) return;
             rs3State[type].page -= 1;
             renderRs3Screen(type);
-            if (rs3State.workload === type) updateRs3Url(type);
+            if (rs3State.workload === type || rs3State.workload === 'all') updateRs3Url(type);
         }
 
         function onRs3Next(type, e) {
@@ -3150,7 +3302,7 @@
             if (rs3State[type].page >= rs3State[type].totalPages) return;
             rs3State[type].page += 1;
             renderRs3Screen(type);
-            if (rs3State.workload === type) updateRs3Url(type);
+            if (rs3State.workload === type || rs3State.workload === 'all') updateRs3Url(type);
         }
 
         var r1Prev = document.getElementById('rule1-prev');
@@ -3170,6 +3322,10 @@
         var r3RamNext = document.getElementById('rs3-ram-next');
         var r3CpuFilter = document.getElementById('rs3-cpu-filter');
         var r3RamFilter = document.getElementById('rs3-ram-filter');
+        var r3HostingFilter = document.getElementById('rs3-hosting-filter');
+        var r3StatusFilter = document.getElementById('rs3-status-filter');
+        var r3CpuHeadRow = document.getElementById('rs3-cpu-head-row');
+        var r3RamHeadRow = document.getElementById('rs3-ram-head-row');
         var rule1Tbody = document.getElementById('rule1-tbody');
         var rule2Tbody = document.getElementById('rule2-tbody');
         if (r1Prev) r1Prev.addEventListener('click', onRule1Prev);
@@ -3244,6 +3400,31 @@
         } else {
             rs3State.ram.filter = normalizeRs3RamFilter(rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter);
         }
+        if (r3HostingFilter) {
+            rs3State.shared.hostingZone = String(r3HostingFilter.value || '').trim();
+            r3HostingFilter.addEventListener('change', function(e) {
+                rs3State.shared.hostingZone = String(e.target.value || '').trim();
+                onRs3SharedFilterChange();
+            });
+        }
+        if (r3StatusFilter) {
+            rs3State.shared.installedStatus = String(r3StatusFilter.value || '').trim();
+            r3StatusFilter.addEventListener('change', function(e) {
+                rs3State.shared.installedStatus = String(e.target.value || '').trim();
+                onRs3SharedFilterChange();
+            });
+        }
+        [r3CpuHeadRow, r3RamHeadRow].forEach(function(headRow) {
+            if (!headRow) return;
+            headRow.addEventListener('click', function(e) {
+                var button = e.target.closest('[data-rs3-sort-field]');
+                if (!button) return;
+                var type = button.getAttribute('data-rs3-sort-type');
+                var sortField = button.getAttribute('data-rs3-sort-field');
+                if (!type || !sortField) return;
+                onRs3SortChange(type, sortField);
+            });
+        });
         if (rs3WorkloadFilter) {
             rs3WorkloadFilter.addEventListener('change', function(e) {
                 rs3State.workload = String(e.target.value || 'ALL').toLowerCase();

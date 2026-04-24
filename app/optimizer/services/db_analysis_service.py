@@ -495,6 +495,12 @@ def compute_db_metrics() -> dict:
     }
     context.update(_calculate_savings(rule_results, license_metrics))
 
+    # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
+    rws = context.get("rule_wise_savings") or {}
+    context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
+    context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
+    context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
+
     # ── Strategy 3: CPU & RAM right-sizing ────────────────────────────────────
     context["rightsizing"] = compute_rightsizing_metrics()
 
@@ -542,7 +548,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "Cluster name": server.cluster_name or "",
                 "Criticality": server.criticality or "",
                 "Environment": server.environment or "",
-                "Hosting Zone": server.hosting_zone or "",
+                "Hosting Zone": _normalize_hosting_zone(server.hosting_zone or ""),
                 "Installed Status": server.installed_status_boones or server.installed_status_usu or "",
                 "Apps ID Mapped": server.apps_id or "",
                 "App name": server.app_name or "",
@@ -556,7 +562,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "Comments for Usage (GB)": "",
                 "Decom check": "",
                 "server_name": server.server_name or "",
-                "hosting_zone": server.hosting_zone or "",
+                "hosting_zone": _normalize_hosting_zone(server.hosting_zone or ""),
                 "installed_status_usu": server.installed_status_usu or "",
             })
             server_records[server.id] = record
@@ -602,20 +608,16 @@ def compute_rightsizing_metrics() -> dict:
     workload_options = ["CPU", "RAM"]
     default_workload = "CPU"
     default_filter_by_workload = {
-        "CPU": "PROD_CPU_Optimization",
-        "RAM": "PROD_RAM_Optimization",
+        "CPU": "PROD_CPU_Rightsizing",
+        "RAM": "PROD_RAM_Rightsizing",
     }
     cpu_filter_options = [
-        "PROD_CPU_Optimization",
-        "PROD_CPU_Recommendation",
-        "NONPROD_CPU_Optimization",
-        "NONPROD_CPU_Recommendation",
+        "PROD_CPU_Rightsizing",
+        "NONPROD_CPU_Rightsizing",
     ]
     ram_filter_options = [
-        "PROD_RAM_Optimization",
-        "PROD_RAM_Recommendation",
-        "NONPROD_RAM_Optimization",
-        "NONPROD_RAM_Recommendation",
+        "PROD_RAM_Rightsizing",
+        "NONPROD_RAM_Rightsizing",
     ]
     screen_filter_options = {
         "CPU": cpu_filter_options,
@@ -643,7 +645,10 @@ def compute_rightsizing_metrics() -> dict:
         "screen_filter_options": screen_filter_options,
         "cpu_filter_options": cpu_filter_options,
         "ram_filter_options": ram_filter_options,
-        "screen_summaries": {"CPU": {}, "RAM": {}},
+        "screen_summaries": {
+            "CPU": {k: {"count": 0, "prod_count": 0, "nonprod_count": 0, "reduction_total": 0.0} for k in cpu_filter_options},
+            "RAM": {k: {"count": 0, "prod_count": 0, "nonprod_count": 0, "reduction_total": 0.0} for k in ram_filter_options},
+        },
         "total_vcpu_reduction": 0,
         "total_ram_reduction_gib": 0.0,
         "total_current_ram_gib": 0.0,
@@ -842,16 +847,16 @@ def compute_rightsizing_metrics() -> dict:
 
     # ── PROD / NON-PROD breakdown ──────────────────────────────────────────────
     def _filter_records(records: list, filter_value: str) -> list:
+        fv = str(filter_value or "")
+        if fv.endswith("_Rightsizing"):
+            env_type = "NON-PROD" if fv.startswith("NONPROD_") else "PROD"
+            return [r for r in records if str(r.get("Env_Type") or "") == env_type]
         filter_field = (
             "Recommendation_Type"
-            if str(filter_value or "").endswith("_Recommendation")
+            if fv.endswith("_Recommendation")
             else "Optimization_Type"
         )
-        return [
-            record
-            for record in records
-            if str(record.get(filter_field) or "") == str(filter_value or "")
-        ]
+        return [r for r in records if str(r.get(filter_field) or "") == fv]
 
     def _screen_summary(records: list, filter_value: str, reduction_key: str) -> dict:
         selected = _filter_records(records, filter_value)

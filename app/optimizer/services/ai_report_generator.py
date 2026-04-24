@@ -578,6 +578,11 @@ def build_agent_strategy_results_payload(
             "crit_ram_count": _safe_int(rightsizing.get("crit_ram_count")),
             "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
             "physical_count": _safe_int(rightsizing.get("physical_count")),
+            "estimated_savings_eur": _safe_float(
+                native_context.get("rightsizing_savings")
+                or (native_context.get("rule_wise_savings") or {}).get("rightsizing")
+                or 0
+            ),
         },
     }
 
@@ -602,22 +607,37 @@ def _build_agent_report_summary_context(
     strategy_results: Dict[str, Any],
 ) -> Dict[str, Any]:
     license_metrics = native_context.get("license_metrics") or {}
-    rightsizing = strategy_results.get("strategy_3_rightsizing") if isinstance(strategy_results, dict) else {}
+    s3 = (strategy_results.get("strategy_3_rightsizing") or {}) if isinstance(strategy_results, dict) else {}
+    rightsizing_savings = _safe_float(
+        s3.get("estimated_savings_eur")
+        or native_context.get("rightsizing_savings")
+        or (native_context.get("rule_wise_savings") or {}).get("rightsizing")
+        or 0
+    )
     return {
         "total_demand_quantity": _safe_int(license_metrics.get("total_demand_quantity")),
         "total_license_cost": _safe_float(license_metrics.get("total_license_cost")),
         "azure_payg_count": _safe_int((strategy_results.get("strategy_1_azure_byol_payg") or {}).get("candidate_count")),
         "retired_count": _safe_int((strategy_results.get("strategy_2_retired_devices") or {}).get("candidate_count")),
-        "azure_payg_savings": _safe_float(native_context.get("azure_payg_savings")),
-        "retired_devices_savings": _safe_float(native_context.get("retired_devices_savings")),
-        "cpu_count": _safe_int(rightsizing.get("cpu_candidate_count")),
-        "ram_count": _safe_int(rightsizing.get("ram_candidate_count")),
-        "crit_cpu_count": _safe_int(rightsizing.get("crit_cpu_count")),
-        "crit_ram_count": _safe_int(rightsizing.get("crit_ram_count")),
-        "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
-        "physical_count": _safe_int(rightsizing.get("physical_count")),
-        "total_vcpu_reduction": _safe_int(rightsizing.get("total_vcpu_reduction")),
-        "total_ram_reduction_gib": round(_safe_float(rightsizing.get("total_ram_reduction_gib")), 1),
+        "azure_payg_savings": _safe_float(
+            (strategy_results.get("strategy_1_azure_byol_payg") or {}).get("estimated_savings_eur")
+            or native_context.get("azure_payg_savings")
+            or 0
+        ),
+        "retired_devices_savings": _safe_float(
+            (strategy_results.get("strategy_2_retired_devices") or {}).get("estimated_savings_eur")
+            or native_context.get("retired_devices_savings")
+            or 0
+        ),
+        "rightsizing_savings": rightsizing_savings,
+        "cpu_count": _safe_int(s3.get("cpu_candidate_count")),
+        "ram_count": _safe_int(s3.get("ram_candidate_count")),
+        "crit_cpu_count": _safe_int(s3.get("crit_cpu_count")),
+        "crit_ram_count": _safe_int(s3.get("crit_ram_count")),
+        "lifecycle_count": _safe_int(s3.get("lifecycle_count")),
+        "physical_count": _safe_int(s3.get("physical_count")),
+        "total_vcpu_reduction": _safe_int(s3.get("total_vcpu_reduction")),
+        "total_ram_reduction_gib": round(_safe_float(s3.get("total_ram_reduction_gib")), 1),
         "total_savings": _safe_float(native_context.get("total_savings")),
     }
 
@@ -647,17 +667,29 @@ def _render_local_agent_report_markdown(
     lines: list[str] = ["# Agent Report", ""]
     lines.extend(["## Executive Summary", ""])
     lines.append(
-        f"- Estimated combined opportunity across licensing and rightsizing: **{format_currency(summary_context.get('total_savings', 0))}**."
+        f"- Estimated combined opportunity across all three strategies: **{format_currency(summary_context.get('total_savings', 0))}**."
     )
     lines.append(
-        f"- Licensing opportunities include **{summary_context.get('azure_payg_count', 0)}** Azure BYOL to PAYG candidates and **{summary_context.get('retired_count', 0)}** retired-but-reporting devices."
+        f"- **Strategy 1 – Azure BYOL to PAYG**: **{summary_context.get('azure_payg_count', 0)}** candidates,"
+        f" estimated saving **{format_currency(summary_context.get('azure_payg_savings', 0))}**."
     )
     lines.append(
-        f"- Rightsizing opportunities include **{summary_context.get('cpu_count', 0)}** CPU candidates, **{summary_context.get('ram_count', 0)}** RAM candidates, **{summary_context.get('crit_cpu_count', 0)}** criticality-aware CPU flags, and **{summary_context.get('crit_ram_count', 0)}** criticality-aware RAM flags."
+        f"- **Strategy 2 – Retired Devices**: **{summary_context.get('retired_count', 0)}** retired-but-reporting devices,"
+        f" estimated saving **{format_currency(summary_context.get('retired_devices_savings', 0))}**."
     )
+    lines.append(
+        f"- **Strategy 3 – CPU/RAM Rightsizing**: **{summary_context.get('cpu_count', 0)}** CPU candidates,"
+        f" **{summary_context.get('ram_count', 0)}** RAM candidates,"
+        f" **{summary_context.get('total_vcpu_reduction', 0)}** vCPU reduction potential,"
+        f" estimated saving **{format_currency(summary_context.get('rightsizing_savings', 0))}**."
+    )
+    if summary_context.get("crit_cpu_count") or summary_context.get("crit_ram_count"):
+        lines.append(
+            f"- Criticality-aware flags: **{summary_context.get('crit_cpu_count', 0)}** CPU and **{summary_context.get('crit_ram_count', 0)}** RAM — require human review before change."
+        )
     if summary_context.get("lifecycle_count") or summary_context.get("physical_count"):
         lines.append(
-            f"- Guardrail review is required for **{summary_context.get('lifecycle_count', 0)}** lifecycle-risk systems and **{summary_context.get('physical_count', 0)}** physical systems before automated changes."
+            f"- Guardrail review required for **{summary_context.get('lifecycle_count', 0)}** lifecycle-risk and **{summary_context.get('physical_count', 0)}** physical systems before automated changes."
         )
     lines.append("")
 
@@ -667,6 +699,9 @@ def _render_local_agent_report_markdown(
     lines.append(f"- **Total license cost**: {format_currency(summary_context.get('total_license_cost', 0))}")
     lines.append(f"- **CPU reduction potential**: {summary_context.get('total_vcpu_reduction', 0)} vCPU")
     lines.append(f"- **RAM reduction potential**: {summary_context.get('total_ram_reduction_gib', 0):.1f} GiB")
+    lines.append(f"- **Strategy 1 savings (Azure BYOL→PAYG)**: {format_currency(summary_context.get('azure_payg_savings', 0))}")
+    lines.append(f"- **Strategy 2 savings (Retired Devices)**: {format_currency(summary_context.get('retired_devices_savings', 0))}")
+    lines.append(f"- **Strategy 3 savings (Rightsizing)**: {format_currency(summary_context.get('rightsizing_savings', 0))}")
     if notes and str(notes).strip():
         lines.append(f"- **Notes**: {str(notes).strip()}")
     lines.append("")
@@ -737,15 +772,81 @@ def _render_local_agent_report_markdown(
     return normalize_report_content_text("\n".join(lines).strip())
 
 
+def _try_agent_report_tool(
+    *,
+    usecase_id: str,
+    strategy_results: Dict[str, Any],
+    rules_evaluation: Dict[str, Any],
+    notes: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Try to call the actual agent report_generator tool from agent/liscence-optimizer/src/tools/.
+    Imports the tool directly (no HTTP), so it works even when the A2A server is not running.
+    Returns the rendered Markdown string on success, or None on any failure.
+    """
+    import json as _json
+    import sys
+    from pathlib import Path as _Path
+
+    agent_src = (
+        _Path(__file__).resolve().parents[3]
+        / "agent" / "liscence-optimizer" / "src"
+    )
+    str_path = str(agent_src)
+
+    try:
+        added = str_path not in sys.path
+        if added:
+            sys.path.insert(0, str_path)
+        try:
+            from tools.report_generator import report_generator as _agent_report_gen  # noqa: PLC0415
+        finally:
+            if added and str_path in sys.path:
+                try:
+                    sys.path.remove(str_path)
+                except ValueError:
+                    pass
+
+        result_json = _agent_report_gen(
+            usecase_id=usecase_id,
+            strategy_results_json=_json.dumps(strategy_results, default=str),
+            rules_evaluation_json=_json.dumps(rules_evaluation, default=str),
+            notes=notes,
+        )
+        result = _json.loads(result_json)
+        if result.get("success") and result.get("markdown"):
+            logger.info(
+                "Agent report_generator tool (agent/liscence-optimizer) produced %d chars of markdown.",
+                len(result["markdown"]),
+            )
+            return normalize_report_content_text(str(result["markdown"]))
+        logger.warning("Agent report_generator returned success=False or empty markdown: %s", result.get("error"))
+    except Exception as exc:
+        logger.warning(
+            "Direct agent report_generator tool call failed (%s); will use Django-native renderer.",
+            exc,
+        )
+    return None
+
+
 def build_live_agent_report_preview(
     *,
     usecase_id: str = "uc_1_2_3",
     strategy_results_override: Optional[Dict[str, Any]] = None,
     notes: Optional[str] = None,
 ) -> Dict[str, Any]:
-    from optimizer.services.db_analysis_service import compute_db_metrics
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
 
-    native_context = compute_db_metrics()
+    try:
+        native_context = compute_live_db_metrics()
+    except Exception as exc:
+        logger.warning(
+            "compute_live_db_metrics() failed in build_live_agent_report_preview (%s); "
+            "generating report with empty context.",
+            exc,
+        )
+        native_context = {}
+
     rule_results = native_context.get("rule_results") or {}
     rightsizing = dict(native_context.get("rightsizing") or {})
     strategy_results = build_agent_strategy_results_payload(
@@ -762,13 +863,25 @@ def build_live_agent_report_preview(
         rightsizing=merged_rightsizing,
     )
     summary_context = _build_agent_report_summary_context(native_context, strategy_results)
-    report_markdown = _render_local_agent_report_markdown(
+
+    # Prefer the actual agent tool (agent/liscence-optimizer/src/tools/report_generator.py)
+    # so the report format matches exactly what the A2A server would produce.
+    report_markdown = _try_agent_report_tool(
         usecase_id=usecase_id,
         strategy_results=strategy_results,
         rules_evaluation=rules_evaluation,
-        summary_context=summary_context,
         notes=notes,
     )
+    if not report_markdown:
+        # Fall back to Django-native renderer (same content, slightly different heading style)
+        logger.info("Using Django-native agent report renderer as fallback.")
+        report_markdown = _render_local_agent_report_markdown(
+            usecase_id=usecase_id,
+            strategy_results=strategy_results,
+            rules_evaluation=rules_evaluation,
+            summary_context=summary_context,
+            notes=notes,
+        )
 
     return {
         "native_context": native_context,
