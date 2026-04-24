@@ -1877,6 +1877,229 @@ def api_savings_summary(request):
 
 @require_GET
 @login_required
+def api_oracle_data(request):
+    """
+    API: USU Installations and Demand Details — MySQL and/or Oracle (Java) product families.
+
+    GET /api/usu-data/
+
+    Query params (all optional):
+      family    — "mysql" | "oracle" | "all"  (default: "all")
+      type      — "installations" | "demand" | "all"  (default: "all")
+      page      — 1-based page number  (default: 1)
+      page_size — rows per page, max 500  (default: 100)
+      hosting   — filter by NormalizedHostingZone (e.g. "Public Cloud")
+      status    — filter by install_status, installations only (e.g. "Installed", "Retired")
+
+    Response shape (family=all):
+      {
+        "request_id": str,
+        "status": "completed",
+        "family": "all",
+        "result": {
+          "mysql":  { "product_family": "MySQL",  "label": "MySQL Server Data",
+                      "installations": {...}, "demand_details": {...} },
+          "oracle": { "product_family": "Java",   "label": "Oracle Server Data",
+                      "installations": {...}, "demand_details": {...} }
+        }
+      }
+
+    Response shape (family=mysql or family=oracle):
+      {
+        "request_id": str,
+        "status": "completed",
+        "family": "mysql",          # or "oracle"
+        "product_family": "MySQL",  # or "Java"
+        "label": "MySQL Server Data",
+        "result": { "installations": {...}, "demand_details": {...} }
+      }
+    """
+    from math import ceil
+    from optimizer.models import USUInstallation, USUDemandDetail
+
+    # family key → (DB product_family value, human label)
+    FAMILY_MAP = {
+        "mysql":  ("MySQL", "MySQL Server Data"),
+        "oracle": ("Java",  "Oracle Server Data"),
+    }
+
+    # ── Parse query params ────────────────────────────────────────────────────
+    family_param = request.GET.get("family", "all").lower().strip()
+    if family_param not in ("mysql", "oracle", "all"):
+        return JsonResponse(
+            {"error": "Invalid family. Use 'mysql', 'oracle', or 'all'."},
+            status=400,
+        )
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+
+    try:
+        page_size = min(max(1, int(request.GET.get("page_size", 100))), 500)
+    except (ValueError, TypeError):
+        page_size = 100
+
+    data_type      = request.GET.get("type", "all").lower()
+    hosting_filter = request.GET.get("hosting", "").strip()
+    status_filter  = request.GET.get("status", "").strip()
+    skip = (page - 1) * page_size
+
+    def _normalize_hosting(zone):
+        z = str(zone or "").strip().lower()
+        if not z:
+            return ""
+        if "public" in z:
+            return "Public Cloud"
+        if "avs" in z or ("private" in z and "cloud" in z):
+            return "Private Cloud AVS"
+        return str(zone or "").strip()
+
+    def _fetch_installations(db_pf):
+        if data_type not in ("all", "installations"):
+            return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
+
+        qs = (
+            USUInstallation.objects
+            .filter(product_family=db_pf, server__is_active=True)
+            .select_related("server")
+            .order_by("server__server_name")
+        )
+        if status_filter:
+            qs = qs.filter(device_status__iexact=status_filter)
+
+        rows = list(qs.values(
+            "server__server_name", "server__hosting_zone", "server__environment",
+            "server__is_cloud_device", "server__cloud_provider",
+            "device_status", "no_license_required", "product_description",
+            "product_edition", "product_family", "manufacturer",
+            "inv_status_std_name", "cpu_core_count", "cpu_socket_count",
+            "topology_type", "inventory_date",
+        ))
+
+        if hosting_filter:
+            rows = [
+                r for r in rows
+                if _normalize_hosting(r["server__hosting_zone"]).lower() == hosting_filter.lower()
+            ]
+
+        total = len(rows)
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": ceil(total / page_size) if total else 0,
+            "items": [
+                {
+                    "server_name":         r["server__server_name"],
+                    "hosting_zone":        _normalize_hosting(r["server__hosting_zone"]),
+                    "environment":         r["server__environment"],
+                    "install_status":      r["device_status"],
+                    "no_license_required": r["no_license_required"],
+                    "product_description": r["product_description"],
+                    "product_edition":     r["product_edition"],
+                    "product_family":      r["product_family"],
+                    "manufacturer":        r["manufacturer"],
+                    "inv_status_std_name": r["inv_status_std_name"],
+                    "cpu_core_count":      float(r["cpu_core_count"]) if r["cpu_core_count"] is not None else None,
+                    "cpu_socket_count":    r["cpu_socket_count"],
+                    "topology_type":       r["topology_type"],
+                    "inventory_date":      r["inventory_date"].isoformat() if r["inventory_date"] else None,
+                    "is_cloud_device":     r["server__is_cloud_device"],
+                    "cloud_provider":      r["server__cloud_provider"],
+                }
+                for r in rows[skip: skip + page_size]
+            ],
+        }
+
+    def _fetch_demand(db_pf):
+        if data_type not in ("all", "demand"):
+            return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
+
+        qs = (
+            USUDemandDetail.objects
+            .filter(product_family=db_pf, server__is_active=True)
+            .select_related("server")
+            .order_by("server__server_name")
+        )
+
+        rows = list(qs.values(
+            "server__server_name", "server__hosting_zone", "server__environment",
+            "server__is_cloud_device", "server__cloud_provider",
+            "product_description", "product_edition", "product_family",
+            "manufacturer", "eff_quantity", "no_license_required",
+            "device_purpose", "cpu_core_count", "topology_type", "virt_type",
+        ))
+
+        if hosting_filter:
+            rows = [
+                r for r in rows
+                if _normalize_hosting(r["server__hosting_zone"]).lower() == hosting_filter.lower()
+            ]
+
+        total = len(rows)
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": ceil(total / page_size) if total else 0,
+            "items": [
+                {
+                    "server_name":         r["server__server_name"],
+                    "hosting_zone":        _normalize_hosting(r["server__hosting_zone"]),
+                    "environment":         r["server__environment"],
+                    "product_description": r["product_description"],
+                    "product_edition":     r["product_edition"],
+                    "product_family":      r["product_family"],
+                    "manufacturer":        r["manufacturer"],
+                    "eff_quantity":        float(r["eff_quantity"]) if r["eff_quantity"] is not None else None,
+                    "no_license_required": r["no_license_required"],
+                    "device_purpose":      r["device_purpose"],
+                    "cpu_core_count":      float(r["cpu_core_count"]) if r["cpu_core_count"] is not None else None,
+                    "topology_type":       r["topology_type"],
+                    "virt_type":           r["virt_type"],
+                    "is_cloud_device":     r["server__is_cloud_device"],
+                    "cloud_provider":      r["server__cloud_provider"],
+                }
+                for r in rows[skip: skip + page_size]
+            ],
+        }
+
+    # ── Build response ────────────────────────────────────────────────────────
+    if family_param == "all":
+        result = {}
+        for key, (db_pf, label) in FAMILY_MAP.items():
+            result[key] = {
+                "product_family": db_pf,
+                "label":          label,
+                "installations":  _fetch_installations(db_pf),
+                "demand_details": _fetch_demand(db_pf),
+            }
+        return JsonResponse({
+            "request_id": str(uuid.uuid4()),
+            "status":     "completed",
+            "family":     "all",
+            "result":     result,
+        })
+
+    # Single family
+    db_pf, label = FAMILY_MAP[family_param]
+    return JsonResponse({
+        "request_id":     str(uuid.uuid4()),
+        "status":         "completed",
+        "family":         family_param,
+        "product_family": db_pf,
+        "label":          label,
+        "result": {
+            "installations":  _fetch_installations(db_pf),
+            "demand_details": _fetch_demand(db_pf),
+        },
+    })
+
+
+@require_GET
+@login_required
 def api_agent_runs(request):
     """
     API: List recent agent runs.

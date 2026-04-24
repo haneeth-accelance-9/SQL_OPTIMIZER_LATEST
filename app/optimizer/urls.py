@@ -24,6 +24,13 @@ urlpatterns = [
     # ── Summary / BI API endpoints ────────────────────────────────────────────
     # GET  /api/savings-summary/             → all three strategies + totals (PowerBI)
     path("api/savings-summary/", views.api_savings_summary, name="api_savings_summary"),
+    # GET  /api/usu-data/                    → MySQL and/or Oracle (Java) installations + demand details
+    #      ?family=mysql|oracle|all          filter by product family (default: all)
+    #      ?type=all|installations|demand    filter by data type (default: all)
+    #      ?page=1&page_size=100             pagination (max 500)
+    #      ?hosting=Public+Cloud             filter by normalized hosting zone
+    #      ?status=Installed|Retired         filter by install status (installations only)
+    path("api/usu-data/", views.api_oracle_data, name="api_oracle_data"),
     # ── Agentic AI API endpoints ───────────────────────────────────────────────
     # GET  /api/agent-runs/                  → list recent agent runs
     # POST /api/agent-runs/trigger/          → trigger a new agent run
