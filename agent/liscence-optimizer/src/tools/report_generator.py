@@ -228,6 +228,193 @@ def _rules_doc_by_id() -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _friendly_usecase_name(usecase_id: str) -> str:
+    """
+    Translate technical usecase IDs into user-facing titles.
+    This only affects the report text (no business logic).
+    """
+    raw = str(usecase_id or "").strip()
+    if not raw:
+        return "Optimization Report"
+
+    normalized = raw.lower().replace("-", "_")
+    if normalized in {"uc_1_2_3", "uc_all", "all"}:
+        return "SQL License & Infrastructure Optimization (All Strategies)"
+
+    # Fallback for "uc_1_1", "uc_3_2", etc.
+    if normalized.startswith("uc_1"):
+        return "Cloud Licensing Optimization (Azure BYOL → PAYG, Retired Devices)"
+    if normalized.startswith("uc_2"):
+        return "Retired Devices & Data Quality Remediation"
+    if normalized.startswith("uc_3"):
+        return "Workload Right-Sizing (CPU & RAM)"
+
+    return raw
+
+
+def _friendly_rule_heading(rule_id: str, meta: dict[str, Any] | None) -> str:
+    rid = str(rule_id or "").strip()
+    desc = (meta or {}).get("description") if isinstance(meta, dict) else None
+    desc_s = str(desc or "").strip()
+    if desc_s:
+        return desc_s
+
+    # For rules present in evaluation but not in rules.base.yaml, provide friendly labels.
+    # Never show internal rule IDs in the report output.
+    normalized = rid.lower().strip()
+    fallback_map = {
+        "uc_3_3_criticality_cpu_optimization": "Criticality-aware CPU Optimization (Human Review)",
+        "uc_3_4_criticality_ram_optimization": "Criticality-aware RAM Optimization (Human Review)",
+        "uc_3_5_lifecycle_risk_flags": "Lifecycle Risk Flags (Human Review)",
+        "uc_3_6_physical_system_review": "Physical Systems Require Review",
+    }
+    if normalized in fallback_map:
+        return fallback_map[normalized]
+
+    return "Additional finding"
+
+
+def _fmt_eur(value: Any) -> str:
+    try:
+        if value is None:
+            return "€0.00"
+        x = float(value)
+    except Exception:
+        return "€0.00"
+    return f"€{x:,.2f}"
+
+
+def _strategy_overview(strategy_results: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Extract a compact per-strategy overview from the conventional payload shape:
+      strategy_1_azure_byol_payg: { candidate_count, estimated_savings_eur, ... }
+      strategy_2_retired_devices: { candidate_count, estimated_savings_eur, ... }
+      strategy_3_rightsizing:     { cpu_candidate_count, ram_candidate_count, estimated_savings_eur, ... }
+    """
+    s1 = strategy_results.get("strategy_1_azure_byol_payg") if isinstance(strategy_results, dict) else None
+    s2 = strategy_results.get("strategy_2_retired_devices") if isinstance(strategy_results, dict) else None
+    s3 = strategy_results.get("strategy_3_rightsizing") if isinstance(strategy_results, dict) else None
+
+    out: list[dict[str, Any]] = []
+    if isinstance(s1, dict):
+        out.append({
+            "name": "Strategy 1 — Azure BYOL → PAYG",
+            "candidates": _safe_int(s1.get("candidate_count")) or 0,
+            "savings_eur": s1.get("estimated_savings_eur"),
+        })
+    if isinstance(s2, dict):
+        out.append({
+            "name": "Strategy 2 — Retired Devices",
+            "candidates": _safe_int(s2.get("candidate_count")) or 0,
+            "savings_eur": s2.get("estimated_savings_eur"),
+        })
+    if isinstance(s3, dict):
+        out.append({
+            "name": "Strategy 3 — Workload Right-Sizing (CPU & RAM)",
+            "cpu_candidates": _safe_int(s3.get("cpu_candidate_count")) or 0,
+            "ram_candidates": _safe_int(s3.get("ram_candidate_count")) or 0,
+            "vcpu_reduction": _safe_int(s3.get("total_vcpu_reduction")) or 0,
+            "ram_reduction_gib": s3.get("total_ram_reduction_gib"),
+            # Accept multiple possible key names from upstream payloads
+            "savings_eur": (
+                s3.get("estimated_savings_eur")
+                if s3.get("estimated_savings_eur") is not None
+                else s3.get("rightsizing_savings_eur")
+            ),
+        })
+    return out
+
+
+def _recommendations_by_strategy(
+    strategy_results: dict[str, Any],
+    matched_counts: dict[str, int],
+) -> list[str]:
+    """
+    Descriptive recommendations per strategy + guardrails.
+    Uses only provided counts/savings; does not invent new metrics.
+    """
+    lines: list[str] = []
+
+    # Strategy 1
+    s1 = strategy_results.get("strategy_1_azure_byol_payg") if isinstance(strategy_results, dict) else None
+    s1_count = _safe_int((s1 or {}).get("candidate_count")) or matched_counts.get("uc_1_1_azure_byol_to_payg", 0)
+    s1_savings = (s1 or {}).get("estimated_savings_eur") if isinstance(s1, dict) else None
+    if s1_count:
+        lines.extend([
+            "### Strategy 1 — Azure BYOL → PAYG",
+            "",
+            f"- **What it means**: **{s1_count}** workload(s) appear eligible to move from BYOL licensing to PAYG based on hosting zone and inventory/licensing flags.",
+            "- **Why it matters**: PAYG can simplify governance and reduce operational overhead; cost impact depends on workload profile and existing entitlements.",
+            "- **Recommended next steps**:",
+            "  - Validate the candidate list with application owners and licensing stakeholders (edition, entitlement, compliance).",
+            "  - Prioritize non-PROD first; batch changes by hosting zone and application group.",
+            "  - For each candidate, compare PAYG vs BYOL under current agreements (reserved capacity / hybrid benefits / enterprise discounts).",
+        ])
+        if s1_savings is not None:
+            lines.append(f"  - Savings baseline from strategy output: **{_fmt_eur(s1_savings)}**.")
+        lines.append("")
+
+    # Strategy 2
+    s2 = strategy_results.get("strategy_2_retired_devices") if isinstance(strategy_results, dict) else None
+    s2_count = _safe_int((s2 or {}).get("candidate_count")) or matched_counts.get("uc_1_2_retired_device_installs", 0)
+    s2_savings = (s2 or {}).get("estimated_savings_eur") if isinstance(s2, dict) else None
+    if s2_count:
+        lines.extend([
+            "### Strategy 2 — Retired Devices (still reporting installs)",
+            "",
+            f"- **What it means**: **{s2_count}** device(s) are marked retired but still show installation/licensing signals.",
+            "- **Why it matters**: this is often a data-quality or decommissioning gap that can inflate demand and introduce audit risk.",
+            "- **Recommended next steps**:",
+            "  - Reconcile CMDB retirement status vs discovery data; close the loop (decommission, update status, or correct inventory).",
+            "  - Only suppress records with an auditable trail (who approved, evidence, timestamp).",
+            "  - Add a recurring control: when a device is retired, verify discovery is also retired within an agreed SLA.",
+        ])
+        if s2_savings is not None:
+            lines.append(f"  - Savings baseline from strategy output: **{_fmt_eur(s2_savings)}**.")
+        lines.append("")
+
+    # Strategy 3
+    s3 = strategy_results.get("strategy_3_rightsizing") if isinstance(strategy_results, dict) else None
+    cpu_count = _safe_int((s3 or {}).get("cpu_candidate_count")) or matched_counts.get("uc_3_1_cpu_rightsizing", 0)
+    ram_count = _safe_int((s3 or {}).get("ram_candidate_count")) or matched_counts.get("uc_3_2_ram_rightsizing", 0)
+    vcpu_red = _safe_int((s3 or {}).get("total_vcpu_reduction")) or 0
+    s3_savings = (s3 or {}).get("estimated_savings_eur") if isinstance(s3, dict) else None
+    if cpu_count or ram_count:
+        lines.extend([
+            "### Strategy 3 — Workload Right-Sizing (CPU & RAM)",
+            "",
+            f"- **What it means**: CPU candidates **{cpu_count}**, RAM candidates **{ram_count}**; potential vCPU reduction **{vcpu_red}**.",
+            "- **Why it matters**: right-sizing reduces waste, but must be gated by peaks, business criticality, and change windows.",
+            "- **Recommended next steps**:",
+            "  - Apply to non-PROD first with monitoring + rollback plans; then stage PROD changes in maintenance windows.",
+            "  - Validate the utilization inputs (fractions vs percents) and ensure peaks/minima are not incident-driven artifacts.",
+            "  - Confirm application SLOs and owner sign-off before reducing capacity.",
+        ])
+        if s3_savings is not None:
+            lines.append(f"  - Savings baseline from strategy output: **{_fmt_eur(s3_savings)}**.")
+        lines.append("")
+
+    # Guardrails if present
+    guardrails = [
+        ("uc_3_3_criticality_cpu_optimization", "Criticality-aware CPU flags"),
+        ("uc_3_4_criticality_ram_optimization", "Criticality-aware RAM flags"),
+        ("uc_3_5_lifecycle_risk_flags", "Lifecycle risk flags"),
+        ("uc_3_6_physical_system_review", "Physical system review flags"),
+    ]
+    present = [(rid, label, matched_counts.get(rid, 0)) for rid, label in guardrails if matched_counts.get(rid, 0) > 0]
+    if present:
+        lines.extend([
+            "### Guardrails (Human Review Required)",
+            "",
+            "- These findings are **not** direct “optimize now” actions — they are controls that require validation before change.",
+        ])
+        for rid, label, cnt in present:
+            _ = rid
+            lines.append(f"- **{label}**: **{cnt}** finding(s). Route to human review workflow.")
+        lines.append("")
+
+    return lines
+
 _OP_LABELS: dict[str, str] = {
     "eq": "equals",
     "eq_ci": "equals (case-insensitive)",
@@ -364,10 +551,13 @@ def _render_markdown(
     _ = instructions
 
     lines: list[str] = []
+    report_title = "IT Optimization Report"
+    usecase_title = _friendly_usecase_name(usecase_id)
+
     # Single top-level title (avoid duplication in downstream renderers)
-    lines.append(f"# IT Optimization Report")
+    lines.append(f"# {report_title}")
     lines.append("")
-    lines.append(f"## Use case: `{usecase_id}`")
+    lines.append(f"## Use case: {usecase_title}")
     lines.append("")
     lines.append(f"- **Report date**: {date.today().isoformat()}")
     lines.append("")
@@ -375,33 +565,73 @@ def _render_markdown(
     rules_meta = _rules_doc_by_id()
 
     matched_counts_map = _extract_matched_counts(rules_evaluation)
+
+    # Render all rules that exist either in rules.base.yaml OR in the evaluation payload.
+    # This ensures criticality/lifecycle/physical rules show up when the evaluator provides them.
+    all_rule_ids = sorted({*rules_meta.keys(), *matched_counts_map.keys()})
+
     matched_counts: list[tuple[str, int]] = []
-    for rid in sorted(rules_meta.keys()):
+    for rid in all_rule_ids:
         matched_counts.append((rid, matched_counts_map.get(rid, 0)))
     matched_total = sum(cnt for _, cnt in matched_counts)
 
     strategy_results = _normalize_strategy_results_payload(strategy_results)
     strategy_evidence = _collect_host_evidence_from_strategy(strategy_results or {})
+    strategy_overview = _strategy_overview(strategy_results or {})
 
     lines.append("## Executive summary")
     lines.append("")
-    if matched_counts:
-        top = sorted(matched_counts, key=lambda x: x[1], reverse=True)[:3]
-        top_text = ", ".join([f"{rid} ({cnt})" for rid, cnt in top if cnt > 0]) or "no matched rules"
-        lines.append(
-            f"- Findings generated for **{usecase_id}** using provided rule evaluation and strategy outputs. "
-            f"Top matching rules: **{top_text}**."
-        )
-    else:
-        lines.append(f"- Findings generated for **{usecase_id}** using provided strategy outputs.")
-    lines.append("- Counts reflect rule-engine matches; recommendations reflect upstream strategy outputs when provided.")
+    lines.append(
+        "- This report summarises optimization opportunities and guardrails across licensing and right-sizing strategies."
+    )
+    lines.append(
+        "- Counts reflect rule-engine matches; host-level recommendations/evidence reflect upstream strategy outputs when provided."
+    )
     if matched_counts_map:
-        lines.append(f"- Total rule matches observed: **{matched_total}**.")
+        lines.append(f"- Total rule matches observed: **{matched_total}** record(s) across **{len(matched_counts_map)}** rule(s).")
+        top = sorted(
+            [(rid, matched_counts_map.get(rid, 0)) for rid in matched_counts_map.keys()],
+            key=lambda x: x[1],
+            reverse=True,
+        )[:3]
+        top_named = []
+        for rid, cnt in top:
+            if cnt <= 0:
+                continue
+            heading = _friendly_rule_heading(rid, rules_meta.get(rid))
+            top_named.append(f"{heading}: **{cnt}**")
+        if top_named:
+            lines.append(f"- Highest-volume findings: {', '.join(top_named)}.")
     lines.append("")
 
-    lines.append("## Overview")
+    lines.append("## Portfolio snapshot")
     lines.append("")
-    lines.append(f"- **Use case id**: `{usecase_id}`")
+    if strategy_overview:
+        # First: show strategy-level KPIs when provided.
+        total_savings = 0.0
+        for row in strategy_overview:
+            try:
+                total_savings += float(row.get("savings_eur") or 0)
+            except Exception:
+                pass
+        if total_savings:
+            lines.append(f"- **Estimated combined opportunity (strategies 1–3)**: **{_fmt_eur(total_savings)}**")
+        for row in strategy_overview:
+            name = row.get("name") or "Strategy"
+            if "cpu_candidates" in row:
+                lines.append(
+                    f"- **{name}**: **{row.get('cpu_candidates', 0)}** CPU candidate(s), "
+                    f"**{row.get('ram_candidates', 0)}** RAM candidate(s), "
+                    f"**{row.get('vcpu_reduction', 0)}** vCPU reduction potential, "
+                    f"estimated saving **{_fmt_eur(row.get('savings_eur'))}**."
+                )
+            else:
+                lines.append(
+                    f"- **{name}**: **{row.get('candidates', 0)}** candidate(s), "
+                    f"estimated saving **{_fmt_eur(row.get('savings_eur'))}**."
+                )
+        lines.append("")
+
     rules_hit = sum(1 for _, cnt in matched_counts if cnt > 0)
     lines.append(f"- **Rules matched**: {rules_hit} rule(s); **total matches**: {matched_total} record(s)")
     if strategy_results:
@@ -424,27 +654,27 @@ def _render_markdown(
         lines.append(f"- **Notes**: {str(notes).strip()}")
     lines.append("")
 
-    lines.append("## Key findings")
+    lines.append("## Rule coverage")
     lines.append("")
     if matched_counts:
-        lines.append("| Rule id | Matched count |")
+        lines.append("| Rule | Matched count |")
         lines.append("|---|---:|")
         for rid, cnt in sorted(matched_counts, key=lambda x: x[0]):
-            lines.append(f"| `{rid}` | {cnt} |")
+            lines.append(f"| {_friendly_rule_heading(rid, rules_meta.get(rid))} | {cnt} |")
     else:
         lines.append("- Rule evaluation summary was not available; matched counts cannot be presented.")
     lines.append("")
 
-    lines.append("## Use case results")
+    lines.append("## Rule results")
     lines.append("")
-    # Always render one section per known rule from rules.base.yaml
-    for rid in sorted(rules_meta.keys()):
+    # Render one section per known rule (YAML + evaluation payload ids)
+    for rid in all_rule_ids:
         meta = rules_meta.get(rid, {})
         desc = meta.get("description") if isinstance(meta, dict) else None
         rtype = meta.get("type") if isinstance(meta, dict) else None
         cnt = matched_counts_map.get(rid, 0)
 
-        lines.append(f"### `{rid}`")
+        lines.append(f"### {_friendly_rule_heading(rid, meta)}")
         lines.append("")
         if desc:
             lines.append(f"- **Purpose**: {desc}")
@@ -478,12 +708,12 @@ def _render_markdown(
                 else:
                     lines.append(f"  - {ll}")
 
-        lines.append(f"- **Results**: matched **{cnt}** record(s)")
+        lines.append(f"- **Matched records**: **{cnt}**")
 
         ex_hosts = _extract_example_hosts(rules_evaluation, rule_id=rid, limit=3)
         if ex_hosts:
             lines.append(
-                f"- **Example host(s) from rule evaluation**: {', '.join([f'`{h}`' for h in ex_hosts])}"
+                f"- **Example host(s)**: {', '.join([f'`{h}`' for h in ex_hosts])}"
             )
 
         strategy_sections = _strategy_sections_for_rule(rid)
@@ -500,6 +730,15 @@ def _render_markdown(
                     lines.append(f"  {ev}")
         lines.append("")
 
+    lines.append("## Recommendations")
+    lines.append("")
+    rec_lines = _recommendations_by_strategy(strategy_results or {}, matched_counts_map)
+    if rec_lines:
+        lines.extend(rec_lines)
+    else:
+        lines.append("- Provide strategy outputs to generate tailored recommendations per use case.")
+        lines.append("")
+
     if strategy_evidence:
         lines.append("## Evidence from strategy outputs")
         lines.append("")
@@ -509,16 +748,6 @@ def _render_markdown(
             for ev in strategy_evidence[section]:
                 lines.append(ev)
             lines.append("")
-
-    lines.append("## Recommended actions")
-    lines.append("")
-    if strategy_evidence:
-        lines.append("- Prioritize hosts with explicit rightsizing / licensing actions surfaced in strategy outputs.")
-        lines.append("- Validate change windows and performance baselines before applying reductions (CPU/RAM).")
-        lines.append("- For licensing actions, confirm entitlement constraints and target hosting policy (BYOL vs PAYG).")
-    else:
-        lines.append("- Enrich strategy outputs to surface host-level recommendations (host, action, rationale).")
-    lines.append("")
 
     lines.append("## Risks / caveats")
     lines.append("")

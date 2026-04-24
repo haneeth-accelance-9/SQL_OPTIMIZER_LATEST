@@ -269,13 +269,25 @@ GRAFANA_SNAPSHOT_RETENTION_DAYS = int(
 # Remove    : python manage.py crontab remove
 # Show      : python manage.py crontab show
 CRONJOBS = [
-    # ── USU data sync — every Monday at 02:00 ─────────────────────────────────
+    # ── USU MySQL data sync — every Monday at 02:00 ───────────────────────────
+    # Cron function name: fetch_usu_data
     (
         "0 2 * * 1",
         "django.core.management.call_command",
         ["fetch_usu_data"],
         {},
         ">> " + str(BASE_DIR / "logs" / "usu_sync.log") + " 2>&1",
+    ),
+    # ── USU Java/Oracle data sync — every Tuesday at 02:30 ───────────────────
+    # Cron function name: fetch_java_usu_data
+    # product_family=Java → Oracle Server Data (~1 230 installations + ~1 230 demand records)
+    # Offset by 30 min from MySQL sync to avoid DB lock contention.
+    (
+        "30 2 * * 2",
+        "django.core.management.call_command",
+        ["fetch_java_usu_data"],
+        {},
+        ">> " + str(BASE_DIR / "logs" / "usu_java_sync.log") + " 2>&1",
     ),
     # ── Grafana metrics fetch — every hour at minute 0 ───────────────────────
     # Pulls the last 2 h of Prometheus metrics (5-min step) each run.
