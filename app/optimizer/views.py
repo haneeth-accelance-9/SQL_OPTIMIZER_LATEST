@@ -119,7 +119,7 @@ def _get_or_create_user_profile(user):
 
 def _build_post_login_redirect_url() -> str:
     """Return the default authenticated landing page for login flows."""
-    return f"{reverse('optimizer:results')}?{POST_LOGIN_RESULTS_QUERY}#{POST_LOGIN_RESULTS_FRAGMENT}"
+    return f"{reverse('optimizer:results')}#{POST_LOGIN_RESULTS_FRAGMENT}"
 
 
 
@@ -2120,6 +2120,124 @@ def api_candidate_decision(request, candidate_id):
         "candidate_id": str(candidate.id),
         "decision": decision_value,
         "server_name": candidate.server.server_name if candidate.server else "",
+    })
+
+
+@require_GET
+@login_required
+def api_rule1_data(request):
+    """API: Rule 1 raw candidate data with optional sorting and pagination.
+
+    GET /api/rule1-data/
+    Query params:
+      sort_field  – column key to sort by (must match a key in the data)
+      sort_order  – asc | desc  (default: asc)
+      page        – 1-based page number (default: 1)
+      page_size   – rows per page, max 200 (default: 25)
+    """
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+    context = compute_live_db_metrics()
+    rr = context.get("rule_results", {})
+    data = list(rr.get("azure_payg") or [])
+
+    keys = list(data[0].keys()) if data else []
+
+    sort_field = str(request.GET.get("sort_field", "")).strip()
+    sort_order = str(request.GET.get("sort_order", "asc")).strip().lower()
+    if sort_order not in ("asc", "desc"):
+        sort_order = "asc"
+
+    if sort_field and sort_field in keys:
+        reverse_sort = sort_order == "desc"
+        data = sorted(
+            data,
+            key=lambda r: (r.get(sort_field) is None or r.get(sort_field) == "", str(r.get(sort_field) or "").lower()),
+            reverse=reverse_sort,
+        )
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(200, max(1, int(request.GET.get("page_size", 25))))
+    except (TypeError, ValueError):
+        page_size = 25
+
+    total = len(data)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    page_data = data[start: start + page_size]
+
+    return JsonResponse({
+        "keys": keys,
+        "rows": [[r.get(k) for k in keys] for r in page_data],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "sort_field": sort_field,
+        "sort_order": sort_order,
+    })
+
+
+@require_GET
+@login_required
+def api_rule2_data(request):
+    """API: Rule 2 retired-devices data with optional sorting and pagination.
+
+    GET /api/rule2-data/
+    Query params:
+      sort_field  – column key to sort by (must match a key in the data)
+      sort_order  – asc | desc  (default: asc)
+      page        – 1-based page number (default: 1)
+      page_size   – rows per page, max 200 (default: 25)
+    """
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+    context = compute_live_db_metrics()
+    rr = context.get("rule_results", {})
+    data = list(rr.get("retired_devices") or [])
+
+    keys = list(data[0].keys()) if data else []
+
+    sort_field = str(request.GET.get("sort_field", "")).strip()
+    sort_order = str(request.GET.get("sort_order", "asc")).strip().lower()
+    if sort_order not in ("asc", "desc"):
+        sort_order = "asc"
+
+    if sort_field and sort_field in keys:
+        reverse_sort = sort_order == "desc"
+        data = sorted(
+            data,
+            key=lambda r: (r.get(sort_field) is None or r.get(sort_field) == "", str(r.get(sort_field) or "").lower()),
+            reverse=reverse_sort,
+        )
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(200, max(1, int(request.GET.get("page_size", 25))))
+    except (TypeError, ValueError):
+        page_size = 25
+
+    total = len(data)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    page_data = data[start: start + page_size]
+
+    return JsonResponse({
+        "keys": keys,
+        "rows": [[r.get(k) for k in keys] for r in page_data],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "sort_field": sort_field,
+        "sort_order": sort_order,
     })
 
 

@@ -72,7 +72,7 @@
                             <p class="mt-1 text-sm text-red-600 flex items-center gap-1" role="alert"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M5.636 5.636l1.414 1.414M17.657 17.657l1.414-1.414"/></svg>{{ form.password.errors.0 }}</p>
                             {% endif %}
                         </div>
-                        <input type="hidden" name="next" value="{{ next }}">
+                        <input type="hidden" name="next" value="{% if next %}{{ next }}{% else %}{% url 'optimizer:results' %}#dashboard{% endif %}">
                         <button type="submit"
                             class="w-full py-3 px-4 bg-slate-900 text-white font-semibold rounded-2xl hover:bg-slate-800 focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-colors flex items-center justify-center gap-2 mt-2">
                             <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>

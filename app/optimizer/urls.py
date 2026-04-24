@@ -21,6 +21,8 @@ urlpatterns = [
     path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
     path("rightsizing/download/<str:sheet_key>/", views.download_rightsizing_sheet, name="download_rightsizing_sheet"),
     path("api/strategy3-rightsizing/", views.api_strategy3_rightsizing, name="api_strategy3_rightsizing"),
+    path("api/rule1-data/", views.api_rule1_data, name="api_rule1_data"),
+    path("api/rule2-data/", views.api_rule2_data, name="api_rule2_data"),
     # ── Summary / BI API endpoints ────────────────────────────────────────────
     # GET  /api/savings-summary/             → all three strategies + totals (PowerBI)
     path("api/savings-summary/", views.api_savings_summary, name="api_savings_summary"),
