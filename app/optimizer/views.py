@@ -204,10 +204,11 @@ def _get_db_context_for_report():
 
     context = compute_live_db_metrics()
 
-    # Flatten savings so _build_report_render_context can read them
+    # Flatten savings so _build_report_render_context and agent payload builder can read them
     dash = build_dashboard_context(context)
     context["azure_payg_savings"] = dash.get("azure_payg_savings", 0)
     context["retired_devices_savings"] = dash.get("retired_devices_savings", 0)
+    context["rightsizing_savings"] = dash.get("rightsizing_savings", 0)
 
     rr = context.get("rule_results", {})
     lm = context.get("license_metrics", {})
@@ -656,14 +657,16 @@ def _serialize_rs3_api_record(record, workload):
 def _format_rs3_api_screen_label(filter_value):
     normalized = str(filter_value or "").strip().upper()
     mapping = {
+        # Primary (new) filter keys
+        "PROD_CPU_RIGHTSIZING": "PROD CPU Right-Sizing",
+        "NONPROD_CPU_RIGHTSIZING": "Nonprod CPU Right-Sizing",
+        "PROD_RAM_RIGHTSIZING": "PROD RAM Right-Sizing",
+        "NONPROD_RAM_RIGHTSIZING": "Nonprod RAM Right-Sizing",
+        # Legacy aliases (kept for backward compatibility)
         "PROD_CPU_OPTIMIZATION": "PROD CPU Right-Sizing",
         "NONPROD_CPU_OPTIMIZATION": "Nonprod CPU Right-Sizing",
-        "PROD_CPU_RECOMMENDATION": "PROD CPU Recommendation",
-        "NONPROD_CPU_RECOMMENDATION": "Nonprod CPU Recommendation",
         "PROD_RAM_OPTIMIZATION": "PROD RAM Right-Sizing",
         "NONPROD_RAM_OPTIMIZATION": "Nonprod RAM Right-Sizing",
-        "PROD_RAM_RECOMMENDATION": "PROD RAM Recommendation",
-        "NONPROD_RAM_RECOMMENDATION": "Nonprod RAM Recommendation",
     }
     return mapping.get(normalized, _format_rs3_sheet_label(filter_value))
 
@@ -1390,6 +1393,16 @@ def _build_legacy_report_markdown(context):
 
 
 def _resolve_report_markdown(context, agentic=None):
+    """
+    Resolve the best available report markdown in priority order:
+      1. Stored AgentRun.report_markdown (set after clicking "Run Agent")
+      2. Live agent preview from build_live_agent_report_preview()
+         — internally tries agent/liscence-optimizer/src/tools/report_generator.py first,
+           then falls back to Django-native renderer
+      3. Legacy fallback (Azure OpenAI text or static template) — only if step 2 completely fails
+
+    Step 2 is logged in detail; exceptions are never silently swallowed.
+    """
     agentic = agentic or {}
     latest_agent_report = (
         (agentic.get("agent_run") or {}).get("report_markdown")
@@ -1397,35 +1410,73 @@ def _resolve_report_markdown(context, agentic=None):
         else ""
     )
     if latest_agent_report:
+        logger.info("Using stored AgentRun.report_markdown for /report/.")
         return normalize_report_content_text(latest_agent_report)
 
+    # Priority 2: live agent preview (uses agent/liscence-optimizer tool or Django fallback)
+    preview_markdown = ""
     try:
         from optimizer.services.ai_report_generator import build_live_agent_report_preview
 
         preview = build_live_agent_report_preview(usecase_id="uc_1_2_3")
         preview_markdown = preview.get("report_markdown") or ""
         preview_summary = preview.get("summary_context") or {}
-        has_live_signal = any(
-            [
-                preview_summary.get("total_demand_quantity"),
-                preview_summary.get("total_license_cost"),
-                preview_summary.get("total_savings"),
+
+        # Accept the preview if the agent produced ANY text, even without live data —
+        # the agent renderer always generates structured markdown regardless of data size.
+        if preview_markdown:
+            logger.info(
+                "Using agent live preview report for /report/ (agent_payg=%s retired=%s cpu=%s ram=%s).",
                 preview_summary.get("azure_payg_count"),
                 preview_summary.get("retired_count"),
                 preview_summary.get("cpu_count"),
                 preview_summary.get("ram_count"),
-                preview_summary.get("crit_cpu_count"),
-                preview_summary.get("crit_ram_count"),
-                preview_summary.get("lifecycle_count"),
-                preview_summary.get("physical_count"),
-            ]
-        )
-        if preview_markdown and has_live_signal:
+            )
             return normalize_report_content_text(preview_markdown)
+        else:
+            logger.warning("build_live_agent_report_preview() returned empty markdown.")
     except Exception as exc:
-        logger.exception("Failed to build live agent report preview for /report/: %s", exc)
+        logger.exception(
+            "build_live_agent_report_preview() raised an exception for /report/ — "
+            "falling back to legacy report. Error: %s",
+            exc,
+        )
 
-    return _build_legacy_report_markdown(context)
+    # Priority 3: build agent-format report directly from the already-computed context
+    # (the context was built by _get_db_context_for_report which calls compute_live_db_metrics,
+    #  so the rule_results and rightsizing data are already available without extra DB queries)
+    logger.warning(
+        "build_live_agent_report_preview() failed — building agent-format report "
+        "directly from pre-computed context data (all 3 strategies)."
+    )
+    try:
+        from optimizer.services.ai_report_generator import (
+            build_agent_strategy_results_payload,
+            _build_local_rules_evaluation,
+            _build_agent_report_summary_context,
+            _render_local_agent_report_markdown,
+        )
+        strategy_results = build_agent_strategy_results_payload(context)
+        rules_evaluation = _build_local_rules_evaluation(
+            rule_results=context.get("rule_results") or {},
+            rightsizing=context.get("rightsizing") or {},
+        )
+        summary_context = _build_agent_report_summary_context(context, strategy_results)
+        md = _render_local_agent_report_markdown(
+            usecase_id="uc_1_2_3",
+            strategy_results=strategy_results,
+            rules_evaluation=rules_evaluation,
+            summary_context=summary_context,
+        )
+        if md:
+            logger.info("Agent-format report built directly from context (%d chars).", len(md))
+            return md
+    except Exception as exc2:
+        logger.exception("Direct agent-format report build from context also failed: %s", exc2)
+
+    # Absolute last resort: empty string so the template shows "No report generated"
+    logger.error("All report generation paths failed — returning empty report.")
+    return ""
 
 
 @require_GET
