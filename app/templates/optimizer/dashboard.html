@@ -98,15 +98,15 @@
                 </button>
                 <button onclick="setOptimizerTab('rule1');" id="tablink-rule1"
                     class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    Strategy 1
+                    PAYG Recommendations
                 </button>
                 <button onclick="setOptimizerTab('rule2');" id="tablink-rule2"
                     class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    Strategy 2
+                    Retired Assets
                 </button>
                 <button onclick="setOptimizerTab('rule3');" id="tablink-rule3"
                     class="optimizer-tab-link rounded-md px-4 py-2 text-md font-semibold transition-all duration-200 whitespace-nowrap">
-                    Strategy 3
+                    Rightsizing
                 </button>
                 <div class="flex-1"></div>
                 <button onclick="setOptimizerTab('dataquality');" id="tablink-dataquality"
@@ -124,7 +124,7 @@
         <div id="panel-rule1" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
             data-tab="rule1">
             <div class="payg-rule-shell flex-shrink-0 mb-6">
-                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
+                <div class="mb-4">
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">PAYG Recommendations</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify Azure SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
@@ -136,11 +136,11 @@
                         </div>
                     </div>
                     <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
-                        <div>
+                        <!-- <div>
                             <p class="payg-hero-eyebrow">BYOL to PAYG candidates</p>
                             <p class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ azure_payg_count }}</p>
                             <p class="mt-2 text-[11px] font-semibold text-sky-600">Candidate List</p>
-                        </div>
+                        </div> -->
                         <div class="payg-hero-lines" aria-hidden="true"></div>
                     </div>
                 </div>
@@ -193,10 +193,10 @@
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
                             <h3 class="chart-card-title">PAYG Breakdown by Hosting Zone</h3>
-                            <div class="chart-legend-hint">
+                            <!-- <div class="chart-legend-hint">
                                 <span class="chart-dot" style="background:#00BCFF"></span><span>Current</span>
                                 <span class="chart-dot" style="background:#89D329"></span><span>Estimated</span>
-                            </div>
+                            </div> -->
                         </div>
                         <div class="chart-container chart-height-reference">
                             {% if chart_specs.chart_azure_by_zone_bar %}
@@ -359,25 +359,18 @@
         <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
             data-tab="rule2">
             <div class="payg-rule-shell flex-shrink-0 mb-6">
-                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
+                <div class="mb-4">
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">Retired Devices</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Retired devices still reporting install. Reconcile CMDB and confirm decommissioning.</p>
-                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        <div class="mt-3 inline-flex max-w-full items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 whitespace-nowrap">
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
-                            <p>Data for this Strategy is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
+                            <p class="whitespace-nowrap">Data for this Strategy is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
                         </div>
                     </div>
-                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
-                        <div>
-                            <p class="payg-hero-eyebrow">Retired but reporting</p>
-                            <p class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ retired_count }}</p>
-                            <p class="mt-2 text-[11px] font-semibold text-sky-600">Candidate List</p>
-                        </div>
-                        <div class="payg-hero-lines" aria-hidden="true"></div>
-                    </div>
+                   
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
@@ -672,40 +665,44 @@
                                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-start">
                                     <div class="min-w-0">
                                         <span class="dashboard-section-label">CPU</span>
-                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}</p>
-                                        <p class="mt-1 text-sm font-semibold text-slate-600">vCPUs</p>
+                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}<span class="text-base font-semibold text-slate-600"> vCPUs </span></p>
+                                        <!-- <p class="mt-1 text-sm font-semibold text-slate-600"></p> -->
+                                                                        <p class="mt-2 whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
+
                                     </div>
-                                    <div class="grid w-full min-w-0 grid-cols-2 gap-3 lg:w-[180px] lg:pt-1">
-                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
-                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">PROD</p>
-                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.cpu_prod_count|default:0 }}</p>
+                                    <div class="flex w-full min-w-0 flex-col lg:w-[180px] lg:pt-1">
+                                        <div class="flex items-center justify-between gap-3 px-3 py-3">
+                                            <p class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">PROD</p>
+                                            <p class="text-2xl font-bold text-slate-900">{{ rightsizing.cpu_prod_count|default:0 }}</p>
                                         </div>
-                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
-                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">NON-PROD</p>
-                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.cpu_nonprod_count|default:0 }}</p>
+                                        <div class="mx-3 border-t border-slate-200"></div>
+                                        <div class="flex items-center justify-between gap-3 px-3 py-3">
+                                            <p class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">NON-PROD</p>
+                                            <p class="text-2xl font-bold text-slate-900">{{ rightsizing.cpu_nonprod_count|default:0 }}</p>
                                         </div>
                                     </div>
-                                    <p class="whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
                                 </div>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
                                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-start">
                                     <div class="min-w-0">
                                         <span class="dashboard-section-label">RAM</span>
-                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}</p>
-                                        <p class="mt-1 text-sm font-semibold text-slate-600">GiB RAM</p>
+                                        <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}<span class="text-base font-semibold text-slate-600"> GiB RAM</span></p>
+                                                                           <p class="mt-2 whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
+
+                                        <!-- <p class="mt-1 text-sm font-semibold text-slate-600"></p> -->
                                     </div>
-                                    <div class="grid w-full min-w-0 grid-cols-2 gap-3 lg:w-[180px] lg:pt-1">
-                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
-                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">PROD</p>
-                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.ram_prod_count|default:0 }}</p>
+                                    <div class="flex w-full min-w-0 flex-col lg:w-[180px] lg:pt-1">
+                                        <div class="flex items-center justify-between gap-3 px-3 py-3">
+                                            <p class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">PROD</p>
+                                            <p class="text-2xl font-bold text-slate-900">{{ rightsizing.ram_prod_count|default:0 }}</p>
                                         </div>
-                                        <div class="flex items-center justify-between gap-2 rounded-2xl px-3 py-3">
-                                            <p class="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-500">NON-PROD</p>
-                                            <p class="text-lg font-bold text-slate-900">{{ rightsizing.ram_nonprod_count|default:0 }}</p>
+                                        <div class="mx-3 border-t border-slate-200"></div>
+                                        <div class="flex items-center justify-between gap-3 px-3 py-3">
+                                            <p class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">NON-PROD</p>
+                                            <p class="text-2xl font-bold text-slate-900">{{ rightsizing.ram_nonprod_count|default:0 }}</p>
                                         </div>
                                     </div>
-                                    <p class="whitespace-normal break-words text-sm leading-6 text-slate-500 lg:col-span-2">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
                                 </div>
                             </div>
                         </div>
@@ -713,24 +710,24 @@
 
                     <div class="xl:col-span-6 dashboard-panel-card">
                         <div class="mb-4">
-                            <h3 class="text-base font-bold text-slate-900">Enterprise SQL Optimizer Accuracy</h3>
+                            <h3 class="text-base font-bold text-slate-900">Estimated Accuracy</h3>
                             <p class="mt-1 text-sm text-slate-500">Confidence snapshot for the three optimization strategies based on internal validation.</p>
                         </div>
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
-                                <span class="dashboard-section-label">Strategy 1</span>
+                                <span class="dashboard-section-label">PAYG Recommendations</span>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
-                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
-                                <span class="dashboard-section-label">Strategy 2</span>
+                                <span class="dashboard-section-label">Retired Assets</span>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
-                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
-                                <span class="dashboard-section-label">Strategy 3</span>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">TBD</p>
-                                <p class="mt-3 text-sm text-slate-500">Based on Internal manual check.</p>
+                                <span class="dashboard-section-label">Rightsizing</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
+                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                         </div>
                     </div>
@@ -739,12 +736,21 @@
 
             <section class="flex-shrink-0 mb-6">
                 <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
-                    <div class="xl:col-span-7 dashboard-panel-card">
+                    <div class="xl:col-span-12 dashboard-panel-card">
                         <div>
                             <span class="dashboard-section-label">Price Distribution by License Type</span>
                             <p class="mt-1 text-sm text-slate-500">Cost and quantity by Standard, Developer, and Enterprise editions.</p>
                         </div>
                         {% if price_distribution %}
+                        <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {% for item in price_distribution_summary %}
+                            <div class="dashboard-kpi-card border-l-[6px] {% if item.accent == 'sky' %}border-l-sky-500{% elif item.accent == 'emerald' %}border-l-emerald-500{% elif item.accent == 'lime' %}border-l-lime-500{% else %}border-l-violet-500{% endif %}">
+                                <span class="dashboard-section-label">{{ item.label }}</span>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">{% if item.is_currency %}€{{ item.value|floatformat:2 }}{% else %}{{ item.value }}{% endif %}</p>
+                                <p class="mt-1 text-sm text-slate-500">{{ item.subtext }}</p>
+                            </div>
+                            {% endfor %}
+                        </div>
                         <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             {% for item in price_distribution %}
                             <div class="dashboard-license-card dashboard-license-card-compact {% if item.type == 'Standard' %}dashboard-license-standard{% elif item.type == 'Developer' %}dashboard-license-developer{% elif item.type == 'Enterprise' %}dashboard-license-enterprise{% else %}dashboard-license-neutral{% endif %}">
@@ -762,7 +768,7 @@
                         {% endif %}
                     </div>
 
-                    <div class="xl:col-span-5 dashboard-panel-card">
+                    <!-- <div class="xl:col-span-5 dashboard-panel-card">
                         <div>
                             <span class="dashboard-section-label">CPU Core Optimization</span>
                             <p class="mt-1 text-sm text-slate-500">Core footprint patterns across switch candidates.</p>
@@ -776,7 +782,7 @@
                             <div class="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">No chart data</div>
                             {% endif %}
                         </div>
-                    </div>
+                    </div> -->
                 </div>
             </section>
 
@@ -786,13 +792,13 @@
                         <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <span class="dashboard-section-label">Right Sizing CPU</span>
-                                <p class="mt-1 text-sm text-slate-500">Average vs peak CPU utilisation with CPU filter selection.</p>
+                                <p class="mt-1 text-sm text-slate-500">Top 10 servers – average vs peak CPU utilisation with filter selection.</p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <label for="dash-rs3-cpu-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                                 <select id="dash-rs3-cpu-filter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
-                                    <option value="PROD_CPU_Optimization">PROD CPU Optimization</option>
-                                    <option value="NONPROD_CPU_Optimization">NON-PROD CPU Optimization</option>
+                                    <option value="PROD_CPU_Optimization">Prod CPU Right Sizing</option>
+                                    <option value="NONPROD_CPU_Optimization">Non Prod CPU Right Sizing</option>
                                 </select>
                             </div>
                         </div>
@@ -805,13 +811,13 @@
                         <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <span class="dashboard-section-label">Right Sizing RAM</span>
-                                <p class="mt-1 text-sm text-slate-500">Average vs min free memory with RAM filter selection.</p>
+                                <p class="mt-1 text-sm text-slate-500">Top 10 servers – average vs min free memory with filter selection.</p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <label for="dash-rs3-ram-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                                 <select id="dash-rs3-ram-filter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
-                                    <option value="PROD_RAM_Optimization">PROD RAM Optimization</option>
-                                    <option value="NONPROD_RAM_Optimization">NON-PROD RAM Optimization</option>
+                                    <option value="PROD_RAM_Optimization">Prod RAM Right Sizing</option>
+                                    <option value="NONPROD_RAM_Optimization">Non Prod RAM Right Sizing</option>
                                 </select>
                             </div>
                         </div>
@@ -980,16 +986,6 @@
                             <p>Data for this Strategy is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
                         </div>
                     </div>
-                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
-                        <div>
-                            <p id="rs3-cpu-hero-label" class="payg-hero-eyebrow">CPU optimizations total</p>
-                            <p id="rs3-cpu-hero-total" class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ rs.cpu_count|default:0 }}</p>
-                            <p id="rs3-cpu-hero-breakdown" class="mt-1 text-[11px] font-semibold text-sky-600">
-                                PROD: {{ rs.cpu_prod_count|default:0 }} &nbsp;|&nbsp; NON-PROD: {{ rs.cpu_nonprod_count|default:0 }}
-                            </p>
-                        </div>
-                        <div class="payg-hero-lines" aria-hidden="true"></div>
-                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
@@ -1011,6 +1007,7 @@
                                         <div class="group relative">
                                             <span class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#00BCFF] text-[10px] font-bold text-white shadow-sm">i</span>
                                             <div class="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden w-64 -translate-y-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium leading-5 text-slate-600 shadow-[0_14px_30px_rgba(15,23,42,0.12)] group-hover:block">
+                                                Production VM<br>
                                                 Avg_CPU_12m &lt; 15%<br>
                                                 Peak_CPU_12m &lt;= 70%<br>
                                                 Current vCPU &gt;= 4
@@ -1051,10 +1048,10 @@
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
                             <h3 id="rs3-cpu-chart-title" class="chart-card-title">Top 10 Servers - Average vs Peak CPU Utilisation (%)</h3>
-                            <div class="chart-legend-hint">
+                            <!-- <div class="chart-legend-hint">
                                 <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-cpu-legend-1">Avg CPU%</span>
                                 <span class="chart-dot" style="background:#89D329"></span><span id="rs3-cpu-legend-2">Peak CPU%</span>
-                            </div>
+                            </div> -->
                         </div>
                         <div class="chart-container chart-height-reference">
                             <div id="chart-rs3-cpu" class="plotly-chart w-full h-full"></div>
@@ -1122,17 +1119,7 @@
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
                         <h2 id="rs3-ram-title" class="text-[2rem] leading-tight font-extrabold text-slate-900">RAM Right-Sizing</h2>
-                        <p class="mt-2 max-w-3xl text-sm text-slate-500">VMs with average free memory ≥ 35% (PROD) or ≥ 30% (NON-PROD) and more than 8 GiB (PROD) or 4 GiB (NON-PROD) allocated.</p>
-                    </div>
-                    <div class="payg-hero-card payg-hero-card-compact lg:w-[535px]">
-                        <div>
-                            <p id="rs3-ram-hero-label" class="payg-hero-eyebrow">RAM optimizations total</p>
-                            <p id="rs3-ram-hero-total" class="mt-1 text-[2.1rem] leading-none font-extrabold tracking-tight text-slate-900">{{ rs.ram_count|default:0 }}</p>
-                            <p id="rs3-ram-hero-breakdown" class="mt-1 text-[11px] font-semibold text-sky-600">
-                                PROD: {{ rs.ram_prod_count|default:0 }} &nbsp;|&nbsp; NON-PROD: {{ rs.ram_nonprod_count|default:0 }}
-                            </p>
-                        </div>
-                        <div class="payg-hero-lines" aria-hidden="true"></div>
+                        <p class="mt-2 max-w-full whitespace-nowrap text-sm text-slate-500">VMs with average free memory ≥ 35% (PROD) or ≥ 30% (NON-PROD) and more than 8 GiB (PROD) or 4 GiB (NON-PROD) allocated.</p>
                     </div>
                 </div>
 
@@ -1196,10 +1183,10 @@
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
                             <h3 id="rs3-ram-chart-title" class="chart-card-title">Top 10 Servers - Average vs Min Free Memory (%)</h3>
-                            <div class="chart-legend-hint">
+                            <!-- <div class="chart-legend-hint">
                                 <span class="chart-dot" style="background:#84D329"></span><span id="rs3-ram-legend-1">Avg Free Mem%</span>
                                 <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-ram-legend-2">Min Free Mem%</span>
-                            </div>
+                            </div> -->
                         </div>
                         <div class="chart-container chart-height-reference">
                             <div id="chart-rs3-ram" class="plotly-chart w-full h-full"></div>
@@ -1701,6 +1688,9 @@
 {{ rightsizing.screen_filter_options|json_script:"rs3-screen-filter-options" }}
 {{ rightsizing.default_filter_by_workload|json_script:"rs3-default-filters" }}
 {{ rightsizing.screen_summaries|json_script:"rs3-screen-summaries" }}
+<script>
+    window.rs3SavingsSummaryUrl = "{% url 'optimizer:api_savings_summary' %}";
+</script>
 {{ chart_specs|json_script:"chart-specs-data" }}
 {{ dq_usu_rows|json_script:"dq-usu-data" }}
 {{ dq_usu_keys|json_script:"dq-usu-keys" }}
@@ -2160,6 +2150,13 @@
                         layout.margin = { l: 20, r: 20, t: 60, b: 20 };
                     }
 
+                    if (id === 'chart_retired_env') {
+                        layout.showlegend = false;
+                        spec.data = (spec.data || []).map(function(trace) {
+                            return Object.assign({}, trace, { showlegend: false });
+                        });
+                    }
+
                     var ids = ['chart-' + id, 'chart-dash-' + id];
                     for (var i = 0; i < ids.length; i++) {
                         var el = document.getElementById(ids[i]);
@@ -2266,31 +2263,42 @@
 
             function renderDashCpuChart(filterValue) {
                 if (!dashCpuEl) return;
+                var cpuFilterField = /_Recommendation$/.test(filterValue || '') ? 'recommendation_type' : 'optimization_type';
                 var filtered = cpuChartData.filter(function(row) {
-                    return String(row.optimization_type || '') === String(filterValue || '');
+                    return String(row[cpuFilterField] || '') === String(filterValue || '');
                 });
 
-                if (!filtered.length) {
-                    Plotly.newPlot(dashCpuEl, [], buildRs3Layout('Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
+                var top10 = filtered
+                    .map(function(d) { return { name: d.name, avg: Number(d.avg || 0), peak: Number(d.peak || 0), sort: Math.max(Number(d.avg || 0), Number(d.peak || 0)) }; })
+                    .sort(function(a, b) { return b.sort - a.sort; })
+                    .slice(0, 10);
+
+                if (!top10.length) {
+                    Plotly.newPlot(dashCpuEl, [], buildRs3Layout('Top 10 Servers – Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
                     return;
                 }
 
+                var labels = top10.map(function(d) { return d.name; });
                 Plotly.newPlot(dashCpuEl, [
                     {
-                        x: filtered.map(function(d) { return d.name; }),
-                        y: filtered.map(function(d) { return d.avg; }),
-                        type: 'bar',
+                        x: labels,
+                        y: top10.map(function(d) { return d.avg; }),
+                        type: 'scatter',
+                        mode: 'lines+markers',
                         name: 'Avg CPU %',
-                        marker: { color: '#1ea7e1' }
+                        line: { color: '#1ea7e1', width: 2 },
+                        marker: { color: '#1ea7e1', size: 7 }
                     },
                     {
-                        x: filtered.map(function(d) { return d.name; }),
-                        y: filtered.map(function(d) { return d.peak; }),
-                        type: 'bar',
+                        x: labels,
+                        y: top10.map(function(d) { return d.peak; }),
+                        type: 'scatter',
+                        mode: 'lines+markers',
                         name: 'Peak CPU %',
-                        marker: { color: '#84cc16' }
+                        line: { color: '#84cc16', width: 2 },
+                        marker: { color: '#84cc16', size: 7 }
                     }
-                ], buildRs3Layout('Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
+                ], buildRs3Layout('Top 10 Servers – Average vs Peak CPU Utilisation (%)', 'CPU %'), dashPlotlyConfig);
             }
 
             if (dashCpuEl) {
@@ -2305,32 +2313,42 @@
 
             function renderDashRamChart(filterValue) {
                 if (!dashRamEl) return;
-                var filterField = /_Recommendation$/.test(filterValue || '') ? 'recommendation_type' : 'optimization_type';
+                var ramFilterField = /_Recommendation$/.test(filterValue || '') ? 'recommendation_type' : 'optimization_type';
                 var filtered = ramChartData.filter(function(row) {
-                    return String(row[filterField] || '') === String(filterValue || '');
+                    return String(row[ramFilterField] || '') === String(filterValue || '');
                 });
 
-                if (!filtered.length) {
-                    Plotly.newPlot(dashRamEl, [], buildRs3Layout('Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
+                var top10 = filtered
+                    .map(function(d) { return { name: d.name, avg: Number(d.avg_free || 0), min: Number(d.min_free || 0), sort: Math.max(Number(d.avg_free || 0), Number(d.min_free || 0)) }; })
+                    .sort(function(a, b) { return b.sort - a.sort; })
+                    .slice(0, 10);
+
+                if (!top10.length) {
+                    Plotly.newPlot(dashRamEl, [], buildRs3Layout('Top 10 Servers – Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
                     return;
                 }
 
+                var rLabels = top10.map(function(d) { return d.name; });
                 Plotly.newPlot(dashRamEl, [
                     {
-                        x: filtered.map(function(d) { return d.name; }),
-                        y: filtered.map(function(d) { return d.avg_free; }),
-                        type: 'bar',
+                        x: rLabels,
+                        y: top10.map(function(d) { return d.avg; }),
+                        type: 'scatter',
+                        mode: 'lines+markers',
                         name: 'Avg Free Mem %',
-                        marker: { color: '#84cc16' }
+                        line: { color: '#84cc16', width: 2 },
+                        marker: { color: '#84cc16', size: 7 }
                     },
                     {
-                        x: filtered.map(function(d) { return d.name; }),
-                        y: filtered.map(function(d) { return d.min_free; }),
-                        type: 'bar',
+                        x: rLabels,
+                        y: top10.map(function(d) { return d.min; }),
+                        type: 'scatter',
+                        mode: 'lines+markers',
                         name: 'Min Free Mem %',
-                        marker: { color: '#00BCFF' }
+                        line: { color: '#00BCFF', width: 2 },
+                        marker: { color: '#00BCFF', size: 7 }
                     }
-                ], buildRs3Layout('Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
+                ], buildRs3Layout('Top 10 Servers – Average vs Min Free Memory (%)', 'Free Mem %'), dashPlotlyConfig);
             }
 
             if (dashRamEl) {
@@ -2627,8 +2645,8 @@
         var rs3FilterConfig = {
             cpu: {
                 defaultFilter: 'PROD_CPU_Rightsizing',
-                optimizationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation'],
-                recommendationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation'],
+                optimizationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation', 'Cost_Savings_EUR'],
+                recommendationColumns: ['server_name', 'Env_Type', 'Avg_CPU_12m', 'Peak_CPU_12m', 'Current_vCPU', 'Recommended_vCPU', 'CPU_Recommendation', 'Cost_Savings_EUR'],
                 reductionKey: 'Potential_vCPU_Reduction',
                 chartFieldMap: { avg: 'avg', peak: 'peak' },
                 chartLabels: ['Avg CPU %', 'Peak CPU %'],
@@ -2643,8 +2661,8 @@
             },
             ram: {
                 defaultFilter: 'PROD_RAM_Rightsizing',
-                optimizationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation'],
-                recommendationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation'],
+                optimizationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation', 'Cost_Savings_EUR'],
+                recommendationColumns: ['server_name', 'Env_Type', 'Avg_FreeMem_12m', 'Min_FreeMem_12m', 'Current_RAM_GiB', 'Recommended_RAM_GiB', 'RAM_Recommendation', 'Cost_Savings_EUR'],
                 reductionKey: 'Potential_RAM_Reduction_GiB',
                 chartFieldMap: { avg: 'avg_free', peak: 'min_free' },
                 chartLabels: ['Avg Free Mem %', 'Min Free Mem %'],
@@ -2673,6 +2691,10 @@
         var rs3DefaultFilters = rs3DefaultFiltersEl ? JSON.parse(rs3DefaultFiltersEl.textContent || '{}') : {};
         var rs3State = {
             workload: rs3WorkloadFilter ? String(rs3WorkloadFilter.value || 'ALL').toLowerCase() : 'all',
+            savingsMeta: {
+                avgCostPerCorePairEur: 0,
+                avgCostPerGibEur: 0
+            },
             cpu: {
                 data: rs3CpuDataEl ? JSON.parse(rs3CpuDataEl.textContent || '[]') : [],
                 chartData: rs3CpuChartDataEl ? JSON.parse(rs3CpuChartDataEl.textContent || '[]') : [],
@@ -2860,6 +2882,13 @@
 
         function renderRs3RecommendationCell(columnName, value) {
             var text = safeText(value);
+
+            if (columnName === 'Cost_Savings_EUR') {
+                var numericValue = Number(value || 0);
+                var displayValue = isNaN(numericValue) ? '€0.00' : ('€' + numericValue.toFixed(2));
+                return '<td class="px-4 py-3 text-xs font-semibold text-slate-800 whitespace-nowrap">' + escapeHtml(displayValue) + '</td>';
+            }
+
             if (columnName !== 'CPU_Recommendation' && columnName !== 'RAM_Recommendation') {
                 return '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(text) + '</td>';
             }
@@ -2867,18 +2896,55 @@
             var raw = String(value || '').trim();
             var isReduced = /^(reduce|reduced)\b/i.test(raw);
             var isIncreased = /^(increase|increased)\b/i.test(raw);
-            var arrowHtml = '';
-            var textClass = 'text-slate-700';
+            var dotHtml = '';
 
             if (isReduced) {
-                arrowHtml = '<span class="mr-2 text-sm font-bold" style="color:#FF0000;">&darr;</span>';
-                textClass = '';
+                dotHtml = '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#ef4444;"></span>';
             } else if (isIncreased) {
-                arrowHtml = '<span class="mr-2 text-sm font-bold text-emerald-600">&uarr;</span>';
-                textClass = 'text-emerald-600';
+                dotHtml = '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#22c55e;"></span>';
             }
 
-            return '<td class="px-4 py-3 text-xs font-semibold whitespace-nowrap ' + textClass + '"' + (isReduced ? ' style="color:#FF0000;"' : '') + '>' + arrowHtml + escapeHtml(text) + '</td>';
+            return '<td class="px-4 py-3 text-xs font-semibold whitespace-nowrap text-slate-800"><span class="flex items-center">' + dotHtml + escapeHtml(text) + '</span></td>';
+        }
+
+        function enrichRs3SavingsFromSummary() {
+            var url = window.rs3SavingsSummaryUrl;
+            if (!url || typeof fetch !== 'function') return;
+            fetch(url, {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Failed to load savings summary');
+                    return response.json();
+                })
+                .then(function(payload) {
+                    var strategies = (((payload || {}).result || {}).strategies) || [];
+                    var rightsizing = strategies.find(function(item) { return item && item.id === 'rightsizing'; }) || {};
+                    var avgCpuCost = Number(rightsizing.avg_cost_per_core_pair_eur || 0);
+                    var avgRamCost = Number(rightsizing.avg_cost_per_gib_eur || 0);
+                    rs3State.savingsMeta.avgCostPerCorePairEur = isNaN(avgCpuCost) ? 0 : avgCpuCost;
+                    rs3State.savingsMeta.avgCostPerGibEur = isNaN(avgRamCost) ? 0 : avgRamCost;
+
+                    rs3State.cpu.data = (rs3State.cpu.data || []).map(function(record) {
+                        var nextRecord = Object.assign({}, record);
+                        var reduction = Number(nextRecord.Potential_vCPU_Reduction || 0);
+                        var costSavings = (isNaN(reduction) || isNaN(avgCpuCost) || avgCpuCost <= 0) ? 0 : ((reduction / 2) * avgCpuCost);
+                        nextRecord.Cost_Savings_EUR = Math.round(costSavings * 100) / 100;
+                        return nextRecord;
+                    });
+                    rs3State.ram.data = (rs3State.ram.data || []).map(function(record) {
+                        var nextRecord = Object.assign({}, record);
+                        var reduction = Number(nextRecord.Potential_RAM_Reduction_GiB || 0);
+                        var costSavings = (isNaN(reduction) || isNaN(avgRamCost) || avgRamCost <= 0) ? 0 : (reduction * avgRamCost);
+                        nextRecord.Cost_Savings_EUR = Math.round(costSavings * 100) / 100;
+                        return nextRecord;
+                    });
+                    renderRs3Screen('cpu');
+                    renderRs3Screen('ram');
+                })
+                .catch(function() {});
         }
 
         function renderRs3TableBody(type, records, columns, page) {
@@ -3193,6 +3259,7 @@
         }
         renderRs3Screen('cpu');
         renderRs3Screen('ram');
+        enrichRs3SavingsFromSummary();
         updateRs3SectionVisibility();
     });
 

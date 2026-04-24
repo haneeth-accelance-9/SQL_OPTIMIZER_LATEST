@@ -646,6 +646,7 @@ def compute_rightsizing_metrics() -> dict:
         "screen_summaries": {"CPU": {}, "RAM": {}},
         "total_vcpu_reduction": 0,
         "total_ram_reduction_gib": 0.0,
+        "total_current_ram_gib": 0.0,
         "cpu_chart_data": [],
         "ram_chart_data": [],
         "error": None,
@@ -891,6 +892,7 @@ def compute_rightsizing_metrics() -> dict:
 
     vcpu_reduction = int(_reduction(cpu_df, "Current_vCPU", "Recommended_vCPU"))
     ram_reduction = round(float(_reduction(ram_df, "Current_RAM_GiB", "Recommended_RAM_GiB")), 1)
+    total_current_ram_gib = round(float(pd.to_numeric(df.get("Current_RAM_GiB"), errors="coerce").fillna(0).sum()), 1) if "Current_RAM_GiB" in df.columns else 0.0
 
     # ── Chart data: all servers (not just candidates) for context ─────────────
     cpu_chart: list = []
@@ -979,6 +981,7 @@ def compute_rightsizing_metrics() -> dict:
         },
         "total_vcpu_reduction": vcpu_reduction,
         "total_ram_reduction_gib": ram_reduction,
+        "total_current_ram_gib": total_current_ram_gib,
         "cpu_chart_data": cpu_chart,
         "ram_chart_data": ram_chart,
         "error": None,
@@ -1226,7 +1229,16 @@ def compute_live_db_metrics() -> dict:
         if not valid_prices.empty:
             avg_cost_per_core_pair_eur = round(float(valid_prices.mean()), 2)
 
+    # Approximate RAM unit cost using observed license spend spread across the
+    # currently allocated RAM footprint in the live rightsizing inventory.
+    avg_cost_per_gib_eur = 0.0
+    total_current_ram_gib = float(rightsizing.get("total_current_ram_gib") or 0)
+    total_license_cost = float(license_metrics.get("total_license_cost") or 0)
+    if total_current_ram_gib > 0 and total_license_cost > 0:
+        avg_cost_per_gib_eur = round(total_license_cost / total_current_ram_gib, 2)
+
     rightsizing["avg_cost_per_core_pair_eur"] = avg_cost_per_core_pair_eur
+    rightsizing["avg_cost_per_gib_eur"] = avg_cost_per_gib_eur
 
     rightsizing_for_savings = {
         "total_vcpu_reduction": rightsizing.get("total_vcpu_reduction") or 0,
@@ -1234,6 +1246,7 @@ def compute_live_db_metrics() -> dict:
         "cpu_count": rightsizing.get("cpu_count") or 0,
         "ram_count": rightsizing.get("ram_count") or 0,
         "avg_cost_per_core_pair_eur": avg_cost_per_core_pair_eur,
+        "avg_cost_per_gib_eur": avg_cost_per_gib_eur,
     }
 
     context = {

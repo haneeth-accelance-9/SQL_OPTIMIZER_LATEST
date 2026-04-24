@@ -51,12 +51,14 @@ def _calculate_savings(
     # Strategy 3 inputs (zero if rightsizing data not provided)
     rs_vcpu_reduction = 0
     rs_avg_cost_per_core_pair = 0.0
+    rs_avg_cost_per_gib = 0.0
     rs_cpu_count = 0
     rs_ram_count = 0
     rs_total_ram_reduction_gib = 0.0
     if rightsizing:
         rs_vcpu_reduction = int(rightsizing.get("total_vcpu_reduction") or 0)
         rs_avg_cost_per_core_pair = float(rightsizing.get("avg_cost_per_core_pair_eur") or 0)
+        rs_avg_cost_per_gib = float(rightsizing.get("avg_cost_per_gib_eur") or 0)
         rs_cpu_count = int(rightsizing.get("cpu_count") or 0)
         rs_ram_count = int(rightsizing.get("ram_count") or 0)
         rs_total_ram_reduction_gib = float(rightsizing.get("total_ram_reduction_gib") or 0)
@@ -82,6 +84,7 @@ def _calculate_savings(
                 "total_vcpu_reduction": rs_vcpu_reduction,
                 "total_ram_reduction_gib": rs_total_ram_reduction_gib,
                 "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
+                "avg_cost_per_gib_eur": rs_avg_cost_per_gib,
             },
             "total_savings": rightsizing_savings,
         }
@@ -117,6 +120,7 @@ def _calculate_savings(
             "total_vcpu_reduction": rs_vcpu_reduction,
             "total_ram_reduction_gib": rs_total_ram_reduction_gib,
             "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
+            "avg_cost_per_gib_eur": rs_avg_cost_per_gib,
         },
         "total_savings": total_savings,
     }
@@ -273,6 +277,7 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
         "cpu_count": rs_ctx.get("cpu_count") or 0,
         "ram_count": rs_ctx.get("ram_count") or 0,
         "avg_cost_per_core_pair_eur": rs_ctx.get("avg_cost_per_core_pair_eur") or 0,
+        "avg_cost_per_gib_eur": rs_ctx.get("avg_cost_per_gib_eur") or 0,
     } if rs_ctx else None
     savings = _calculate_savings(rr, lm, rightsizing=rightsizing_for_savings)
     out["rule_wise_savings"] = context.get("rule_wise_savings") or savings["rule_wise_savings"]
@@ -284,6 +289,43 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
     out["total_savings"] = float(context.get("total_savings", savings["total_savings"]) or 0)
     out["potential_savings"] = out["total_savings"]
     out["price_distribution"] = lm.get("price_distribution") or []
+    price_distribution = out["price_distribution"]
+    price_total_quantity = sum(int(item.get("quantity", 0) or 0) for item in price_distribution)
+    price_total_cost = sum(float(item.get("total_cost", 0) or 0) for item in price_distribution)
+    price_type_count = len(price_distribution)
+    highest_avg_item = max(
+        price_distribution,
+        key=lambda item: float(item.get("avg_price", 0) or 0),
+        default=None,
+    )
+    out["price_distribution_summary"] = [
+        {
+            "label": "License Types",
+            "value": price_type_count,
+            "subtext": "Active editions",
+            "accent": "sky",
+        },
+        {
+            "label": "Total Quantity",
+            "value": price_total_quantity,
+            "subtext": "Across visible license types",
+            "accent": "emerald",
+        },
+        {
+            "label": "Total Cost",
+            "value": round(price_total_cost, 2),
+            "subtext": "Combined distributed cost",
+            "accent": "lime",
+            "is_currency": True,
+        },
+        {
+            "label": "Highest Avg Price",
+            "value": highest_avg_item.get("avg_price", 0) if highest_avg_item else 0,
+            "subtext": (highest_avg_item.get("type", "N/A") + " edition") if highest_avg_item else "No data",
+            "accent": "violet",
+            "is_currency": True,
+        },
+    ]
     out["cost_reduction_tips"] = lm.get("cost_reduction_tips") or []
     out["cost_reduction_ai_recommendations"] = context.get("cost_reduction_ai_recommendations") or ""
     out.setdefault("title", "Results & Dashboard")

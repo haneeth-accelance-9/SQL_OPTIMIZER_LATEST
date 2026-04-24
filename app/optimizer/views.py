@@ -257,7 +257,6 @@ def _format_metric_label(metric_name):
 
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
-    "is_virtual",
     "Env_Type",
     "Avg_CPU_12m",
     "Peak_CPU_12m",
@@ -277,7 +276,6 @@ RS3_CPU_RIGHTSIZING_COLUMNS = [
 
 RS3_RAM_OPTIMIZATION_COLUMNS = [
     "server_name",
-    "is_virtual",
     "Env_Type",
     "Avg_FreeMem_12m",
     "Min_FreeMem_12m",
@@ -297,7 +295,6 @@ RS3_RAM_RIGHTSIZING_COLUMNS = [
 
 RS3_CPU_RECOMMENDATION_COLUMNS = [
     "server_name",
-    "is_virtual",
     "Env_Type",
     "Current_vCPU",
     "Recommended_vCPU",
@@ -306,7 +303,6 @@ RS3_CPU_RECOMMENDATION_COLUMNS = [
 
 RS3_RAM_RECOMMENDATION_COLUMNS = [
     "server_name",
-    "is_virtual",
     "Env_Type",
     "Current_RAM_GiB",
     "Recommended_RAM_GiB",
@@ -1661,7 +1657,8 @@ def api_savings_summary(request):
               "savings_eur": float,
               "vcpu_reduction": int,      <- total vCPUs that can be removed
               "ram_reduction_gib": float, <- total GiB RAM that can be freed
-              "avg_cost_per_core_pair_eur": float
+              "avg_cost_per_core_pair_eur": float,
+              "avg_cost_per_gib_eur": float
             }
           ],
           "total_savings_eur": float,
@@ -1707,6 +1704,7 @@ def api_savings_summary(request):
             "vcpu_reduction": int(rs_meta.get("total_vcpu_reduction") or rs.get("total_vcpu_reduction") or 0),
             "ram_reduction_gib": float(rs_meta.get("total_ram_reduction_gib") or rs.get("total_ram_reduction_gib") or 0),
             "avg_cost_per_core_pair_eur": float(rs_meta.get("avg_cost_per_core_pair_eur") or rs.get("avg_cost_per_core_pair_eur") or 0),
+            "avg_cost_per_gib_eur": float(rs_meta.get("avg_cost_per_gib_eur") or rs.get("avg_cost_per_gib_eur") or 0),
         },
     ]
 
