@@ -739,28 +739,19 @@
                     <div class="xl:col-span-12 dashboard-panel-card">
                         <div>
                             <span class="dashboard-section-label">Price Distribution by License Type</span>
-                            <p class="mt-1 text-sm text-slate-500">Cost and quantity by Standard, Developer, and Enterprise editions.</p>
+                            <p class="mt-1 text-sm text-slate-500">Cost and quantity by Standard, Developer, and Other (from Helpful Reports sheet 5 or from Prices + Demand sheets).</p>
                         </div>
                         {% if price_distribution %}
                         <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                            {% for item in price_distribution_summary %}
-                            <div class="dashboard-kpi-card border-l-[6px] {% if item.accent == 'sky' %}border-l-sky-500{% elif item.accent == 'emerald' %}border-l-emerald-500{% elif item.accent == 'lime' %}border-l-lime-500{% else %}border-l-violet-500{% endif %}">
-                                <span class="dashboard-section-label">{{ item.label }}</span>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">{% if item.is_currency %}€{{ item.value|floatformat:2 }}{% else %}{{ item.value }}{% endif %}</p>
-                                <p class="mt-1 text-sm text-slate-500">{{ item.subtext }}</p>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             {% for item in price_distribution %}
+                            {% if item.quantity > 0 or item.total_cost > 0 %}
                             <div class="dashboard-license-card dashboard-license-card-compact {% if item.type == 'Standard' %}dashboard-license-standard{% elif item.type == 'Developer' %}dashboard-license-developer{% elif item.type == 'Enterprise' %}dashboard-license-enterprise{% else %}dashboard-license-neutral{% endif %}">
                                 <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ item.type }}</p>
-                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ item.quantity }}</p>
+                                <p class="mt-3 text-3xl font-bold text-slate-900">{{ item.quantity }} <span class="text-base font-medium text-slate-400">qty</span></p>
                                 <p class="mt-1 text-xs text-slate-500">Total cost: {{ item.total_cost|floatformat:2 }}</p>
-                                <div class="mt-4 space-y-1 text-xs text-slate-500">
-                                    <p>Avg Cost : <span class="font-semibold text-slate-900">{{ item.avg_price|floatformat:2 }}</span></p>
-                                </div>
+                                <p class="mt-1 text-xs text-slate-500">Avg price: <span class="font-semibold text-slate-700">{{ item.avg_price|floatformat:2 }}</span></p>
                             </div>
+                            {% endif %}
                             {% endfor %}
                         </div>
                         {% else %}
@@ -971,20 +962,6 @@
                         <option value="{{ option }}" {% if option == rs3_selected_workload %}selected{% endif %}>{% if option == "ALL" %}Select All{% else %}{{ option }}{% endif %}</option>
                         {% endfor %}
                     </select>
-                    <label for="rs3-hosting-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting</label>
-                    <select id="rs3-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                        <option value="">All Hosting</option>
-                        {% for option in rs3_api_hosting_options %}
-                        <option value="{{ option }}" {% if rs3_selected_hosting_zone == option %}selected{% endif %}>{{ option }}</option>
-                        {% endfor %}
-                    </select>
-                    <label for="rs3-status-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</label>
-                    <select id="rs3-status-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                        <option value="">All Status</option>
-                        {% for option in rs3_api_status_options %}
-                        <option value="{{ option }}" {% if rs3_selected_status == option %}selected{% endif %}>{{ option }}</option>
-                        {% endfor %}
-                    </select>
                 </div>
             </div>
 
@@ -1084,20 +1061,46 @@
                                 <option value="{{ option }}" {% if rs3_cpu_selected_filter == option %}selected{% endif %}>{{ option }}</option>
                                 {% endfor %}
                             </select>
+                            <label for="rs3-cpu-hosting-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting</label>
+                            <select id="rs3-cpu-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                                <option value="">All Hosting</option>
+                                {% for option in rs3_api_hosting_options %}
+                                <option value="{{ option }}" {% if rs3_cpu_selected_hosting_zone == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="rs3-cpu-status-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</label>
+                            <select id="rs3-cpu-status-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                                <option value="">All Status</option>
+                                {% for option in rs3_api_status_options %}
+                                <option value="{{ option }}" {% if rs3_cpu_selected_status == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
+                            </select>
                             <span id="rs3-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.cpu_count|default:0 }}</span>
-                            {% if total_rs3_cpu_pages > 1 and rs.cpu_optimizations %}
-                            <nav class="flex items-center gap-1" id="rs3-cpu-nav" data-current-page="{{ rs3_cpu_page }}" data-total-pages="{{ total_rs3_cpu_pages }}">
-                                <button id="rs3-cpu-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rs3_cpu_page <= 1 %}text-slate-300{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</button>
+                            <nav class="flex items-center gap-1" id="rs3-cpu-nav" data-current-page="{{ rs3_cpu_page }}" data-total-pages="{{ total_rs3_cpu_pages }}" style="display:none;">
+                                <button id="rs3-cpu-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
                                 <span id="rs3-cpu-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rs3_cpu_page }} of {{ total_rs3_cpu_pages }}</span>
-                                <button id="rs3-cpu-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rs3_cpu_page >= total_rs3_cpu_pages %}text-slate-300{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</button>
+                                <button id="rs3-cpu-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
-                            {% endif %}
+                            <button id="rs3-cpu-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
+                        <div id="rs3-cpu-loading" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/75">
+                            <div class="flex items-center gap-2 text-slate-500 text-xs font-semibold">
+                                <svg class="animate-spin h-4 w-4 text-sky-500" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                Loading…
+                            </div>
+                        </div>
                         {% if cpu_keys %}
                         <table id="rs3-cpu-table" class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
+                            <thead class="bg-slate-50">
                                 <tr id="rs3-cpu-head-row">
                                     {% for key in cpu_keys %}
                                     <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
@@ -1126,6 +1129,17 @@
                         {% endif %}
                     </div>
                 </div>
+            </div>
+
+            <!-- CPU column visibility panel -->
+            <div id="rs3-cpu-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="rs3-cpu-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="rs3-cpu-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
             </div>
 
             <!-- ── RAM RIGHT-SIZING ─────────────────────────────────────────── -->
@@ -1219,20 +1233,46 @@
                                 <option value="{{ option }}" {% if rs3_ram_selected_filter == option %}selected{% endif %}>{{ option }}</option>
                                 {% endfor %}
                             </select>
+                            <label for="rs3-ram-hosting-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting</label>
+                            <select id="rs3-ram-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                                <option value="">All Hosting</option>
+                                {% for option in rs3_api_hosting_options %}
+                                <option value="{{ option }}" {% if rs3_ram_selected_hosting_zone == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="rs3-ram-status-filter" class="ml-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</label>
+                            <select id="rs3-ram-status-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                                <option value="">All Status</option>
+                                {% for option in rs3_api_status_options %}
+                                <option value="{{ option }}" {% if rs3_ram_selected_status == option %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
+                            </select>
                             <span id="rs3-ram-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.ram_count|default:0 }}</span>
-                            {% if total_rs3_ram_pages > 1 and rs.ram_optimizations %}
-                            <nav class="flex items-center gap-1" id="rs3-ram-nav" data-current-page="{{ rs3_ram_page }}" data-total-pages="{{ total_rs3_ram_pages }}">
-                                <button id="rs3-ram-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rs3_ram_page <= 1 %}text-slate-300{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</button>
+                            <nav class="flex items-center gap-1" id="rs3-ram-nav" data-current-page="{{ rs3_ram_page }}" data-total-pages="{{ total_rs3_ram_pages }}" style="display:none;">
+                                <button id="rs3-ram-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
                                 <span id="rs3-ram-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rs3_ram_page }} of {{ total_rs3_ram_pages }}</span>
-                                <button id="rs3-ram-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rs3_ram_page >= total_rs3_ram_pages %}text-slate-300{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</button>
+                                <button id="rs3-ram-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
-                            {% endif %}
+                            <button id="rs3-ram-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
+                        <div id="rs3-ram-loading" class="hidden absolute inset-0 z-10 flex items-center justify-center bg-white/75">
+                            <div class="flex items-center gap-2 text-slate-500 text-xs font-semibold">
+                                <svg class="animate-spin h-4 w-4 text-sky-500" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                Loading…
+                            </div>
+                        </div>
                         {% if ram_keys %}
                         <table id="rs3-ram-table" class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
+                            <thead class="bg-slate-50">
                                 <tr id="rs3-ram-head-row">
                                     {% for key in ram_keys %}
                                     <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
@@ -1263,112 +1303,111 @@
                 </div>
             </div>
 
+            <!-- RAM column visibility panel -->
+            <div id="rs3-ram-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="rs3-ram-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="rs3-ram-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
+            </div>
+
             <!-- ── UC 3.3: CRITICALITY-AWARE CPU OPTIMIZATION ─────────────────── -->
             <div class="mb-8">
                 <div class="flex items-center gap-3 mb-4">
                     <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware CPU Optimization</h2>
-                    <!-- <span class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">UC 3.3</span> -->
-                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
+                    <span id="crit-cpu-count-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
                 </div>
                 <p class="text-sm text-slate-500 mb-4">Applies to all environments and criticality levels. Flags under-utilised (&lt;10% avg CPU), over-utilised (&gt;80%), or high-peak (&gt;95%) critical systems.</p>
-                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
-                    {% if rs.crit_cpu_optimizations %}
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
+                    <div class="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-2">
+                        <span id="crit-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.crit_cpu_count|default:0 }}</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <nav class="flex items-center gap-1" id="crit-cpu-nav" style="display:none;">
+                                <button id="crit-cpu-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
+                                <span id="crit-cpu-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
+                                <button id="crit-cpu-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
+                            </nav>
+                            <button id="crit-cpu-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table id="crit-cpu-table" class="min-w-full divide-y divide-slate-200 text-left text-xs">
                             <thead class="bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
-                                    <!-- <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th> -->
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg CPU%</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Peak CPU%</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Current vCPU</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommended vCPU</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommendation</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Lifecycle Flag</th>
-                                </tr>
+                                <tr id="crit-cpu-head-row"></tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                {% for row in rs.crit_cpu_optimizations|slice:":50" %}
-                                <tr class="hover:bg-orange-50/40 transition-colors">
-                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
-                                    <!-- <td class="px-4 py-3 whitespace-nowrap">
-                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
-                                    </td> -->
-                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-700">{{ row.Avg_CPU_12m|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-700">{{ row.Peak_CPU_12m|default:"—" }}</td>
-                                    <td class="px-4 py-3 font-semibold text-slate-900">{{ row.Current_vCPU|default:"—" }}</td>
-                                    <td class="px-4 py-3 font-semibold text-emerald-700">{{ row.Recommended_vCPU|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.CPU_Recommendation|default:"—" }}</td>
-                                    <td class="px-4 py-3">
-                                        {% if row.Lifecycle_Flag %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Lifecycle_Flag }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
+                            <tbody id="crit-cpu-tbody" class="divide-y divide-slate-100"></tbody>
                         </table>
+                        <div id="crit-cpu-empty" class="hidden p-8 text-center text-slate-400">
+                            <p class="font-semibold text-slate-500">No critically-aware CPU candidates found.</p>
+                        </div>
                     </div>
-                    {% else %}
-                    <div class="p-8 text-center text-slate-400">
-                        <p class="font-semibold text-slate-500">No critically-aware CPU candidates found.</p>
-                    </div>
-                    {% endif %}
                 </div>
+            </div>
+
+            <!-- Crit CPU column visibility panel -->
+            <div id="crit-cpu-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="crit-cpu-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="crit-cpu-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
             </div>
 
             <!-- ── UC 3.4: CRITICALITY-AWARE RAM OPTIMIZATION ─────────────────── -->
             <div class="mb-8">
                 <div class="flex items-center gap-3 mb-4">
                     <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware RAM Optimization</h2>
-                    <!-- <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-[10px] font-bold text-purple-700">UC 3.4</span> -->
-                    <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_ram_count|default:0 }} systems</span>
+                    <span id="crit-ram-count-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_ram_count|default:0 }} systems</span>
                 </div>
                 <p class="text-sm text-slate-500 mb-4">Flags systems with very high free memory (&gt;80%) for cautious downsize, low free memory (&lt;20%) for upsize review, or critically low minimum memory (&lt;5%).</p>
-                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
-                    {% if rs.crit_ram_optimizations %}
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
+                    <div class="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-2">
+                        <span id="crit-ram-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.crit_ram_count|default:0 }}</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <nav class="flex items-center gap-1" id="crit-ram-nav" style="display:none;">
+                                <button id="crit-ram-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
+                                <span id="crit-ram-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
+                                <button id="crit-ram-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
+                            </nav>
+                            <button id="crit-ram-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table id="crit-ram-table" class="min-w-full divide-y divide-slate-200 text-left text-xs">
                             <thead class="bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Critically</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Avg Free Mem%</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Min Free Mem%</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Current RAM (GiB)</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommended RAM (GiB)</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Recommendation</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Lifecycle Flag</th>
-                                </tr>
+                                <tr id="crit-ram-head-row"></tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                {% for row in rs.crit_ram_optimizations|slice:":50" %}
-                                <tr class="hover:bg-purple-50/40 transition-colors">
-                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
-                                    <!-- <td class="px-4 py-3 whitespace-nowrap">
-                                        {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
-                                    </td> -->
-                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-700">{{ row.Avg_FreeMem_12m|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-700">{{ row.Min_FreeMem_12m|default:"—" }}</td>
-                                    <td class="px-4 py-3 font-semibold text-slate-900">{{ row.Current_RAM_GiB|default:"—" }}</td>
-                                    <td class="px-4 py-3 font-semibold text-emerald-700">{{ row.Recommended_RAM_GiB|default:"—" }}</td>
-                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.RAM_Recommendation|default:"—" }}</td>
-                                    <td class="px-4 py-3">
-                                        {% if row.Lifecycle_Flag %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Lifecycle_Flag }}</span>{% else %}<span class="text-slate-300">—</span>{% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
+                            <tbody id="crit-ram-tbody" class="divide-y divide-slate-100"></tbody>
                         </table>
+                        <div id="crit-ram-empty" class="hidden p-8 text-center text-slate-400">
+                            <p class="font-semibold text-slate-500">No critically-aware RAM candidates found.</p>
+                        </div>
                     </div>
-                    {% else %}
-                    <div class="p-8 text-center text-slate-400">
-                        <p class="font-semibold text-slate-500">No critically-aware RAM candidates found.</p>
-                    </div>
-                    {% endif %}
                 </div>
+            </div>
+
+            <!-- Crit RAM column visibility panel -->
+            <div id="crit-ram-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="crit-ram-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="crit-ram-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
             </div>
 
             <!-- ── LIFECYCLE RISK FLAGS ──────────────────────────────────────── -->
@@ -1503,41 +1542,56 @@
 
             <!-- USU Sub-panel -->
             <div id="dq-panel-usu" class="dq-sub-panel flex flex-col gap-4">
-                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <h3 class="text-sm font-bold text-slate-800">USU Installations</h3>
-                            <!-- <p class="text-xs text-slate-500 mt-0.5">Latest {{ dq_usu_rows|length }} records from the USU Installation API.</p> -->
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-semibold">{{ dq_usu_rows|length }} rows</span>
-                            <nav class="flex items-center gap-1" id="dq-usu-nav">
-                                <button id="dq-usu-prev" onclick="dqChangePage('usu',-1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300">Prev</button>
+                        <h3 class="text-sm font-bold text-slate-800">USU Installations</h3>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <label for="usu-family-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
+                            <select id="usu-family-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                                <option value="all">All</option>
+                                <option value="mysql">MySQL</option>
+                                <option value="oracle">Oracle</option>
+                            </select>
+                            <span id="dq-usu-total-badge" class="px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-semibold">Total: 0</span>
+                            <nav class="flex items-center gap-1" id="dq-usu-nav" style="display:none;">
+                                <button id="dq-usu-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
                                 <span id="dq-usu-page-label" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
-                                <button id="dq-usu-next" onclick="dqChangePage('usu',1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300">Next</button>
+                                <button id="dq-usu-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
+                            <button id="usu-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        {% if dq_usu_keys %}
-                        <table class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
-                                <tr>
-                                    {% for k in dq_usu_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ k }}</th>
-                                    {% endfor %}
-                                </tr>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table id="dq-usu-table" class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-slate-50">
+                                <tr id="dq-usu-head-row"></tr>
                             </thead>
                             <tbody id="dq-usu-tbody" class="bg-white divide-y divide-slate-100"></tbody>
                         </table>
-                        {% else %}
-                        <div class="p-8 text-center">
+                        <div id="dq-usu-empty" class="hidden p-8 text-center text-slate-400">
                             <p class="text-sm font-semibold text-slate-500">No USU installation data available.</p>
                             <p class="text-xs text-slate-400 mt-1">Run <code class="bg-slate-100 px-1 rounded">python manage.py fetch_usu_data</code> to populate.</p>
                         </div>
-                        {% endif %}
+                        <div id="dq-usu-loading" class="hidden p-8 text-center text-slate-400">
+                            <p class="text-sm font-semibold text-slate-500">Loading…</p>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- USU column visibility panel -->
+            <div id="usu-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="usu-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="usu-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
             </div>
 
             <!-- Grafana Sub-panel -->
@@ -1585,80 +1639,92 @@
                 {% endif %}
 
                 <!-- Tabular view -->
-                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <h3 class="text-sm font-bold text-slate-800">Grafana Metrics — Raw Data</h3>
-                            <p class="text-xs text-slate-500 mt-0.5">{% if dq_grafana_is_snapshot %}Latest snapshots{% else %}Monthly rollup records{% endif %} ({{ dq_grafana_rows|length }} rows)</p>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-semibold">{{ dq_grafana_rows|length }} rows</span>
-                            <nav class="flex items-center gap-1" id="dq-grafana-nav">
-                                <button id="dq-grafana-prev" onclick="dqChangePage('grafana',-1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
+                        <h3 class="text-sm font-bold text-slate-800">Grafana Metrics — Raw Data</h3>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span id="dq-grafana-total-badge" class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-semibold">Total: {{ dq_grafana_rows|length }}</span>
+                            <nav class="flex items-center gap-1" id="dq-grafana-nav" style="display:none;">
+                                <button id="dq-grafana-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
                                 <span id="dq-grafana-page-label" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
-                                <button id="dq-grafana-next" onclick="dqChangePage('grafana',1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
+                                <button id="dq-grafana-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
+                            <button id="dq-grafana-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        {% if dq_grafana_keys %}
-                        <table class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
-                                <tr>
-                                    {% for k in dq_grafana_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ k }}</th>
-                                    {% endfor %}
-                                </tr>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table id="dq-grafana-table" class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-slate-50">
+                                <tr id="dq-grafana-head-row"></tr>
                             </thead>
                             <tbody id="dq-grafana-tbody" class="bg-white divide-y divide-slate-100"></tbody>
                         </table>
-                        {% else %}
-                        <div class="p-8 text-center">
+                        <div id="dq-grafana-empty" class="hidden p-8 text-center text-slate-400">
                             <p class="text-sm font-semibold text-slate-500">No Grafana metric data available.</p>
                             <p class="text-xs text-slate-400 mt-1">Run <code class="bg-slate-100 px-1 rounded">python manage.py fetch_grafana_metrics</code> to populate.</p>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
             </div>
 
+            <!-- Grafana column visibility panel -->
+            <div id="dq-grafana-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="dq-grafana-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="dq-grafana-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
+            </div>
+
             <!-- Flat Files Sub-panel -->
             <div id="dq-panel-flatfiles" class="dq-sub-panel flex flex-col gap-4 hidden">
-                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
+                <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <h3 class="text-sm font-bold text-slate-800">Flat File Ingestion</h3>
-                            <!-- <p class="text-xs text-slate-500 mt-0.5">Latest {{ dq_flatfile_rows|length }} CPU utilisation records ingested from Boone's public/private cloud flat files.</p> -->
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold">{{ dq_flatfile_rows|length }} rows</span>
-                            <nav class="flex items-center gap-1" id="dq-flatfiles-nav">
-                                <button id="dq-flatfiles-prev" onclick="dqChangePage('flatfiles',-1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
+                        <h3 class="text-sm font-bold text-slate-800">Flat File Ingestion</h3>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span id="dq-flatfiles-total-badge" class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold">Total: {{ dq_flatfile_rows|length }}</span>
+                            <nav class="flex items-center gap-1" id="dq-flatfiles-nav" style="display:none;">
+                                <button id="dq-flatfiles-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
                                 <span id="dq-flatfiles-page-label" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
-                                <button id="dq-flatfiles-next" onclick="dqChangePage('flatfiles',1)" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
+                                <button id="dq-flatfiles-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
+                            <button id="dq-flatfiles-col-toggle-btn" type="button"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                                Columns
+                            </button>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        {% if dq_flatfile_keys %}
-                        <table class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
-                                <tr>
-                                    {% for k in dq_flatfile_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ k }}</th>
-                                    {% endfor %}
-                                </tr>
+                    <div class="overflow-x-auto p-0 relative bg-white">
+                        <table id="dq-flatfiles-table" class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-slate-50">
+                                <tr id="dq-flatfiles-head-row"></tr>
                             </thead>
                             <tbody id="dq-flatfiles-tbody" class="bg-white divide-y divide-slate-100"></tbody>
                         </table>
-                        {% else %}
-                        <div class="p-8 text-center">
+                        <div id="dq-flatfiles-empty" class="hidden p-8 text-center text-slate-400">
                             <p class="text-sm font-semibold text-slate-500">No flat file data available.</p>
-                            <p class="text-xs text-slate-400 mt-1">Upload a Boone's flat file to populate CPU utilisation records.</p>
+                            <p class="text-xs text-slate-400 mt-1">Upload a flat file to populate CPU utilisation records.</p>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
+            </div>
+
+            <!-- Flat Files column visibility panel -->
+            <div id="dq-flatfiles-col-panel" class="hidden fixed z-50 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden" style="width:228px;">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                    <span class="text-xs font-semibold text-slate-700">Show / Hide Columns</span>
+                    <button id="dq-flatfiles-col-panel-close" type="button" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="dq-flatfiles-col-checkboxes" class="p-3 space-y-1.5 max-h-52 overflow-y-auto"></div>
             </div>
         </div>
         <!-- END DATA QUALITY PANEL -->
@@ -1723,6 +1789,8 @@
 {{ rule2_keys|json_script:"rule2-keys" }}
 {{ rightsizing_cpu_data_json|json_script:"rs3-cpu-data" }}
 {{ rightsizing_ram_data_json|json_script:"rs3-ram-data" }}
+{{ crit_cpu_data_json|json_script:"crit-cpu-data" }}
+{{ crit_ram_data_json|json_script:"crit-ram-data" }}
 {{ rightsizing.cpu_chart_data|json_script:"rs3-cpu-chart" }}
 {{ rightsizing.ram_chart_data|json_script:"rs3-ram-chart" }}
 {{ rightsizing.screen_filter_options|json_script:"rs3-screen-filter-options" }}
@@ -1733,6 +1801,7 @@
     window.rs3RightsizingApiUrl = "{% url 'optimizer:api_strategy3_rightsizing' %}";
     window.rule1DataApiUrl      = "{% url 'optimizer:api_rule1_data' %}";
     window.rule2DataApiUrl      = "{% url 'optimizer:api_rule2_data' %}";
+    window.usuDataApiUrl        = "{% url 'optimizer:api_oracle_data' %}";
 </script>
 {{ chart_specs|json_script:"chart-specs-data" }}
 {{ dq_usu_rows|json_script:"dq-usu-data" }}
@@ -2459,6 +2528,7 @@
 
         // Client-side pagination (no full page reload)
         var PER_PAGE = 6;
+        var RS3_PER_PAGE = 10;
         var rule1DataEl = document.getElementById('rule1-data');
         var rule2DataEl = document.getElementById('rule2-data');
         var rule1KeysEl = document.getElementById('rule1-keys');
@@ -2505,6 +2575,26 @@
         }());
         function saveRule2HiddenCols() {
             try { localStorage.setItem('rule2HiddenCols', JSON.stringify(Array.from(rule2HiddenCols))); } catch (e) {}
+        }
+
+        // ── Rule 3: column-visibility state ───────────────────────────────────
+        var rs3CpuHiddenCols = (function () {
+            try {
+                var arr = JSON.parse(localStorage.getItem('rs3CpuHiddenCols') || '[]');
+                return new Set(Array.isArray(arr) ? arr : []);
+            } catch (e) { return new Set(); }
+        }());
+        function saveRs3CpuHiddenCols() {
+            try { localStorage.setItem('rs3CpuHiddenCols', JSON.stringify(Array.from(rs3CpuHiddenCols))); } catch (e) {}
+        }
+        var rs3RamHiddenCols = (function () {
+            try {
+                var arr = JSON.parse(localStorage.getItem('rs3RamHiddenCols') || '[]');
+                return new Set(Array.isArray(arr) ? arr : []);
+            } catch (e) { return new Set(); }
+        }());
+        function saveRs3RamHiddenCols() {
+            try { localStorage.setItem('rs3RamHiddenCols', JSON.stringify(Array.from(rs3RamHiddenCols))); } catch (e) {}
         }
 
         function safeText(val) {
@@ -2948,7 +3038,9 @@
                 totalPages: rs3CpuNav ? parseInt(rs3CpuNav.getAttribute('data-total-pages'), 10) : 1,
                 filter: '',
                 sortField: 'potential_vcpu_reduction',
-                sortOrder: 'desc'
+                sortOrder: 'desc',
+                hostingZone: '',
+                installedStatus: ''
             },
             ram: {
                 data: rs3RamDataEl ? JSON.parse(rs3RamDataEl.textContent || '[]') : [],
@@ -2957,7 +3049,9 @@
                 totalPages: rs3RamNav ? parseInt(rs3RamNav.getAttribute('data-total-pages'), 10) : 1,
                 filter: '',
                 sortField: 'potential_ram_reduction_gib',
-                sortOrder: 'desc'
+                sortOrder: 'desc',
+                hostingZone: '',
+                installedStatus: ''
             }
         };
         var rs3CpuRightsizingFilterMap = {
@@ -3148,20 +3242,29 @@
             };
         }
 
+        function rs3SortIconSvg(type, sortField) {
+            var activeField = rs3State[type].sortField;
+            var order = rs3State[type].sortOrder;
+            if (!sortField || activeField !== sortField) {
+                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            }
+            if (order === 'asc') {
+                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            }
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
         function renderRs3TableHead(type, columns) {
             var headRow = document.getElementById('rs3-' + type + '-head-row');
             if (!headRow) return;
+            var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
             var html = '';
             for (var i = 0; i < columns.length; i++) {
+                if (hiddenCols.has(i)) continue;
                 var label = formatRs3Display(columns[i]);
                 var sortField = getRs3ApiFieldForColumn(type, columns[i]);
-                var isActive = sortField && rs3State[type].sortField === sortField;
-                var sortIndicator = '';
-                if (isActive) {
-                    sortIndicator = rs3State[type].sortOrder === 'asc' ? ' ^' : ' v';
-                }
                 if (sortField) {
-                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50"><button type="button" class="inline-flex items-center gap-1 hover:text-slate-700" data-rs3-sort-type="' + escapeHtml(type) + '" data-rs3-sort-field="' + escapeHtml(sortField) + '">' + escapeHtml(label + sortIndicator) + '</button></th>';
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50"><button type="button" class="inline-flex items-center gap-1 hover:text-slate-700" data-rs3-sort-type="' + escapeHtml(type) + '" data-rs3-sort-field="' + escapeHtml(sortField) + '" data-rs3-col-idx="' + i + '">' + escapeHtml(label) + rs3SortIconSvg(type, sortField) + '</button></th>';
                 } else {
                     html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
                 }
@@ -3239,12 +3342,14 @@
         function renderRs3TableBody(type, records, columns, page) {
             var tbody = document.getElementById('rs3-' + type + '-tbody');
             if (!tbody) return;
-            var start = (page - 1) * PER_PAGE;
-            var slice = records.slice(start, start + PER_PAGE);
+            var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
+            var start = (page - 1) * RS3_PER_PAGE;
+            var slice = records.slice(start, start + RS3_PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 html += '<tr class="hover:bg-slate-50 transition-colors">';
                 for (var j = 0; j < columns.length; j++) {
+                    if (hiddenCols.has(j)) continue;
                     html += renderRs3RecommendationCell(columns[j], slice[i][columns[j]]);
                 }
                 html += '</tr>';
@@ -3255,10 +3360,12 @@
         function requestRs3TableData(type, columns, fallbackRecords) {
             var url = window.rs3RightsizingApiUrl;
             if (!url || typeof fetch !== 'function') {
+                rs3State[type].cachedRows = fallbackRecords;
+                rs3State[type].cachedCols = columns;
                 renderRs3TableBody(type, fallbackRecords, columns, rs3State[type].page);
                 setRs3EmptyState(type, fallbackRecords.length > 0);
                 updateRs3TotalBadge(type, fallbackRecords.length);
-                updateRs3Pagination(type, rs3State[type].page, Math.max(1, Math.ceil(fallbackRecords.length / PER_PAGE)), fallbackRecords.length);
+                updateRs3Pagination(type, rs3State[type].page, Math.max(1, Math.ceil(fallbackRecords.length / RS3_PER_PAGE)), fallbackRecords.length);
                 return;
             }
 
@@ -3266,12 +3373,13 @@
             requestUrl.searchParams.set('workload', type.toUpperCase());
             requestUrl.searchParams.set('screen_filter', rs3State[type].filter);
             requestUrl.searchParams.set('page', rs3State[type].page);
-            requestUrl.searchParams.set('page_size', PER_PAGE);
+            requestUrl.searchParams.set('page_size', RS3_PER_PAGE);
             requestUrl.searchParams.set('sort_field', rs3State[type].sortField);
             requestUrl.searchParams.set('sort_order', rs3State[type].sortOrder);
-            if (rs3State.shared.hostingZone) requestUrl.searchParams.set('hosting_zone', rs3State.shared.hostingZone);
-            if (rs3State.shared.installedStatus) requestUrl.searchParams.set('installed_status_usu', rs3State.shared.installedStatus);
+            if (rs3State[type].hostingZone) requestUrl.searchParams.set('hosting_zone', rs3State[type].hostingZone);
+            if (rs3State[type].installedStatus) requestUrl.searchParams.set('installed_status_usu', rs3State[type].installedStatus);
 
+            setRs3Loading(type, true);
             fetch(requestUrl.toString(), {
                 method: 'GET',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -3291,18 +3399,30 @@
                     var page = Number(pagination.page || 1);
                     rs3State[type].page = page;
                     rs3State[type].totalPages = totalPages;
+                    rs3State[type].cachedRows = rows;
+                    rs3State[type].cachedCols = columns;
                     renderRs3TableBody(type, rows, columns, 1);
                     setRs3EmptyState(type, totalRows > 0);
                     updateRs3TotalBadge(type, totalRows);
                     updateRs3Pagination(type, page, totalPages, totalRows);
+                    setRs3Loading(type, false);
                 })
                 .catch(function() {
-                    var totalPages = Math.max(1, Math.ceil(fallbackRecords.length / PER_PAGE));
+                    var totalPages = Math.max(1, Math.ceil(fallbackRecords.length / RS3_PER_PAGE));
+                    rs3State[type].cachedRows = fallbackRecords;
+                    rs3State[type].cachedCols = columns;
                     renderRs3TableBody(type, fallbackRecords, columns, rs3State[type].page);
                     setRs3EmptyState(type, fallbackRecords.length > 0);
                     updateRs3TotalBadge(type, fallbackRecords.length);
                     updateRs3Pagination(type, rs3State[type].page, totalPages, fallbackRecords.length);
+                    setRs3Loading(type, false);
                 });
+        }
+
+        function setRs3Loading(type, isLoading) {
+            var el = document.getElementById('rs3-' + type + '-loading');
+            if (!el) return;
+            el.classList.toggle('hidden', !isLoading);
         }
 
         function setRs3EmptyState(type, hasRows) {
@@ -3328,7 +3448,7 @@
             var visiblePage = totalRows ? page : 1;
             var visibleTotalPages = totalRows ? totalPages : 1;
             if (display) display.textContent = 'Page ' + visiblePage + ' of ' + visibleTotalPages;
-            if (nav) nav.style.display = totalRows > PER_PAGE ? 'flex' : 'none';
+            if (nav) nav.style.display = totalRows > RS3_PER_PAGE ? 'flex' : 'none';
             if (prevBtn) {
                 prevBtn.classList.toggle('text-slate-300', page <= 1 || !totalRows);
                 prevBtn.classList.toggle('text-slate-700', page > 1 && totalRows > 0);
@@ -3429,7 +3549,7 @@
             var state = rs3State[type];
             var filteredRecords = getRs3FilteredRecords(type);
             var columns = getRs3Columns(type, state.filter);
-            var totalPages = Math.max(1, Math.ceil(filteredRecords.length / PER_PAGE));
+            var totalPages = Math.max(1, Math.ceil(filteredRecords.length / RS3_PER_PAGE));
             var summary = getRs3Summary(type, filteredRecords);
 
             state.totalPages = totalPages;
@@ -3437,6 +3557,7 @@
             if (!filteredRecords.length) state.page = 1;
 
             renderRs3TableHead(type, columns);
+            buildRs3ColPanel(type);
             requestRs3TableData(type, columns, filteredRecords);
             updateRs3Summary(type, summary);
             updateRs3EmptyCopy(type);
@@ -3450,10 +3571,14 @@
             url.searchParams.set('rs3_workload', rs3State.workload.toUpperCase());
             url.searchParams.set('rs3_filter', rs3State[selectedType] ? rs3State[selectedType].filter : '');
             url.searchParams.set('rs3_page', rs3State[selectedType] ? rs3State[selectedType].page : 1);
-            if (rs3State.shared.hostingZone) url.searchParams.set('rs3_hosting_zone', rs3State.shared.hostingZone);
-            else url.searchParams.delete('rs3_hosting_zone');
-            if (rs3State.shared.installedStatus) url.searchParams.set('rs3_status', rs3State.shared.installedStatus);
-            else url.searchParams.delete('rs3_status');
+            if (rs3State.cpu.hostingZone) url.searchParams.set('rs3_cpu_hosting_zone', rs3State.cpu.hostingZone);
+            else url.searchParams.delete('rs3_cpu_hosting_zone');
+            if (rs3State.cpu.installedStatus) url.searchParams.set('rs3_cpu_status', rs3State.cpu.installedStatus);
+            else url.searchParams.delete('rs3_cpu_status');
+            if (rs3State.ram.hostingZone) url.searchParams.set('rs3_ram_hosting_zone', rs3State.ram.hostingZone);
+            else url.searchParams.delete('rs3_ram_hosting_zone');
+            if (rs3State.ram.installedStatus) url.searchParams.set('rs3_ram_status', rs3State.ram.installedStatus);
+            else url.searchParams.delete('rs3_ram_status');
             history.replaceState(null, '', url.pathname + url.search + url.hash);
         }
 
@@ -3514,6 +3639,24 @@
             rs3State[type].page += 1;
             renderRs3Screen(type);
             if (rs3State.workload === type || rs3State.workload === 'all') updateRs3Url(type);
+        }
+
+        // ── Rule 3: column visibility panel builder ───────────────────────────
+        function buildRs3ColPanel(type) {
+            var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
+            var cbsEl = document.getElementById('rs3-' + type + '-col-checkboxes');
+            if (!cbsEl) return;
+            var columns = getRs3Columns(type, rs3State[type].filter);
+            var html = '';
+            for (var i = 0; i < columns.length; i++) {
+                var label = formatRs3Display(columns[i]);
+                var checked = !hiddenCols.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="rs3-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-col-idx="' + i + '" data-type="' + escapeHtml(type) + '" ' + checked + '>'
+                      + escapeHtml(label)
+                      + '</label>';
+            }
+            cbsEl.innerHTML = html || '<p class="px-2 text-xs text-slate-400">No columns</p>';
         }
 
         // ── Rule 1: sort (event delegation on thead row) ──────────────────────
@@ -3658,6 +3801,60 @@
             });
         }
 
+        // ── Rule 3: column visibility toggles ────────────────────────────────
+        ['cpu', 'ram'].forEach(function(type) {
+            var toggleBtn  = document.getElementById('rs3-' + type + '-col-toggle-btn');
+            var panel      = document.getElementById('rs3-' + type + '-col-panel');
+            var closeBtn   = document.getElementById('rs3-' + type + '-col-panel-close');
+            var cbsEl      = document.getElementById('rs3-' + type + '-col-checkboxes');
+
+            if (toggleBtn && panel) {
+                toggleBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var opening = panel.classList.contains('hidden');
+                    panel.classList.toggle('hidden');
+                    if (opening) {
+                        buildRs3ColPanel(type);
+                        var rect = toggleBtn.getBoundingClientRect();
+                        var panelW = 228;
+                        var topVal  = rect.bottom + 6;
+                        var leftVal = rect.right - panelW;
+                        if (leftVal < 8) leftVal = 8;
+                        if (leftVal + panelW > window.innerWidth - 8) leftVal = window.innerWidth - panelW - 8;
+                        panel.style.top   = topVal + 'px';
+                        panel.style.left  = leftVal + 'px';
+                        panel.style.right = 'auto';
+                    }
+                });
+            }
+            if (closeBtn && panel) {
+                closeBtn.addEventListener('click', function () { panel.classList.add('hidden'); });
+            }
+            document.addEventListener('click', function (e) {
+                if (!panel || panel.classList.contains('hidden')) return;
+                if (!panel.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) {
+                    panel.classList.add('hidden');
+                }
+            });
+            if (cbsEl) {
+                cbsEl.addEventListener('change', function (e) {
+                    var cb = e.target.closest('.rs3-col-cb');
+                    if (!cb) return;
+                    var cbType = cb.getAttribute('data-type');
+                    var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                    if (isNaN(idx)) return;
+                    var hiddenCols = cbType === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
+                    if (cb.checked) hiddenCols.delete(idx);
+                    else hiddenCols.add(idx);
+                    if (cbType === 'cpu') saveRs3CpuHiddenCols(); else saveRs3RamHiddenCols();
+                    var cols = rs3State[cbType].cachedCols || getRs3Columns(cbType, rs3State[cbType].filter);
+                    renderRs3TableHead(cbType, cols);
+                    renderRs3TableBody(cbType, rs3State[cbType].cachedRows || [], cols, 1);
+                    buildRs3ColPanel(cbType);
+                });
+            }
+        });
+
         var r1Prev = document.getElementById('rule1-prev');
         var r1Next = document.getElementById('rule1-next');
         var r2Prev = document.getElementById('rule2-prev');
@@ -3675,8 +3872,10 @@
         var r3RamNext = document.getElementById('rs3-ram-next');
         var r3CpuFilter = document.getElementById('rs3-cpu-filter');
         var r3RamFilter = document.getElementById('rs3-ram-filter');
-        var r3HostingFilter = document.getElementById('rs3-hosting-filter');
-        var r3StatusFilter = document.getElementById('rs3-status-filter');
+        var r3CpuHostingFilter = document.getElementById('rs3-cpu-hosting-filter');
+        var r3CpuStatusFilter = document.getElementById('rs3-cpu-status-filter');
+        var r3RamHostingFilter = document.getElementById('rs3-ram-hosting-filter');
+        var r3RamStatusFilter = document.getElementById('rs3-ram-status-filter');
         var r3CpuHeadRow = document.getElementById('rs3-cpu-head-row');
         var r3RamHeadRow = document.getElementById('rs3-ram-head-row');
         var rule1Tbody = document.getElementById('rule1-tbody');
@@ -3757,18 +3956,40 @@
         } else {
             rs3State.ram.filter = normalizeRs3RamFilter(rs3DefaultFilters.RAM || rs3FilterConfig.ram.defaultFilter);
         }
-        if (r3HostingFilter) {
-            rs3State.shared.hostingZone = String(r3HostingFilter.value || '').trim();
-            r3HostingFilter.addEventListener('change', function(e) {
-                rs3State.shared.hostingZone = String(e.target.value || '').trim();
-                onRs3SharedFilterChange();
+        if (r3CpuHostingFilter) {
+            rs3State.cpu.hostingZone = String(r3CpuHostingFilter.value || '').trim();
+            r3CpuHostingFilter.addEventListener('change', function(e) {
+                rs3State.cpu.hostingZone = String(e.target.value || '').trim();
+                rs3State.cpu.page = 1;
+                renderRs3Screen('cpu');
+                updateRs3Url('cpu');
             });
         }
-        if (r3StatusFilter) {
-            rs3State.shared.installedStatus = String(r3StatusFilter.value || '').trim();
-            r3StatusFilter.addEventListener('change', function(e) {
-                rs3State.shared.installedStatus = String(e.target.value || '').trim();
-                onRs3SharedFilterChange();
+        if (r3CpuStatusFilter) {
+            rs3State.cpu.installedStatus = String(r3CpuStatusFilter.value || '').trim();
+            r3CpuStatusFilter.addEventListener('change', function(e) {
+                rs3State.cpu.installedStatus = String(e.target.value || '').trim();
+                rs3State.cpu.page = 1;
+                renderRs3Screen('cpu');
+                updateRs3Url('cpu');
+            });
+        }
+        if (r3RamHostingFilter) {
+            rs3State.ram.hostingZone = String(r3RamHostingFilter.value || '').trim();
+            r3RamHostingFilter.addEventListener('change', function(e) {
+                rs3State.ram.hostingZone = String(e.target.value || '').trim();
+                rs3State.ram.page = 1;
+                renderRs3Screen('ram');
+                updateRs3Url('ram');
+            });
+        }
+        if (r3RamStatusFilter) {
+            rs3State.ram.installedStatus = String(r3RamStatusFilter.value || '').trim();
+            r3RamStatusFilter.addEventListener('change', function(e) {
+                rs3State.ram.installedStatus = String(e.target.value || '').trim();
+                rs3State.ram.page = 1;
+                renderRs3Screen('ram');
+                updateRs3Url('ram');
             });
         }
         [r3CpuHeadRow, r3RamHeadRow].forEach(function(headRow) {
@@ -3801,11 +4022,281 @@
         updateRs3SectionVisibility();
     });
 
+    // ── Critically-Aware CPU / RAM tables ────────────────────────────────────
+    (function () {
+        var CRIT_PER_PAGE = 10;
+
+        var critColDefs = {
+            cpu: [
+                { key: 'server_name',       label: 'Server' },
+                { key: 'Environment',        label: 'Env' },
+                { key: 'Avg_CPU_12m',        label: 'Avg CPU%' },
+                { key: 'Peak_CPU_12m',       label: 'Peak CPU%' },
+                { key: 'Current_vCPU',       label: 'Current vCPU' },
+                { key: 'Recommended_vCPU',   label: 'Recommended vCPU' },
+                { key: 'CPU_Recommendation', label: 'Recommendation' },
+                { key: 'Lifecycle_Flag',     label: 'Lifecycle Flag' },
+            ],
+            ram: [
+                { key: 'server_name',           label: 'Server' },
+                { key: 'Environment',            label: 'Env' },
+                { key: 'Avg_FreeMem_12m',        label: 'Avg Free Mem%' },
+                { key: 'Min_FreeMem_12m',        label: 'Min Free Mem%' },
+                { key: 'Current_RAM_GiB',        label: 'Current RAM (GiB)' },
+                { key: 'Recommended_RAM_GiB',    label: 'Recommended RAM (GiB)' },
+                { key: 'RAM_Recommendation',     label: 'Recommendation' },
+                { key: 'Lifecycle_Flag',         label: 'Lifecycle Flag' },
+            ],
+        };
+
+        var critState = {
+            cpu: { page: 1, sortColIdx: -1, sortOrder: 'asc', sortedData: [], hiddenCols: new Set(), data: [] },
+            ram: { page: 1, sortColIdx: -1, sortOrder: 'asc', sortedData: [], hiddenCols: new Set(), data: [] },
+        };
+
+        function loadCritData(type) {
+            var el = document.getElementById('crit-' + type + '-data');
+            var raw = el ? JSON.parse(el.textContent || '[]') : [];
+            critState[type].data = raw;
+            // restore hidden cols from localStorage
+            try {
+                var arr = JSON.parse(localStorage.getItem('critHiddenCols_' + type) || '[]');
+                critState[type].hiddenCols = new Set(Array.isArray(arr) ? arr : []);
+            } catch (e) { critState[type].hiddenCols = new Set(); }
+            critState[type].sortedData = raw.slice();
+        }
+
+        function saveCritHiddenCols(type) {
+            try { localStorage.setItem('critHiddenCols_' + type, JSON.stringify(Array.from(critState[type].hiddenCols))); } catch (e) {}
+        }
+
+        function escHtml(s) {
+            var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML;
+        }
+
+        function critSortIcon(type, colIdx) {
+            var st = critState[type];
+            if (st.sortColIdx !== colIdx) {
+                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            }
+            if (st.sortOrder === 'asc') {
+                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            }
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
+        function doSortCrit(type) {
+            var st = critState[type];
+            var cols = critColDefs[type];
+            if (st.sortColIdx < 0 || st.sortColIdx >= cols.length) {
+                st.sortedData = st.data.slice();
+                return;
+            }
+            var key = cols[st.sortColIdx].key;
+            var dir = st.sortOrder === 'asc' ? 1 : -1;
+            st.sortedData = st.data.slice().sort(function (a, b) {
+                var av = a[key]; var bv = b[key];
+                if (av == null || av === '') return 1;
+                if (bv == null || bv === '') return -1;
+                var an = Number(av); var bn = Number(bv);
+                if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+                return String(av).localeCompare(String(bv)) * dir;
+            });
+        }
+
+        function renderCritHead(type) {
+            var headRow = document.getElementById('crit-' + type + '-head-row');
+            if (!headRow) return;
+            var cols = critColDefs[type];
+            var hidden = critState[type].hiddenCols;
+            var html = '';
+            for (var i = 0; i < cols.length; i++) {
+                if (hidden.has(i)) continue;
+                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">'
+                      + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 crit-sort-btn" data-crit-type="' + type + '" data-crit-col="' + i + '">'
+                      + escHtml(cols[i].label) + critSortIcon(type, i)
+                      + '</button></th>';
+            }
+            headRow.innerHTML = html;
+        }
+
+        function renderCritBody(type) {
+            var tbody = document.getElementById('crit-' + type + '-tbody');
+            var emptyEl = document.getElementById('crit-' + type + '-empty');
+            var tableEl = document.getElementById('crit-' + type + '-table');
+            if (!tbody) return;
+            var st = critState[type];
+            var cols = critColDefs[type];
+            var hidden = st.hiddenCols;
+            var total = st.sortedData.length;
+            var totalPages = Math.max(1, Math.ceil(total / CRIT_PER_PAGE));
+            if (st.page > totalPages) st.page = totalPages;
+            var slice = st.sortedData.slice((st.page - 1) * CRIT_PER_PAGE, st.page * CRIT_PER_PAGE);
+
+            if (tableEl) tableEl.classList.toggle('hidden', total === 0);
+            if (emptyEl) {
+                emptyEl.classList.toggle('hidden', total > 0);
+                emptyEl.classList.toggle('flex', total === 0);
+            }
+
+            var html = '';
+            for (var i = 0; i < slice.length; i++) {
+                var row = slice[i];
+                html += '<tr class="hover:bg-orange-50/40 transition-colors">';
+                for (var j = 0; j < cols.length; j++) {
+                    if (hidden.has(j)) continue;
+                    var val = row[cols[j].key];
+                    var text = (val == null || val === '') ? '—' : String(val);
+                    if (cols[j].key === 'Lifecycle_Flag' && text !== '—') {
+                        html += '<td class="px-4 py-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">' + escHtml(text) + '</span></td>';
+                    } else if (cols[j].key === 'CPU_Recommendation' || cols[j].key === 'RAM_Recommendation') {
+                        var isReduced = /^(reduce|reduced)\b/i.test(text);
+                        var isIncreased = /^(increase|increased)\b/i.test(text);
+                        var dot = isReduced ? '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#ef4444;"></span>'
+                                : isIncreased ? '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#22c55e;"></span>' : '';
+                        html += '<td class="px-4 py-3 text-[10px] font-semibold whitespace-nowrap text-slate-800 max-w-xs"><span class="flex items-center">' + dot + escHtml(text) + '</span></td>';
+                    } else if (cols[j].key === 'Recommended_vCPU' || cols[j].key === 'Recommended_RAM_GiB') {
+                        html += '<td class="px-4 py-3 font-semibold text-emerald-700 whitespace-nowrap text-[10px]">' + escHtml(text) + '</td>';
+                    } else {
+                        html += '<td class="px-4 py-3 text-[10px] text-slate-700 whitespace-nowrap">' + escHtml(text) + '</td>';
+                    }
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+
+            // update pagination UI
+            var nav = document.getElementById('crit-' + type + '-nav');
+            var display = document.getElementById('crit-' + type + '-page-display');
+            var prevBtn = document.getElementById('crit-' + type + '-prev');
+            var nextBtn = document.getElementById('crit-' + type + '-next');
+            if (nav) nav.style.display = total > CRIT_PER_PAGE ? 'flex' : 'none';
+            if (display) display.textContent = 'Page ' + (total ? st.page : 1) + ' of ' + (total ? totalPages : 1);
+            if (prevBtn) {
+                prevBtn.classList.toggle('text-slate-300', st.page <= 1);
+                prevBtn.classList.toggle('text-slate-700', st.page > 1);
+                prevBtn.classList.toggle('hover:bg-slate-100', st.page > 1);
+            }
+            if (nextBtn) {
+                nextBtn.classList.toggle('text-slate-300', st.page >= totalPages);
+                nextBtn.classList.toggle('text-slate-700', st.page < totalPages);
+                nextBtn.classList.toggle('hover:bg-slate-100', st.page < totalPages);
+            }
+            // update total badge
+            var badge = document.getElementById('crit-' + type + '-total-badge');
+            if (badge) badge.textContent = 'Total: ' + total;
+        }
+
+        function buildCritColPanel(type) {
+            var cbsEl = document.getElementById('crit-' + type + '-col-checkboxes');
+            if (!cbsEl) return;
+            var cols = critColDefs[type];
+            var hidden = critState[type].hiddenCols;
+            var html = '';
+            for (var i = 0; i < cols.length; i++) {
+                var checked = !hidden.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="crit-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-crit-type="' + type + '" data-col-idx="' + i + '" ' + checked + '>'
+                      + escHtml(cols[i].label) + '</label>';
+            }
+            cbsEl.innerHTML = html;
+        }
+
+        function initCritTable(type) {
+            loadCritData(type);
+            renderCritHead(type);
+            buildCritColPanel(type);
+            renderCritBody(type);
+
+            // sort delegation
+            var headRow = document.getElementById('crit-' + type + '-head-row');
+            if (headRow) {
+                headRow.addEventListener('click', function (e) {
+                    var btn = e.target.closest('.crit-sort-btn');
+                    if (!btn) return;
+                    var colIdx = parseInt(btn.getAttribute('data-crit-col'), 10);
+                    if (isNaN(colIdx)) return;
+                    var st = critState[type];
+                    if (st.sortColIdx === colIdx) st.sortOrder = st.sortOrder === 'asc' ? 'desc' : 'asc';
+                    else { st.sortColIdx = colIdx; st.sortOrder = 'asc'; }
+                    st.page = 1;
+                    doSortCrit(type);
+                    renderCritHead(type);
+                    renderCritBody(type);
+                });
+            }
+
+            // pagination
+            var prevBtn = document.getElementById('crit-' + type + '-prev');
+            var nextBtn = document.getElementById('crit-' + type + '-next');
+            if (prevBtn) prevBtn.addEventListener('click', function () {
+                if (critState[type].page <= 1) return;
+                critState[type].page -= 1;
+                renderCritBody(type);
+            });
+            if (nextBtn) nextBtn.addEventListener('click', function () {
+                var total = critState[type].sortedData.length;
+                var totalPages = Math.max(1, Math.ceil(total / CRIT_PER_PAGE));
+                if (critState[type].page >= totalPages) return;
+                critState[type].page += 1;
+                renderCritBody(type);
+            });
+
+            // column visibility panel
+            var toggleBtn = document.getElementById('crit-' + type + '-col-toggle-btn');
+            var panel     = document.getElementById('crit-' + type + '-col-panel');
+            var closeBtn  = document.getElementById('crit-' + type + '-col-panel-close');
+            var cbsEl     = document.getElementById('crit-' + type + '-col-checkboxes');
+
+            if (toggleBtn && panel) {
+                toggleBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var opening = panel.classList.contains('hidden');
+                    panel.classList.toggle('hidden');
+                    if (opening) {
+                        buildCritColPanel(type);
+                        var rect = toggleBtn.getBoundingClientRect();
+                        var panelW = 228;
+                        var topVal  = rect.bottom + 6;
+                        var leftVal = rect.right - panelW;
+                        if (leftVal < 8) leftVal = 8;
+                        if (leftVal + panelW > window.innerWidth - 8) leftVal = window.innerWidth - panelW - 8;
+                        panel.style.top  = topVal + 'px';
+                        panel.style.left = leftVal + 'px';
+                        panel.style.right = 'auto';
+                    }
+                });
+            }
+            if (closeBtn && panel) closeBtn.addEventListener('click', function () { panel.classList.add('hidden'); });
+            document.addEventListener('click', function (e) {
+                if (!panel || panel.classList.contains('hidden')) return;
+                if (!panel.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) panel.classList.add('hidden');
+            });
+            if (cbsEl) {
+                cbsEl.addEventListener('change', function (e) {
+                    var cb = e.target.closest('.crit-col-cb');
+                    if (!cb) return;
+                    var t = cb.getAttribute('data-crit-type');
+                    var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                    if (isNaN(idx)) return;
+                    if (cb.checked) critState[t].hiddenCols.delete(idx);
+                    else critState[t].hiddenCols.add(idx);
+                    saveCritHiddenCols(t);
+                    renderCritHead(t);
+                    renderCritBody(t);
+                    buildCritColPanel(t);
+                });
+            }
+        }
+
+        initCritTable('cpu');
+        initCritTable('ram');
+    }());
+
     // ── Data Quality sub-tabs & pagination ────────────────────────────────────
     (function () {
-        var DQ_PER_PAGE = 15;
+        var DQ_PER_PAGE = 10;
         var dqState = {
-            usu:      { page: 1, data: [], keys: [] },
             grafana:  { page: 1, data: [], keys: [] },
             flatfiles:{ page: 1, data: [], keys: [] },
         };
@@ -3819,43 +4310,150 @@
             };
         }
 
-        var usuLoad      = loadDqJson('dq-usu-data',      'dq-usu-keys');
         var grafanaLoad  = loadDqJson('dq-grafana-data',  'dq-grafana-keys');
         var ffLoad       = loadDqJson('dq-flatfile-data', 'dq-flatfile-keys');
 
-        dqState.usu.data      = usuLoad.data;      dqState.usu.keys      = usuLoad.keys;
         dqState.grafana.data  = grafanaLoad.data;  dqState.grafana.keys  = grafanaLoad.keys;
         dqState.flatfiles.data= ffLoad.data;       dqState.flatfiles.keys= ffLoad.keys;
 
-        function dqRenderTable(name) {
+        // ── Per-table sort + column-visibility state ──────────────────────────
+        var dqTableState = {
+            grafana:   { sortColIdx: -1, sortOrder: 'asc', sortedData: dqState.grafana.data.slice(),
+                         hiddenCols: (function(){ try { var a=JSON.parse(localStorage.getItem('dqHiddenCols_grafana')||'[]'); return new Set(Array.isArray(a)?a:[]); } catch(e){ return new Set(); } }()) },
+            flatfiles: { sortColIdx: -1, sortOrder: 'asc', sortedData: dqState.flatfiles.data.slice(),
+                         hiddenCols: (function(){ try { var a=JSON.parse(localStorage.getItem('dqHiddenCols_flatfiles')||'[]'); return new Set(Array.isArray(a)?a:[]); } catch(e){ return new Set(); } }()) },
+        };
+
+        function saveDqHiddenCols(name) {
+            try { localStorage.setItem('dqHiddenCols_' + name, JSON.stringify(Array.from(dqTableState[name].hiddenCols))); } catch(e) {}
+        }
+
+        function dqEsc(s) {
+            var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML;
+        }
+
+        function dqSortIcon(name, colIdx) {
+            var st = dqTableState[name];
+            if (st.sortColIdx !== colIdx) {
+                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            }
+            if (st.sortOrder === 'asc') {
+                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            }
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
+        function dqDoSort(name) {
+            var st = dqTableState[name];
+            var keys = dqState[name].keys;
+            if (st.sortColIdx < 0 || st.sortColIdx >= keys.length) {
+                st.sortedData = dqState[name].data.slice();
+                return;
+            }
+            var key = keys[st.sortColIdx];
+            var dir = st.sortOrder === 'asc' ? 1 : -1;
+            st.sortedData = dqState[name].data.slice().sort(function(a, b) {
+                var av = a[key]; var bv = b[key];
+                if (av == null || av === '') return 1;
+                if (bv == null || bv === '') return -1;
+                var an = Number(av); var bn = Number(bv);
+                if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+                return String(av).localeCompare(String(bv)) * dir;
+            });
+        }
+
+        function dqRenderHead(name) {
+            var headRow = document.getElementById('dq-' + name + '-head-row');
+            if (!headRow) return;
+            var keys = dqState[name].keys;
+            var hidden = dqTableState[name].hiddenCols;
+            var html = '';
+            for (var i = 0; i < keys.length; i++) {
+                if (hidden.has(i)) continue;
+                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">'
+                      + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 dq-sort-btn" data-dq-name="' + dqEsc(name) + '" data-dq-col="' + i + '">'
+                      + dqEsc(keys[i]) + dqSortIcon(name, i)
+                      + '</button></th>';
+            }
+            headRow.innerHTML = html;
+        }
+
+        function dqRenderBody(name) {
             var s = dqState[name];
+            var st = dqTableState[name];
             var tbody = document.getElementById('dq-' + name + '-tbody');
-            var label = document.getElementById('dq-' + name + '-page-label');
+            var tableEl = document.getElementById('dq-' + name + '-table');
+            var emptyEl = document.getElementById('dq-' + name + '-empty');
+            var nav     = document.getElementById('dq-' + name + '-nav');
+            var label   = document.getElementById('dq-' + name + '-page-label');
+            var badge   = document.getElementById('dq-' + name + '-total-badge');
+            var prevBtn = document.getElementById('dq-' + name + '-prev');
+            var nextBtn = document.getElementById('dq-' + name + '-next');
             if (!tbody) return;
-            var total = s.data.length;
+
+            var total = st.sortedData.length;
             var totalPages = Math.max(1, Math.ceil(total / DQ_PER_PAGE));
             s.page = Math.min(Math.max(1, s.page), totalPages);
-            var slice = s.data.slice((s.page - 1) * DQ_PER_PAGE, s.page * DQ_PER_PAGE);
-            var rows = slice.map(function(row) {
-                var cells = s.keys.map(function(k) {
-                    var v = row[k];
+            var slice = st.sortedData.slice((s.page - 1) * DQ_PER_PAGE, s.page * DQ_PER_PAGE);
+            var hidden = st.hiddenCols;
+
+            if (tableEl) tableEl.classList.toggle('hidden', total === 0);
+            if (emptyEl) emptyEl.classList.toggle('hidden', total > 0);
+
+            if (badge) badge.textContent = 'Total: ' + total;
+            if (nav) nav.style.display = total > DQ_PER_PAGE ? 'flex' : 'none';
+            if (label) label.textContent = 'Page ' + (total ? s.page : 1) + ' of ' + (total ? totalPages : 1);
+            if (prevBtn) {
+                prevBtn.classList.toggle('text-slate-300', s.page <= 1);
+                prevBtn.classList.toggle('text-slate-700', s.page > 1);
+                prevBtn.classList.toggle('hover:bg-slate-100', s.page > 1);
+            }
+            if (nextBtn) {
+                nextBtn.classList.toggle('text-slate-300', s.page >= totalPages);
+                nextBtn.classList.toggle('text-slate-700', s.page < totalPages);
+                nextBtn.classList.toggle('hover:bg-slate-100', s.page < totalPages);
+            }
+
+            var html = '';
+            for (var i = 0; i < slice.length; i++) {
+                var row = slice[i];
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
+                for (var j = 0; j < s.keys.length; j++) {
+                    if (hidden.has(j)) continue;
+                    var v = row[s.keys[j]];
                     var txt = (v === null || v === undefined || v === '') ? '—' : String(v);
-                    var div = document.createElement('div'); div.textContent = txt;
-                    return '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + div.innerHTML + '</td>';
-                });
-                return '<tr class="hover:bg-sky-50/60 transition-colors">' + cells.join('') + '</tr>';
-            });
-            tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="' + s.keys.length + '" class="px-6 py-8 text-center text-sm text-slate-400">No data available.</td></tr>';
-            if (label) label.textContent = 'Page ' + s.page + ' of ' + totalPages;
-            var prev = document.getElementById('dq-' + name + '-prev');
-            var next = document.getElementById('dq-' + name + '-next');
-            if (prev) prev.disabled = s.page <= 1;
-            if (next) next.disabled = s.page >= totalPages;
+                    var d = document.createElement('div'); d.textContent = txt;
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + d.innerHTML + '</td>';
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html || '<tr><td colspan="' + s.keys.length + '" class="px-6 py-8 text-center text-sm text-slate-400">No data available.</td></tr>';
+        }
+
+        function buildDqColPanel(name) {
+            var cbsEl = document.getElementById('dq-' + name + '-col-checkboxes');
+            if (!cbsEl) return;
+            var keys = dqState[name].keys;
+            var hidden = dqTableState[name].hiddenCols;
+            var html = '';
+            for (var i = 0; i < keys.length; i++) {
+                var checked = !hidden.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="dq-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-dq-name="' + dqEsc(name) + '" data-col-idx="' + i + '" ' + checked + '>'
+                      + dqEsc(keys[i]) + '</label>';
+            }
+            cbsEl.innerHTML = html || '<p class="px-2 text-xs text-slate-400">No columns</p>';
+        }
+
+        function dqRenderTable(name) {
+            dqRenderHead(name);
+            dqRenderBody(name);
         }
 
         window.dqChangePage = function(name, delta) {
+            if (name === 'usu') { usuChangePage(delta); return; }
             dqState[name].page += delta;
-            dqRenderTable(name);
+            dqRenderBody(name);
         };
 
         var dqSubNames = ['usu', 'grafana', 'flatfiles'];
@@ -3872,11 +4470,405 @@
                     if (btn)   { btn.classList.remove('bg-white', 'text-slate-900', 'shadow-sm'); btn.classList.add('text-slate-500'); }
                 }
             });
+            if (name === 'usu') { if (!usuState.loaded) fetchUsuData(); return; }
             dqRenderTable(name);
         };
 
+        // ── Grafana + Flatfiles: sort, prev/next, column visibility ───────────
+        ['grafana', 'flatfiles'].forEach(function (name) {
+            var headRow   = document.getElementById('dq-' + name + '-head-row');
+            var prevBtn   = document.getElementById('dq-' + name + '-prev');
+            var nextBtn   = document.getElementById('dq-' + name + '-next');
+            var toggleBtn = document.getElementById('dq-' + name + '-col-toggle-btn');
+            var panel     = document.getElementById('dq-' + name + '-col-panel');
+            var closeBtn  = document.getElementById('dq-' + name + '-col-panel-close');
+            var cbsEl     = document.getElementById('dq-' + name + '-col-checkboxes');
+
+            if (headRow) {
+                headRow.addEventListener('click', function (e) {
+                    var btn = e.target.closest('.dq-sort-btn');
+                    if (!btn) return;
+                    var n = btn.getAttribute('data-dq-name');
+                    var colIdx = parseInt(btn.getAttribute('data-dq-col'), 10);
+                    if (isNaN(colIdx)) return;
+                    var st = dqTableState[n];
+                    if (st.sortColIdx === colIdx) st.sortOrder = st.sortOrder === 'asc' ? 'desc' : 'asc';
+                    else { st.sortColIdx = colIdx; st.sortOrder = 'asc'; }
+                    dqState[n].page = 1;
+                    dqDoSort(n);
+                    dqRenderHead(n);
+                    dqRenderBody(n);
+                });
+            }
+            if (prevBtn) prevBtn.addEventListener('click', function () {
+                if (dqState[name].page <= 1) return;
+                dqState[name].page -= 1;
+                dqRenderBody(name);
+            });
+            if (nextBtn) nextBtn.addEventListener('click', function () {
+                var total = dqTableState[name].sortedData.length;
+                var totalPages = Math.max(1, Math.ceil(total / DQ_PER_PAGE));
+                if (dqState[name].page >= totalPages) return;
+                dqState[name].page += 1;
+                dqRenderBody(name);
+            });
+            if (toggleBtn && panel) {
+                toggleBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var opening = panel.classList.contains('hidden');
+                    panel.classList.toggle('hidden');
+                    if (opening) {
+                        buildDqColPanel(name);
+                        var rect = toggleBtn.getBoundingClientRect();
+                        var panelW = 228;
+                        var topVal  = rect.bottom + 6;
+                        var leftVal = rect.right - panelW;
+                        if (leftVal < 8) leftVal = 8;
+                        if (leftVal + panelW > window.innerWidth - 8) leftVal = window.innerWidth - panelW - 8;
+                        panel.style.top  = topVal + 'px';
+                        panel.style.left = leftVal + 'px';
+                        panel.style.right = 'auto';
+                    }
+                });
+            }
+            if (closeBtn && panel) closeBtn.addEventListener('click', function () { panel.classList.add('hidden'); });
+            document.addEventListener('click', function (e) {
+                if (!panel || panel.classList.contains('hidden')) return;
+                if (!panel.contains(e.target) && (!toggleBtn || !toggleBtn.contains(e.target))) panel.classList.add('hidden');
+            });
+            if (cbsEl) {
+                cbsEl.addEventListener('change', function (e) {
+                    var cb = e.target.closest('.dq-col-cb');
+                    if (!cb) return;
+                    var n = cb.getAttribute('data-dq-name');
+                    var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                    if (isNaN(idx)) return;
+                    if (cb.checked) dqTableState[n].hiddenCols.delete(idx);
+                    else dqTableState[n].hiddenCols.add(idx);
+                    saveDqHiddenCols(n);
+                    dqRenderHead(n);
+                    dqRenderBody(n);
+                    buildDqColPanel(n);
+                });
+            }
+        });
+
+        // ── USU API-driven table ──────────────────────────────────────────────
+        var USU_PER_PAGE = 10;
+        var usuApiUrl = window.usuDataApiUrl || '';
+
+        var usuColDefs = [
+            { key: 'server_name',         label: 'Server',         sortable: true },
+            { key: 'product_description', label: 'Product',        sortable: true },
+            { key: 'product_edition',     label: 'Edition',        sortable: true },
+            { key: 'product_family',      label: 'Family',         sortable: true },
+            { key: 'install_status',      label: 'Device Status',  sortable: true },
+            { key: 'inv_status_std_name', label: 'Inv. Status',    sortable: true },
+            { key: 'cpu_core_count',      label: 'CPU Cores',      sortable: true },
+            { key: 'hosting_zone',        label: 'Hosting Zone',   sortable: true },
+            { key: 'environment',         label: 'Environment',    sortable: true },
+            { key: 'manufacturer',        label: 'Manufacturer',   sortable: true },
+            { key: 'inventory_date',      label: 'Inv. Date',      sortable: true },
+        ];
+
+        var usuState = {
+            loaded: false,
+            loading: false,
+            family: 'all',
+            page: 1,
+            total: 0,
+            totalPages: 1,
+            sortField: '',
+            sortOrder: 'asc',
+            _allCachedItems: [],
+            hiddenCols: (function () {
+                try { var a = JSON.parse(localStorage.getItem('usuHiddenCols') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); }
+            }()),
+        };
+
+        function saveUsuHiddenCols() {
+            try { localStorage.setItem('usuHiddenCols', JSON.stringify(Array.from(usuState.hiddenCols))); } catch (e) {}
+        }
+
+        function usuEsc(s) {
+            var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML;
+        }
+
+        function usuSortIcon(colKey) {
+            if (usuState.sortField !== colKey) {
+                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            }
+            if (usuState.sortOrder === 'asc') {
+                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            }
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
+        function renderUsuHead() {
+            var headRow = document.getElementById('dq-usu-head-row');
+            if (!headRow) return;
+            var html = '';
+            for (var i = 0; i < usuColDefs.length; i++) {
+                if (usuState.hiddenCols.has(i)) continue;
+                var col = usuColDefs[i];
+                if (col.sortable) {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50 cursor-pointer">'
+                          + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 usu-sort-btn" data-sort-key="' + usuEsc(col.key) + '">'
+                          + usuEsc(col.label) + usuSortIcon(col.key)
+                          + '</button></th>';
+                } else {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">' + usuEsc(col.label) + '</th>';
+                }
+            }
+            headRow.innerHTML = html;
+        }
+
+        function renderUsuBody(items) {
+            var tbody = document.getElementById('dq-usu-tbody');
+            var tableEl = document.getElementById('dq-usu-table');
+            var emptyEl = document.getElementById('dq-usu-empty');
+            if (!tbody) return;
+            var hasRows = items && items.length > 0;
+            if (tableEl) tableEl.classList.toggle('hidden', !hasRows);
+            if (emptyEl) { emptyEl.classList.toggle('hidden', hasRows); }
+            if (!hasRows) { tbody.innerHTML = ''; return; }
+            var html = '';
+            for (var i = 0; i < items.length; i++) {
+                var row = items[i];
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
+                for (var j = 0; j < usuColDefs.length; j++) {
+                    if (usuState.hiddenCols.has(j)) continue;
+                    var val = row[usuColDefs[j].key];
+                    var txt = (val == null || val === '') ? '—' : String(val);
+                    var d = document.createElement('div'); d.textContent = txt;
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + d.innerHTML + '</td>';
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        function buildUsuColPanel() {
+            var cbsEl = document.getElementById('usu-col-checkboxes');
+            if (!cbsEl) return;
+            var html = '';
+            for (var i = 0; i < usuColDefs.length; i++) {
+                var checked = !usuState.hiddenCols.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="usu-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-col-idx="' + i + '" ' + checked + '>'
+                      + usuEsc(usuColDefs[i].label) + '</label>';
+            }
+            cbsEl.innerHTML = html;
+        }
+
+        function updateUsuPaginationUI() {
+            var nav     = document.getElementById('dq-usu-nav');
+            var display = document.getElementById('dq-usu-page-label');
+            var prevBtn = document.getElementById('dq-usu-prev');
+            var nextBtn = document.getElementById('dq-usu-next');
+            var badge   = document.getElementById('dq-usu-total-badge');
+            if (nav) nav.style.display = usuState.total > USU_PER_PAGE ? 'flex' : 'none';
+            if (display) display.textContent = 'Page ' + usuState.page + ' of ' + usuState.totalPages;
+            if (badge) badge.textContent = 'Total: ' + usuState.total;
+            if (prevBtn) {
+                prevBtn.classList.toggle('text-slate-300', usuState.page <= 1);
+                prevBtn.classList.toggle('text-slate-700', usuState.page > 1);
+            }
+            if (nextBtn) {
+                nextBtn.classList.toggle('text-slate-300', usuState.page >= usuState.totalPages);
+                nextBtn.classList.toggle('text-slate-700', usuState.page < usuState.totalPages);
+            }
+        }
+
+        function doUsuClientSort(items) {
+            if (!usuState.sortField) return items.slice();
+            var key = usuState.sortField;
+            var dir = usuState.sortOrder === 'asc' ? 1 : -1;
+            return items.slice().sort(function (a, b) {
+                var av = a[key]; var bv = b[key];
+                if (av == null || av === '') return 1;
+                if (bv == null || bv === '') return -1;
+                var an = Number(av); var bn = Number(bv);
+                if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+                return String(av).localeCompare(String(bv)) * dir;
+            });
+        }
+
+        function usuApplyClientPage() {
+            var sorted = doUsuClientSort(usuState._allCachedItems);
+            usuState.total = sorted.length;
+            usuState.totalPages = Math.max(1, Math.ceil(sorted.length / USU_PER_PAGE));
+            if (usuState.page > usuState.totalPages) usuState.page = usuState.totalPages;
+            var start = (usuState.page - 1) * USU_PER_PAGE;
+            usuState._cachedItems = sorted.slice(start, start + USU_PER_PAGE);
+        }
+
+        function fetchUsuData() {
+            if (!usuApiUrl || typeof fetch !== 'function') return;
+            if (usuState.loading) return;
+            usuState.loading = true;
+
+            var loadEl = document.getElementById('dq-usu-loading');
+            var tableEl = document.getElementById('dq-usu-table');
+            var emptyEl = document.getElementById('dq-usu-empty');
+            if (loadEl) { loadEl.classList.remove('hidden'); }
+            if (tableEl) tableEl.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
+
+            var url = new URL(usuApiUrl, window.location.origin);
+            url.searchParams.set('family', usuState.family);
+            url.searchParams.set('type', 'installations');
+
+            if (usuState.family === 'all') {
+                // Fetch all items in one shot; paginate client-side
+                url.searchParams.set('page', 1);
+                url.searchParams.set('page_size', 500);
+            } else {
+                url.searchParams.set('page', usuState.page);
+                url.searchParams.set('page_size', USU_PER_PAGE);
+                if (usuState.sortField) {
+                    url.searchParams.set('sort_field', usuState.sortField);
+                    url.searchParams.set('sort_order', usuState.sortOrder);
+                }
+            }
+
+            fetch(url.toString(), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+            .then(function (r) { if (!r.ok) throw new Error('bad'); return r.json(); })
+            .then(function (payload) {
+                usuState.loading = false;
+                usuState.loaded = true;
+                if (loadEl) loadEl.classList.add('hidden');
+
+                if (usuState.family === 'all') {
+                    var mysqlInst  = (((payload.result || {}).mysql  || {}).installations) || {};
+                    var oracleInst = (((payload.result || {}).oracle || {}).installations) || {};
+                    usuState._allCachedItems = (mysqlInst.items || []).concat(oracleInst.items || []);
+                    usuApplyClientPage();
+                } else {
+                    var instData = ((payload.result || {}).installations) || {};
+                    usuState._allCachedItems = [];
+                    usuState.total      = Number(instData.total || 0);
+                    usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
+                    usuState.page       = Number(instData.page || usuState.page);
+                    usuState._cachedItems = instData.items || [];
+                }
+
+                renderUsuHead();
+                renderUsuBody(usuState._cachedItems);
+                updateUsuPaginationUI();
+            })
+            .catch(function () {
+                usuState.loading = false;
+                if (loadEl) loadEl.classList.add('hidden');
+                var tbody = document.getElementById('dq-usu-tbody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="' + usuColDefs.length + '" class="px-6 py-8 text-center text-sm text-red-400">Failed to load data. Please try again.</td></tr>';
+                var tableEl2 = document.getElementById('dq-usu-table');
+                if (tableEl2) tableEl2.classList.remove('hidden');
+            });
+        }
+
+        function usuChangePage(delta) {
+            var newPage = usuState.page + delta;
+            if (newPage < 1 || newPage > usuState.totalPages) return;
+            usuState.page = newPage;
+            if (usuState.family === 'all' && usuState._allCachedItems.length > 0) {
+                usuApplyClientPage();
+                renderUsuHead();
+                renderUsuBody(usuState._cachedItems);
+                updateUsuPaginationUI();
+            } else {
+                fetchUsuData();
+            }
+        }
+
+        // ── USU event listeners ───────────────────────────────────────────────
+        var usuFamilyFilter = document.getElementById('usu-family-filter');
+        if (usuFamilyFilter) {
+            usuFamilyFilter.addEventListener('change', function (e) {
+                usuState.family = e.target.value;
+                usuState.page = 1;
+                fetchUsuData();
+            });
+        }
+
+        var usuPrevBtn = document.getElementById('dq-usu-prev');
+        var usuNextBtn = document.getElementById('dq-usu-next');
+        if (usuPrevBtn) usuPrevBtn.addEventListener('click', function () { usuChangePage(-1); });
+        if (usuNextBtn) usuNextBtn.addEventListener('click', function () { usuChangePage(1); });
+
+        var usuHeadRow = document.getElementById('dq-usu-head-row');
+        if (usuHeadRow) {
+            usuHeadRow.addEventListener('click', function (e) {
+                var btn = e.target.closest('.usu-sort-btn');
+                if (!btn) return;
+                var key = btn.getAttribute('data-sort-key');
+                if (!key) return;
+                if (usuState.sortField === key) usuState.sortOrder = usuState.sortOrder === 'asc' ? 'desc' : 'asc';
+                else { usuState.sortField = key; usuState.sortOrder = 'asc'; }
+                usuState.page = 1;
+                if (usuState.family === 'all' && usuState._allCachedItems.length > 0) {
+                    usuApplyClientPage();
+                    renderUsuHead();
+                    renderUsuBody(usuState._cachedItems);
+                    updateUsuPaginationUI();
+                } else {
+                    fetchUsuData();
+                }
+            });
+        }
+
+        var usuColToggleBtn  = document.getElementById('usu-col-toggle-btn');
+        var usuColPanel      = document.getElementById('usu-col-panel');
+        var usuColPanelClose = document.getElementById('usu-col-panel-close');
+        var usuColCbsEl      = document.getElementById('usu-col-checkboxes');
+
+        if (usuColToggleBtn && usuColPanel) {
+            usuColToggleBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var opening = usuColPanel.classList.contains('hidden');
+                usuColPanel.classList.toggle('hidden');
+                if (opening) {
+                    buildUsuColPanel();
+                    var rect = usuColToggleBtn.getBoundingClientRect();
+                    var panelW = 228;
+                    var topVal  = rect.bottom + 6;
+                    var leftVal = rect.right - panelW;
+                    if (leftVal < 8) leftVal = 8;
+                    if (leftVal + panelW > window.innerWidth - 8) leftVal = window.innerWidth - panelW - 8;
+                    usuColPanel.style.top  = topVal + 'px';
+                    usuColPanel.style.left = leftVal + 'px';
+                    usuColPanel.style.right = 'auto';
+                }
+            });
+        }
+        if (usuColPanelClose && usuColPanel) usuColPanelClose.addEventListener('click', function () { usuColPanel.classList.add('hidden'); });
+        document.addEventListener('click', function (e) {
+            if (!usuColPanel || usuColPanel.classList.contains('hidden')) return;
+            if (!usuColPanel.contains(e.target) && (!usuColToggleBtn || !usuColToggleBtn.contains(e.target))) usuColPanel.classList.add('hidden');
+        });
+        if (usuColCbsEl) {
+            usuColCbsEl.addEventListener('change', function (e) {
+                var cb = e.target.closest('.usu-col-cb');
+                if (!cb) return;
+                var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                if (isNaN(idx)) return;
+                if (cb.checked) usuState.hiddenCols.delete(idx);
+                else usuState.hiddenCols.add(idx);
+                saveUsuHiddenCols();
+                renderUsuHead();
+                renderUsuBody(usuState._cachedItems || []);
+                buildUsuColPanel();
+            });
+        }
+
+        // Initial fetch for USU
+        fetchUsuData();
+
         // Initial render
-        dqRenderTable('usu');
         dqRenderTable('grafana');
         dqRenderTable('flatfiles');
 

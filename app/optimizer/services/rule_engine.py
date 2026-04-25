@@ -152,12 +152,26 @@ def _classify_license_type(product_name: str) -> str:
     if not product_name or not isinstance(product_name, str):
         return "Other"
     p = product_name.lower()
+
+    # Explicit edition keywords take priority
     if LICENSE_TYPE_DEVELOPER in p or "dev " in p:
         return "Developer"
-    if LICENSE_TYPE_ENTERPRISE in p or "ent " in p:
+    if LICENSE_TYPE_ENTERPRISE in p or "ent " in p or "enterprise edition" in p:
         return "Enterprise"
-    if LICENSE_TYPE_STANDARD in p or "std " in p:
+    if LICENSE_TYPE_STANDARD in p or "std " in p or "standard edition" in p:
         return "Standard"
+
+    # MySQL / Oracle MySQL product classification by product type
+    if "mysql" in p or "oracle mysql" in p:
+        # Enterprise-grade MySQL products
+        if any(k in p for k in ("enterprise", "cluster", "cge", "monitor", "backup", "firewall")):
+            return "Enterprise"
+        # Developer / connectivity tools
+        if any(k in p for k in ("connector", "odbc", "jdbc", "python", "net", ".net", "workbench", "router", "shell", "utilities")):
+            return "Developer"
+        # Everything else (server, community, …) → Standard
+        return "Standard"
+
     return "Other"
 
 
@@ -218,7 +232,19 @@ def compute_license_metrics(
     qty = pd.to_numeric(merged[qty_col], errors="coerce").fillna(0)
     price = pd.to_numeric(merged[price_col], errors="coerce").fillna(0)
     merged["_line_cost"] = (price * qty) / 2.0
-    merged["_license_type"] = merged["_prod"].map(_classify_license_type)
+    # Use product_edition as the primary classification signal, but only when it
+    # yields a meaningful result (non-Other). Fall back to product_name otherwise.
+    if "product_edition" in merged.columns:
+        def _classify_row(row):
+            edition = str(row.get("product_edition") or "").strip()
+            if edition:
+                t = _classify_license_type(edition)
+                if t != "Other":
+                    return t
+            return _classify_license_type(str(row["_prod"]))
+        merged["_license_type"] = merged.apply(_classify_row, axis=1)
+    else:
+        merged["_license_type"] = merged["_prod"].map(_classify_license_type)
 
     total_cost = float(merged["_line_cost"].sum())
     sum_qty = float(qty.sum())
@@ -265,6 +291,13 @@ def compute_license_metrics(
                 "avg_price": avg_price,
             })
         price_distribution.sort(key=lambda x: (x["type"] != "Standard", x["type"] != "Developer", x["type"] != "Enterprise", x["type"]))
+
+    # Ensure all four required types are always present (with zeroes if missing)
+    _existing_types = {r["type"] for r in price_distribution}
+    for _required_type in ("Standard", "Developer", "Enterprise", "Other"):
+        if _required_type not in _existing_types:
+            price_distribution.append({"type": _required_type, "quantity": 0, "total_cost": 0.00, "avg_price": 0.00})
+    price_distribution.sort(key=lambda x: (x["type"] != "Standard", x["type"] != "Developer", x["type"] != "Enterprise", x["type"]))
 
     # Cost reduction tips based on data
     cost_reduction_tips = []

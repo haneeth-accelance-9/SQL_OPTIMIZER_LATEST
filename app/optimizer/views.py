@@ -1088,14 +1088,18 @@ def results(request):
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
     cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
     ram_slice = ram_initial_records[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
-    requested_rs3_hosting_zone = str(request.GET.get("rs3_hosting_zone") or "").strip()
-    if requested_rs3_hosting_zone:
-        requested_rs3_hosting_zone = _normalize_rs3_hosting_zone_value(requested_rs3_hosting_zone)
-    if requested_rs3_hosting_zone not in RS3_API_HOSTING_ZONE_OPTIONS:
-        requested_rs3_hosting_zone = ""
-    requested_rs3_status = _normalize_rs3_installed_status_value(request.GET.get("rs3_status"))
-    if requested_rs3_status not in RS3_API_INSTALLED_STATUS_USU_OPTIONS:
-        requested_rs3_status = ""
+    _cpu_hz = str(request.GET.get("rs3_cpu_hosting_zone") or "").strip()
+    if _cpu_hz:
+        _cpu_hz = _normalize_rs3_hosting_zone_value(_cpu_hz)
+    requested_rs3_cpu_hosting_zone = _cpu_hz if _cpu_hz in RS3_API_HOSTING_ZONE_OPTIONS else ""
+    _cpu_st = _normalize_rs3_installed_status_value(request.GET.get("rs3_cpu_status"))
+    requested_rs3_cpu_status = _cpu_st if _cpu_st in RS3_API_INSTALLED_STATUS_USU_OPTIONS else ""
+    _ram_hz = str(request.GET.get("rs3_ram_hosting_zone") or "").strip()
+    if _ram_hz:
+        _ram_hz = _normalize_rs3_hosting_zone_value(_ram_hz)
+    requested_rs3_ram_hosting_zone = _ram_hz if _ram_hz in RS3_API_HOSTING_ZONE_OPTIONS else ""
+    _ram_st = _normalize_rs3_installed_status_value(request.GET.get("rs3_ram_status"))
+    requested_rs3_ram_status = _ram_st if _ram_st in RS3_API_INSTALLED_STATUS_USU_OPTIONS else ""
 
     render_context.update({
         "rightsizing": rs,
@@ -1127,11 +1131,15 @@ def results(request):
         "rs3_ram_selected_filter": ram_initial_filter,
         "rs3_api_hosting_options": RS3_API_HOSTING_ZONE_OPTIONS,
         "rs3_api_status_options": RS3_API_INSTALLED_STATUS_USU_OPTIONS,
-        "rs3_selected_hosting_zone": requested_rs3_hosting_zone,
-        "rs3_selected_status": requested_rs3_status,
+        "rs3_cpu_selected_hosting_zone": requested_rs3_cpu_hosting_zone,
+        "rs3_cpu_selected_status": requested_rs3_cpu_status,
+        "rs3_ram_selected_hosting_zone": requested_rs3_ram_hosting_zone,
+        "rs3_ram_selected_status": requested_rs3_ram_status,
         "rs3_selected_summary": rs3_summary,
         "rightsizing_cpu_data_json": cpu_full,
         "rightsizing_ram_data_json": ram_full,
+        "crit_cpu_data_json": rs.get("crit_cpu_optimizations") or [],
+        "crit_ram_data_json": rs.get("crit_ram_optimizations") or [],
         "download_sheet_options": _build_rs3_download_sheet_options(rs),
     })
     # ── Data Quality: USU, Grafana, Flat Files ────────────────────────────────
@@ -1888,8 +1896,12 @@ def api_oracle_data(request):
       type      — "installations" | "demand" | "all"  (default: "all")
       page      — 1-based page number  (default: 1)
       page_size — rows per page, max 500  (default: 100)
-      hosting   — filter by NormalizedHostingZone (e.g. "Public Cloud")
-      status    — filter by install_status, installations only (e.g. "Installed", "Retired")
+      hosting    — filter by NormalizedHostingZone (e.g. "Public Cloud")
+      status     — filter by install_status, installations only (e.g. "Installed", "Retired")
+      sort_field — field to sort by (server_name, product_description, product_edition,
+                   product_family, install_status, inv_status_std_name, cpu_core_count,
+                   hosting_zone, environment, manufacturer, inventory_date)
+      sort_order — "asc" | "desc"  (default: "asc")
 
     Response shape (family=all):
       {
@@ -1944,7 +1956,18 @@ def api_oracle_data(request):
     data_type      = request.GET.get("type", "all").lower()
     hosting_filter = request.GET.get("hosting", "").strip()
     status_filter  = request.GET.get("status", "").strip()
+    sort_field     = request.GET.get("sort_field", "").strip()
+    sort_order     = request.GET.get("sort_order", "asc").lower().strip()
+    if sort_order not in ("asc", "desc"):
+        sort_order = "asc"
     skip = (page - 1) * page_size
+
+    # Allowed sort fields for installations (maps API key → item dict key)
+    INST_SORTABLE_FIELDS = {
+        "server_name", "product_description", "product_edition", "product_family",
+        "install_status", "inv_status_std_name", "cpu_core_count",
+        "hosting_zone", "environment", "manufacturer", "inventory_date",
+    }
 
     def _normalize_hosting(zone):
         z = str(zone or "").strip().lower()
@@ -1984,33 +2007,48 @@ def api_oracle_data(request):
                 if _normalize_hosting(r["server__hosting_zone"]).lower() == hosting_filter.lower()
             ]
 
-        total = len(rows)
+        # Build mapped items first so we can sort by the public field names
+        all_items = [
+            {
+                "server_name":         r["server__server_name"],
+                "hosting_zone":        _normalize_hosting(r["server__hosting_zone"]),
+                "environment":         r["server__environment"],
+                "install_status":      r["device_status"],
+                "no_license_required": r["no_license_required"],
+                "product_description": r["product_description"],
+                "product_edition":     r["product_edition"],
+                "product_family":      r["product_family"],
+                "manufacturer":        r["manufacturer"],
+                "inv_status_std_name": r["inv_status_std_name"],
+                "cpu_core_count":      float(r["cpu_core_count"]) if r["cpu_core_count"] is not None else None,
+                "cpu_socket_count":    r["cpu_socket_count"],
+                "topology_type":       r["topology_type"],
+                "inventory_date":      r["inventory_date"].isoformat() if r["inventory_date"] else None,
+                "is_cloud_device":     r["server__is_cloud_device"],
+                "cloud_provider":      r["server__cloud_provider"],
+            }
+            for r in rows
+        ]
+
+        if sort_field and sort_field in INST_SORTABLE_FIELDS:
+            reverse = sort_order == "desc"
+            all_items.sort(
+                key=lambda item: (
+                    item.get(sort_field) is None or item.get(sort_field) == "",
+                    str(item.get(sort_field) or "").lower(),
+                ),
+                reverse=reverse,
+            )
+
+        total = len(all_items)
         return {
             "total": total,
             "page": page,
             "page_size": page_size,
             "total_pages": ceil(total / page_size) if total else 0,
-            "items": [
-                {
-                    "server_name":         r["server__server_name"],
-                    "hosting_zone":        _normalize_hosting(r["server__hosting_zone"]),
-                    "environment":         r["server__environment"],
-                    "install_status":      r["device_status"],
-                    "no_license_required": r["no_license_required"],
-                    "product_description": r["product_description"],
-                    "product_edition":     r["product_edition"],
-                    "product_family":      r["product_family"],
-                    "manufacturer":        r["manufacturer"],
-                    "inv_status_std_name": r["inv_status_std_name"],
-                    "cpu_core_count":      float(r["cpu_core_count"]) if r["cpu_core_count"] is not None else None,
-                    "cpu_socket_count":    r["cpu_socket_count"],
-                    "topology_type":       r["topology_type"],
-                    "inventory_date":      r["inventory_date"].isoformat() if r["inventory_date"] else None,
-                    "is_cloud_device":     r["server__is_cloud_device"],
-                    "cloud_provider":      r["server__cloud_provider"],
-                }
-                for r in rows[skip: skip + page_size]
-            ],
+            "sort_field": sort_field,
+            "sort_order": sort_order,
+            "items": all_items[skip: skip + page_size],
         }
 
     def _fetch_demand(db_pf):
