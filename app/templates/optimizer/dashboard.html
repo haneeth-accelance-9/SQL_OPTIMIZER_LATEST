@@ -611,6 +611,16 @@
                                 <p class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
                             </div>
                         </div>
+                        <div class="mt-3 rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Workload Rightsizing</p>
+                            <p class="mt-2 text-2xl font-bold text-slate-900">€{{ rightsizing_savings|floatformat:0 }}</p>
+                            <div class="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-700">
+                                <span>CPU: €{{ rightsizing_cpu_savings|floatformat:0 }}</span>
+                                <span class="text-slate-300">|</span>
+                                <span>RAM: €{{ rightsizing_ram_savings|floatformat:0 }}</span>
+                            </div>
+                            <p class="mt-1 text-xs text-slate-400">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs · {{ rightsizing.total_ram_reduction_gib|default:0 }} GiB potential reduction</p>
+                        </div>
                     </div>
 
                     <div class="xl:col-span-5 dashboard-panel-card">
@@ -980,16 +990,18 @@
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
-                    <!-- CPU metric tile -->
+                    <!-- CPU estimated savings tile -->
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
-                            <p id="rs3-cpu-metric-label" class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">CPU Optimization</p>
-                            <!-- <span id="rs3-cpu-uc-badge" class="inline-flex items-center rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-700">UC 3.1</span> -->
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
+                            <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                                <span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> vCPUs
+                            </span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-xl font-semibold text-slate-500">CPUs</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
                         </div>
-                        <p id="rs3-cpu-metric-description" class="mt-1 text-xs text-slate-500">Potential CPU reduction across all optimizations</p>
+                        <p class="mt-1 text-xs text-slate-500">Estimated annual savings from CPU rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
@@ -1023,14 +1035,24 @@
                                     <p id="rs3-cpu-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_nonprod_count|default:0 }}</p>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-2">
+                            <!-- <div class="grid grid-cols-4 gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total CPU Optimizations</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Candidates</p>
                                     <p id="rs3-cpu-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_count|default:0 }}</p>
                                 </div>
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">CPU Reduction</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-cpu-reduction-value">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">vCPU Reduction</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
+                                </div>
+                            </div> -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">€<span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / Core Pair</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€<span id="rs3-cpu-avg-cost-value">0</span></p>
                                 </div>
                             </div>
                         </div>
@@ -1152,16 +1174,18 @@
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-stretch">
-                    <!-- RAM metric tile -->
+                    <!-- RAM estimated savings tile -->
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
-                            <p id="rs3-ram-metric-label" class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">RAM Optimization</p>
-                            <!-- <span id="rs3-ram-uc-badge" class="inline-flex items-center rounded-full bg-lime-100 px-2 py-1 text-[10px] font-bold text-lime-700">UC 3.2</span> -->
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
+                            <span class="inline-flex items-center gap-1 rounded-full bg-lime-100 px-2.5 py-1 text-[10px] font-bold text-lime-700">
+                                <span id="rs3-ram-reduction-badge">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB
+                            </span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-ram-reduction-total">{{ rs.total_ram_reduction_gib|default:0 }}</span> <span class="text-xl font-semibold text-slate-500">GiB</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-ram-savings-total">{{ rightsizing_ram_savings|floatformat:0 }}</span></p>
                         </div>
-                        <p id="rs3-ram-metric-description" class="mt-1 text-xs text-slate-500">Potential RAM reduction across all optimizations</p>
+                        <p class="mt-1 text-xs text-slate-500">Estimated annual savings from RAM rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
@@ -1195,14 +1219,24 @@
                                     <p id="rs3-ram-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_nonprod_count|default:0 }}</p>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-2">
+                            <!-- <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total RAM Optimizations</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Candidates</p>
                                     <p id="rs3-ram-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_count|default:0 }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">RAM Reduction</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-ram-reduction-value">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-ram-reduction-total">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB</p>
+                                </div>
+                            </div> -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700">€<span id="rs3-ram-reduction-value">{{ rightsizing_ram_savings|floatformat:0 }}</span></p>
+                                </div>
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / GiB</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">€<span id="rs3-ram-avg-cost-value">0</span></p>
                                 </div>
                             </div>
                         </div>
@@ -3319,6 +3353,9 @@
                     rs3State.savingsMeta.avgCostPerCorePairEur = isNaN(avgCpuCost) ? 0 : avgCpuCost;
                     rs3State.savingsMeta.avgCostPerGibEur = isNaN(avgRamCost) ? 0 : avgRamCost;
 
+                    setText('rs3-cpu-avg-cost-value', avgCpuCost > 0 ? avgCpuCost.toLocaleString() : '—');
+                    setText('rs3-ram-avg-cost-value', avgRamCost > 0 ? avgRamCost.toLocaleString() : '—');
+
                     rs3State.cpu.data = (rs3State.cpu.data || []).map(function(record) {
                         var nextRecord = Object.assign({}, record);
                         var reduction = Number(nextRecord.Potential_vCPU_Reduction || 0);
@@ -3405,6 +3442,7 @@
                     setRs3EmptyState(type, totalRows > 0);
                     updateRs3TotalBadge(type, totalRows);
                     updateRs3Pagination(type, page, totalPages, totalRows);
+                    if (result.summary) updateRs3Summary(type, result.summary);
                     setRs3Loading(type, false);
                 })
                 .catch(function() {
@@ -3476,11 +3514,16 @@
             setText('rs3-' + type + '-nonprod-count', summary.nonprod_count);
             setText('rs3-' + type + '-total-count', summary.count);
             setText('rs3-' + type + '-reduction-total', summary.reduction_total);
-            setText('rs3-' + type + '-reduction-value', summary.reduction_total);
+            setText('rs3-' + type + '-reduction-badge', summary.reduction_total);
             setText('rs3-' + type + '-table-title', prettyFilter);
             setText('rs3-' + type + '-chart-title', config.chartTitle);
             setText('rs3-' + type + '-legend-1', config.chartLabels[0]);
             setText('rs3-' + type + '-legend-2', config.chartLabels[1]);
+            if (summary.savings_eur != null) {
+                var savingsInt = Math.round(Number(summary.savings_eur) || 0);
+                setText('rs3-' + type + '-savings-total', savingsInt.toLocaleString());
+                setText('rs3-' + type + '-reduction-value', savingsInt.toLocaleString());
+            }
         }
 
         function updateRs3EmptyCopy(type) {

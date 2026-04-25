@@ -792,8 +792,10 @@ def compute_rightsizing_metrics() -> dict:
             return []
         prepared = src.copy()
         current = pd.to_numeric(prepared[current_col], errors="coerce").fillna(0)
-        recommended = pd.to_numeric(prepared[recommended_col], errors="coerce").fillna(0)
-        prepared[reduction_col] = (current - recommended).clip(lower=0)
+        # Don't fill NaN recommended with 0 — rows without a valid recommendation
+        # have no quantified savings and should contribute 0, not their full current value.
+        recommended = pd.to_numeric(prepared[recommended_col], errors="coerce")
+        prepared[reduction_col] = (current - recommended).clip(lower=0).fillna(0)
         keep = [c for c in cols if c in prepared.columns]
         return (
             prepared[keep]
@@ -892,8 +894,8 @@ def compute_rightsizing_metrics() -> dict:
         if src.empty or cur_col not in src.columns or rec_col not in src.columns:
             return 0
         cur = pd.to_numeric(src[cur_col], errors="coerce").fillna(0)
-        rec = pd.to_numeric(src[rec_col], errors="coerce").fillna(0)
-        return (cur - rec).clip(lower=0).sum()
+        rec = pd.to_numeric(src[rec_col], errors="coerce")
+        return (cur - rec).clip(lower=0).fillna(0).sum()
 
     vcpu_reduction = int(_reduction(cpu_df, "Current_vCPU", "Recommended_vCPU"))
     ram_reduction = round(float(_reduction(ram_df, "Current_RAM_GiB", "Recommended_RAM_GiB")), 1)

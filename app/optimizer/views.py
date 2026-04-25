@@ -659,13 +659,16 @@ def _sort_rs3_api_records(records, workload, sort_field=None, sort_order="desc")
 def _build_rs3_api_summary(records, workload):
     reduction_key = _get_rs3_api_sort_field(workload)
     reduction_total = 0.0
+    savings_total = 0.0
     for record in records or []:
         reduction_total += _coerce_float(record.get(reduction_key))
+        savings_total += _coerce_float(record.get("Cost_Savings_EUR"))
     return {
         "count": len(records or []),
         "prod_count": sum(str(record.get("Env_Type") or "") == "PROD" for record in (records or [])),
         "nonprod_count": sum(str(record.get("Env_Type") or "") == "NON-PROD" for record in (records or [])),
         "reduction_total": round(reduction_total, 1),
+        "savings_eur": round(savings_total, 2),
     }
 
 
