@@ -100,10 +100,11 @@ def _calculate_savings(
     azure_payg_savings = round(total_license_cost * payg_share * 0.28, 2)
     retired_devices_savings = round(total_license_cost * retired_share * 0.05, 2)
 
+    # Total = BYOL to PAYG + Retired Devices + CPU Rightsizing (RAM excluded from total)
     scenario_wise_savings = {
         "cloud_licensing_optimization": azure_payg_savings,
         "inactive_asset_reclamation": retired_devices_savings,
-        "workload_rightsizing": rightsizing_savings,
+        "workload_rightsizing": cpu_rightsizing_savings,
     }
     total_savings = round(sum(scenario_wise_savings.values()), 2)
 

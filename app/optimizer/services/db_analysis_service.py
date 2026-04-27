@@ -1247,6 +1247,16 @@ def compute_live_db_metrics() -> dict:
     rightsizing["avg_cost_per_core_pair_eur"] = avg_cost_per_core_pair_eur
     rightsizing["avg_cost_per_gib_eur"] = avg_cost_per_gib_eur
 
+    # Enrich per-screen summaries with savings_eur so the Rightsizing tab savings
+    # card updates to the current screen's savings (consistent with the GiB badge).
+    _screen_sums = rightsizing.get("screen_summaries") or {}
+    for _s in (_screen_sums.get("RAM") or {}).values():
+        _gib = float(_s.get("reduction_total") or 0)
+        _s["savings_eur"] = round(_gib * avg_cost_per_gib_eur, 2) if avg_cost_per_gib_eur > 0 else 0.0
+    for _s in (_screen_sums.get("CPU") or {}).values():
+        _vcpu = float(_s.get("reduction_total") or 0)
+        _s["savings_eur"] = round((_vcpu / 2) * avg_cost_per_core_pair_eur, 2) if avg_cost_per_core_pair_eur > 0 else 0.0
+
     rightsizing_for_savings = {
         "total_vcpu_reduction": rightsizing.get("total_vcpu_reduction") or 0,
         "total_ram_reduction_gib": rightsizing.get("total_ram_reduction_gib") or 0,

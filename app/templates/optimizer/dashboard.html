@@ -86,7 +86,7 @@
                 </div>
                 <div class="results-kpi-item">
                     <span class="results-kpi-label">Current Cost</span>
-                    <span class="results-kpi-value">€{{ total_license_cost }}</span>
+                    <span class="results-kpi-value">{{ total_license_cost }}€</span>
                 </div>
             </div>
         </div>
@@ -133,6 +133,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
                             <p>Data for this Strategy is sourced from USU.</p>
+                            <!-- </div> -->
                         </div>
                     </div>
                 </div>
@@ -144,13 +145,13 @@
                             <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">PAYG</span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ azure_payg_savings|floatformat:0 }}€</p>
                         </div>
                         <div class="mt-6 space-y-4">
                             <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost|floatformat:0 }}€</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
@@ -164,7 +165,7 @@
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_savings|floatformat:0 }}€</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">PAYG Candidates</p>
@@ -300,17 +301,17 @@
                     {% elif rule1_keys %}
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white">
-                            <tr id="rule1-thead-row">
-                                <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
+                            <tr id="rule1-thead-row" class="results-table-header-row">
+                                <th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap w-14 min-w-[56px]">
                                     <input id="rule1-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
                                 </th>
                                 {% for key in rule1_keys %}
                                 <th data-col-index="{{ forloop.counter0 }}" data-col-key="{{ key }}"
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">
                                     {{ key|title }}</th>
                                 {% endfor %}
                                 <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">
                                     Actions</th>
                             </tr>
                         </thead>
@@ -352,7 +353,7 @@
         </div>
 
         <!-- RULE 2: Retired Devices -->
-        <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
+        <div id="panel-rule2" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
             data-tab="rule2">
             <div class="payg-rule-shell flex-shrink-0 mb-6">
                 <div class="mb-4">
@@ -376,17 +377,17 @@
                             <!-- <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ retired_devices_savings|floatformat:0 }}€</p>
                         </div>
                         <div class="mt-6 space-y-4 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost|floatformat:0 }}€</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_devices_savings|floatformat:0 }}€</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
@@ -457,17 +458,17 @@
                     {% elif rule2_keys %}
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white">
-                            <tr id="rule2-thead-row">
-                                <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
+                            <tr id="rule2-thead-row" class="results-table-header-row">
+                                <th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap w-14 min-w-[56px]">
                                     <input id="rule2-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
                                 </th>
                                 {% for key in rule2_keys %}
                                 <th data-col-index="{{ forloop.counter0 }}" data-col-key="{{ key }}"
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">
                                     {{ key|title }}</th>
                                 {% endfor %}
                                 <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
+                                    class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">
                                     Actions</th>
                             </tr>
                         </thead>
@@ -478,7 +479,7 @@
                                     <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" disabled>
                                 </td>
                                 {% for val in row %}
-                                <td class="px-6 py-3.5 text-sm text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
+                                <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                 {% endfor %}
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">
@@ -577,7 +578,7 @@
         </div>
 
         <!-- DASHBOARD: Executive Summary + Charts + AI Insights + Rule Tables -->
-        <div id="panel-dashboard" class="tab-content-panel active-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto"
+        <div id="panel-dashboard" class="tab-content-panel active-panel w-full flex flex-col p-6 lg:p-8 overflow-visible"
             data-tab="dashboard" style="padding-bottom: 1.5rem;">
             <div class="mb-5 flex flex-col gap-1">
                 <h2 class="text-2xl font-bold text-slate-900">Dashboard</h2>
@@ -594,32 +595,34 @@
                             <span class="dashboard-section-label">Potential Savings</span>
                             <!-- <span class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
-                        <div class="mt-4 flex items-end gap-2">
-                            <span class="text-4xl font-extrabold text-slate-900">€{{ potential_savings|floatformat:0 }}</span>
+                        <div class="mt-5 flex flex-wrap items-end gap-3">
+                            <span class="text-4xl font-extrabold text-slate-900">{{ potential_savings|floatformat:0 }}€</span>
                             <span class="pb-1 text-sm font-medium text-emerald-600">estimated</span>
                         </div>
-                        <p class="mt-4 text-sm leading-6 text-slate-600">Savings are driven primarily by Azure BYOL to PAYG switches, workload right-sizing, and cleanup of inactive or retired software footprints.</p>
-                        <div class="mt-6 grid grid-cols-2 gap-3">
-                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                        <p class="mt-5 max-w-4xl text-sm leading-7 text-slate-600">Savings are driven primarily by Azure BYOL to PAYG switches, workload right-sizing, and cleanup of inactive or retired software footprints.</p>
+                        <div class="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="rounded-2xl bg-white/80 px-5 py-5 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">BYOL to PAYG</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ azure_payg_savings|floatformat:0 }}€</p>
                                 <p class="mt-2 text-base font-semibold text-slate-700">{{ azure_payg_count }} candidates</p>
                             </div>
-                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                            <div class="rounded-2xl bg-white/80 px-5 py-5 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Retired but reporting</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ retired_devices_savings|floatformat:0 }}€</p>
                                 <p class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
                             </div>
                         </div>
-                        <div class="mt-3 rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
-                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Workload Rightsizing</p>
-                            <p class="mt-2 text-2xl font-bold text-slate-900">€{{ rightsizing_savings|floatformat:0 }}</p>
-                            <div class="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-700">
-                                <span>CPU: €{{ rightsizing_cpu_savings|floatformat:0 }}</span>
-                                <span class="text-slate-300">|</span>
-                                <span>RAM: €{{ rightsizing_ram_savings|floatformat:0 }}</span>
+                        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="rounded-2xl bg-white/80 px-5 py-5 ring-1 ring-slate-200">
+                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Rightsizing CPU</p>
+                            <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing_cpu_savings|floatformat:0 }}€</p>
+                            <p class="mt-3 text-base font-semibold text-slate-700">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs</p>
                             </div>
-                            <p class="mt-1 text-xs text-slate-400">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs · {{ rightsizing.total_ram_reduction_gib|default:0 }} GiB potential reduction</p>
+                            <div class="rounded-2xl bg-white/80 px-5 py-5 ring-1 ring-slate-200">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Rightsizing RAM</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing_ram_savings|floatformat:0 }}€</p>
+                                <p class="mt-3 text-base font-semibold text-slate-700">{{ rightsizing.total_ram_reduction_gib|default:0 }} GiB</p>
+                            </div>
                         </div>
                     </div>
 
@@ -920,7 +923,7 @@
             </section>
             -->
 
-            <section class="flex-shrink-0 mb-0">
+            <!-- <section class="flex-shrink-0 mb-0">
                 <div class="dashboard-panel-card">
                     <div class="mb-4 flex items-center justify-between">
                         <div>
@@ -949,11 +952,11 @@
                         </div>
                     </div>
                 </div>
-            </section>
+            </section> -->
         </div>
 
         <!-- RULE 3: CPU & RAM Right-Sizing -->
-        <div id="panel-rule3" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-y-auto" data-tab="rule3">
+        <div id="panel-rule3" class="tab-content-panel w-full flex flex-col p-6 lg:p-8 overflow-visible" data-tab="rule3">
             {% with rs=rightsizing %}
 
             {% if rs.error %}
@@ -994,12 +997,12 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
-                            <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1.5 text-xl font-bold leading-none text-sky-700">
                                 <span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> vCPUs
                             </span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings|floatformat:0 }}€</span></p>
                         </div>
                         <p class="mt-1 text-xs text-slate-500">Estimated annual savings from CPU rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
@@ -1048,11 +1051,11 @@
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">€<span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700"><span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings|floatformat:0 }}€</span></p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / Core Pair</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€<span id="rs3-cpu-avg-cost-value">0</span></p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900"><span id="rs3-cpu-avg-cost-value">0</span>€</p>
                                 </div>
                             </div>
                         </div>
@@ -1122,11 +1125,12 @@
                         </div>
                         {% if cpu_keys %}
                         <table id="rs3-cpu-table" class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50">
-                                <tr id="rs3-cpu-head-row">
+                            <thead class="bg-white">
+                                <tr id="rs3-cpu-head-row" class="results-table-header-row">
                                     {% for key in cpu_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">{{ key }}</th>
                                     {% endfor %}
+                                    <th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="rs3-cpu-tbody" class="bg-white divide-y divide-slate-100">
@@ -1135,6 +1139,9 @@
                                     {% for val in row %}
                                     <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                     {% endfor %}
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1169,7 +1176,7 @@
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
                         <h2 id="rs3-ram-title" class="text-[2rem] leading-tight font-extrabold text-slate-900">RAM Right-Sizing</h2>
-                        <p class="mt-2 max-w-full whitespace-nowrap text-sm text-slate-500">VMs with average free memory ≥ 35% (PROD) or ≥ 30% (NON-PROD) and more than 8 GiB (PROD) or 4 GiB (NON-PROD) allocated.</p>
+                        <p class="mt-2 max-w-full whitespace-nowrap text-sm text-slate-500">Identifying underutilized RAM within MS SQL databases for downsizing and performance optimization.</p>
                     </div>
                 </div>
 
@@ -1178,12 +1185,12 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
-                            <span class="inline-flex items-center gap-1 rounded-full bg-lime-100 px-2.5 py-1 text-[10px] font-bold text-lime-700">
+                            <span class="inline-flex items-center gap-1.5 rounded-full bg-lime-100 px-3 py-1.5 text-xl font-bold leading-none text-lime-700">
                                 <span id="rs3-ram-reduction-badge">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB
                             </span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-ram-savings-total">{{ rightsizing_ram_savings|floatformat:0 }}</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-ram-savings-total">{{ rightsizing_ram_savings|floatformat:0 }}</span>€</p>
                         </div>
                         <p class="mt-1 text-xs text-slate-500">Estimated annual savings from RAM rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
@@ -1306,11 +1313,12 @@
                         </div>
                         {% if ram_keys %}
                         <table id="rs3-ram-table" class="min-w-full divide-y divide-slate-200 text-left">
-                            <thead class="bg-slate-50">
-                                <tr id="rs3-ram-head-row">
+                            <thead class="bg-white">
+                                <tr id="rs3-ram-head-row" class="results-table-header-row">
                                     {% for key in ram_keys %}
-                                    <th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">{{ key }}</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">{{ key }}</th>
                                     {% endfor %}
+                                    <th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="rs3-ram-tbody" class="bg-white divide-y divide-slate-100">
@@ -1319,6 +1327,9 @@
                                     {% for val in row %}
                                     <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
                                     {% endfor %}
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1354,7 +1365,7 @@
                     <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware CPU Optimization</h2>
                     <span id="crit-cpu-count-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
                 </div>
-                <p class="text-sm text-slate-500 mb-4">Applies to all environments and criticality levels. Flags under-utilised (&lt;10% avg CPU), over-utilised (&gt;80%), or high-peak (&gt;95%) critical systems.</p>
+                <p class="text-sm text-slate-500 mb-4">Identifying critically-aware CPUs within MS SQL databases for downsizing and performance optimization.</p>
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-2">
                         <span id="crit-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.crit_cpu_count|default:0 }}</span>
@@ -1372,9 +1383,9 @@
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
-                        <table id="crit-cpu-table" class="min-w-full divide-y divide-slate-200 text-left text-xs">
-                            <thead class="bg-slate-50">
-                                <tr id="crit-cpu-head-row"></tr>
+                        <table id="crit-cpu-table" class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-white">
+                                <tr id="crit-cpu-head-row" class="results-table-header-row"></tr>
                             </thead>
                             <tbody id="crit-cpu-tbody" class="divide-y divide-slate-100"></tbody>
                         </table>
@@ -1402,7 +1413,7 @@
                     <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware RAM Optimization</h2>
                     <span id="crit-ram-count-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_ram_count|default:0 }} systems</span>
                 </div>
-                <p class="text-sm text-slate-500 mb-4">Flags systems with very high free memory (&gt;80%) for cautious downsize, low free memory (&lt;20%) for upsize review, or critically low minimum memory (&lt;5%).</p>
+                <p class="text-sm text-slate-500 mb-4">Identifying critically-aware RAM within MS SQL databases for downsizing and performance optimization.</p>
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-2">
                         <span id="crit-ram-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.crit_ram_count|default:0 }}</span>
@@ -1420,9 +1431,9 @@
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
-                        <table id="crit-ram-table" class="min-w-full divide-y divide-slate-200 text-left text-xs">
-                            <thead class="bg-slate-50">
-                                <tr id="crit-ram-head-row"></tr>
+                        <table id="crit-ram-table" class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-white">
+                                <tr id="crit-ram-head-row" class="results-table-header-row"></tr>
                             </thead>
                             <tbody id="crit-ram-tbody" class="divide-y divide-slate-100"></tbody>
                         </table>
@@ -1470,11 +1481,11 @@
                             <tbody class="divide-y divide-slate-100">
                                 {% for row in rs.lifecycle_risk_flags|slice:":50" %}
                                 <tr class="hover:bg-red-50/40 transition-colors">
-                                    <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-xs font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
                                     </td>
-                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Peak_CPU_12m|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-700">{{ row.Min_FreeMem_12m|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.Lifecycle_Risk_Reasons|default:"—" }}</td>
@@ -1505,20 +1516,21 @@
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] overflow-hidden">
                     {% if rs.physical_system_flags %}
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
-                            <thead class="bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
+                        <table class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-white">
+                                <tr class="results-table-header-row">
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Server</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Env</th>
                                     <!-- <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th> -->
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">IsVirtual Status</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Human Review</th>
-                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Reason</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">IsVirtual Status</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Human Review</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Reason</th>
+                                    <th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 {% for row in rs.physical_system_flags|slice:":50" %}
-                                <tr class="hover:bg-slate-50 transition-colors">
+                                <tr class="hover:bg-sky-50/60 transition-colors">
                                     <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
                                     <!-- <td class="px-4 py-3 whitespace-nowrap">
@@ -1526,7 +1538,10 @@
                                     </td> -->
                                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-700">{{ row.IsVirtual_Status|default:"Physical" }}</span></td>
                                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">{{ row.Human_Review_Required|default:"Yes – Physical System" }}</span></td>
-                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.Review_Reason|default:"Physical system detected." }}</td>
+                                    <td class="px-4 py-3 text-xs text-slate-600 max-w-xs">{{ row.Review_Reason|default:"Physical system detected." }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -1869,6 +1884,31 @@
 
     .results-kpi-strip {
         background: linear-gradient(90deg, #1a5675 0%, #1486b8 45%, #52b86a 76%, #84d91d 100%);
+    }
+
+    .results-table-header-row {
+        background: linear-gradient(90deg, #1f7ba6 0%, #2a95bc 34%, #54b96c 72%, #7fe115 100%);
+    }
+
+    .results-table-header-cell {
+        background: transparent;
+        color: rgba(255, 255, 255, 0.96);
+    }
+
+    .results-table-header-cell button {
+        color: inherit;
+    }
+
+    .results-table-header-cell button:hover {
+        color: #ffffff;
+    }
+
+    .results-table-header-button {
+        color: inherit;
+    }
+
+    .results-table-header-button:hover {
+        color: #ffffff;
     }
 
     .results-kpi-item {
@@ -2520,6 +2560,7 @@
 
         var validTabs = ['rule1', 'rule2', 'rule3', 'combined', 'dashboard', 'dataquality'];
         window.setOptimizerTab = function (tabId) {
+            var pageScrollEl = document.querySelector('.optimizer-page-scroll');
             validTabs.forEach(function (id) {
                 var linkEl = document.getElementById('tablink-' + id);
                 var panelEl = document.getElementById('panel-' + id);
@@ -2529,6 +2570,7 @@
                         panelEl.classList.add('active-panel');
                         panelEl.style.display = 'flex';
                         panelEl.removeAttribute('hidden');
+                        panelEl.scrollTop = 0;
                     }
                     if (history.replaceState) history.replaceState(null, null, '#' + id);
                     else window.location.hash = '#' + id;
@@ -2541,6 +2583,7 @@
                     }
                 }
             });
+            if (pageScrollEl) pageScrollEl.scrollTop = 0;
             setTimeout(function () {
                 var panelEl = document.getElementById('panel-' + tabId);
                 if (panelEl && typeof Plotly !== 'undefined') {
@@ -2562,6 +2605,8 @@
 
         // Client-side pagination (no full page reload)
         var PER_PAGE = 6;
+        var RULE1_PER_PAGE = 10;
+        var RULE2_PER_PAGE = 10;
         var RS3_PER_PAGE = 10;
         var rule1DataEl = document.getElementById('rule1-data');
         var rule2DataEl = document.getElementById('rule2-data');
@@ -2650,6 +2695,12 @@
                 .trim();
         }
 
+        function getRulePageSize(ruleKey) {
+            if (ruleKey === 'rule1') return RULE1_PER_PAGE;
+            if (ruleKey === 'rule2') return RULE2_PER_PAGE;
+            return PER_PAGE;
+        }
+
         function getActionCellHtml() {
             return '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button></td>';
         }
@@ -2657,11 +2708,11 @@
         // ── Rule 1 sort helpers ───────────────────────────────────────────────
         function rule1SortIconSvg(colIdx) {
             if (rule1SortColIdx !== colIdx) {
-                return '<svg class="w-3 h-3 inline-block ml-0.5 text-slate-300 group-hover:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>';
+                return '<svg class="w-3 h-3 inline-block ml-0.5 text-white/80 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>';
             }
             return rule1SortOrder === 'asc'
-                ? '<svg class="w-3 h-3 inline-block ml-0.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>'
-                : '<svg class="w-3 h-3 inline-block ml-0.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
+                ? '<svg class="w-3 h-3 inline-block ml-0.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>'
+                : '<svg class="w-3 h-3 inline-block ml-0.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
         }
 
         function doSortRule1() {
@@ -2683,21 +2734,22 @@
                     return asc ? (sa < sb ? -1 : sa > sb ? 1 : 0) : (sa > sb ? -1 : sa < sb ? 1 : 0);
                 });
             }
-            totalRule1Pages = Math.max(1, Math.ceil(rule1SortedData.length / PER_PAGE));
+            totalRule1Pages = Math.max(1, Math.ceil(rule1SortedData.length / RULE1_PER_PAGE));
         }
 
         function renderRule1Headers() {
             var headRow = document.getElementById('rule1-thead-row');
             if (!headRow) return;
-            var html = '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]"><input id="rule1-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle"></th>';
+            headRow.className = 'results-table-header-row';
+            var html = '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap w-14 min-w-[56px]"><input id="rule1-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle"></th>';
             for (var i = 0; i < rule1Keys.length; i++) {
                 if (rule1HiddenCols.has(i)) continue;
                 var label = escapeHtml(formatCandidateHeader(rule1Keys[i]));
-                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 cursor-pointer select-none" data-col-index="' + i + '">';
-                html += '<button type="button" class="inline-flex items-center gap-0.5 hover:text-slate-700 group rule1-sort-btn" data-col-idx="' + i + '">' + label + rule1SortIconSvg(i) + '</button>';
+                html += '<th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap cursor-pointer select-none" data-col-index="' + i + '">';
+                html += '<button type="button" class="inline-flex items-center gap-0.5 hover:text-white group rule1-sort-btn" data-col-idx="' + i + '">' + label + rule1SortIconSvg(i) + '</button>';
                 html += '</th>';
             }
-            html += '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">Actions</th>';
+            html += '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>';
             headRow.innerHTML = html;
             var sa = document.getElementById('rule1-select-all');
             if (sa) sa.addEventListener('change', function (e) { togglePageSelection('rule1', e.target.checked); });
@@ -2706,8 +2758,8 @@
         function renderRule1Body() {
             var tbody = document.getElementById('rule1-tbody');
             if (!tbody) return;
-            var start = (rule1Page - 1) * PER_PAGE;
-            var slice = rule1SortedData.slice(start, start + PER_PAGE);
+            var start = (rule1Page - 1) * RULE1_PER_PAGE;
+            var slice = rule1SortedData.slice(start, start + RULE1_PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
@@ -2742,11 +2794,11 @@
         // ── Rule 2 sort & render helpers ──────────────────────────────────────
         function rule2SortIconSvg(colIdx) {
             if (rule2SortColIdx !== colIdx) {
-                return '<svg class="w-3 h-3 inline-block ml-0.5 text-slate-300 group-hover:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>';
+                return '<svg class="w-3 h-3 inline-block ml-0.5 text-white/80 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>';
             }
             return rule2SortOrder === 'asc'
-                ? '<svg class="w-3 h-3 inline-block ml-0.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>'
-                : '<svg class="w-3 h-3 inline-block ml-0.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
+                ? '<svg class="w-3 h-3 inline-block ml-0.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>'
+                : '<svg class="w-3 h-3 inline-block ml-0.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
         }
 
         function doSortRule2() {
@@ -2768,21 +2820,22 @@
                     return asc ? (sa < sb ? -1 : sa > sb ? 1 : 0) : (sa > sb ? -1 : sa < sb ? 1 : 0);
                 });
             }
-            totalRule2Pages = Math.max(1, Math.ceil(rule2SortedData.length / PER_PAGE));
+            totalRule2Pages = Math.max(1, Math.ceil(rule2SortedData.length / RULE2_PER_PAGE));
         }
 
         function renderRule2Headers() {
             var headRow = document.getElementById('rule2-thead-row');
             if (!headRow) return;
-            var html = '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]"><input id="rule2-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle"></th>';
+            headRow.className = 'results-table-header-row';
+            var html = '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap w-14 min-w-[56px]"><input id="rule2-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle"></th>';
             for (var i = 0; i < rule2Keys.length; i++) {
                 if (rule2HiddenCols.has(i)) continue;
                 var label = escapeHtml(formatCandidateHeader(rule2Keys[i]));
-                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 cursor-pointer select-none" data-col-index="' + i + '">';
-                html += '<button type="button" class="inline-flex items-center gap-0.5 hover:text-slate-700 group rule2-sort-btn" data-col-idx="' + i + '">' + label + rule2SortIconSvg(i) + '</button>';
+                html += '<th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap cursor-pointer select-none" data-col-index="' + i + '">';
+                html += '<button type="button" class="inline-flex items-center gap-0.5 hover:text-white group rule2-sort-btn" data-col-idx="' + i + '">' + label + rule2SortIconSvg(i) + '</button>';
                 html += '</th>';
             }
-            html += '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">Actions</th>';
+            html += '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>';
             headRow.innerHTML = html;
             var sa = document.getElementById('rule2-select-all');
             if (sa) sa.addEventListener('change', function (e) { togglePageSelection('rule2', e.target.checked); });
@@ -2791,13 +2844,13 @@
         function renderRule2Body() {
             var tbody = document.getElementById('rule2-tbody');
             if (!tbody) return;
-            var start = (rule2Page - 1) * PER_PAGE;
-            var slice = rule2SortedData.slice(start, start + PER_PAGE);
+            var start = (rule2Page - 1) * RULE2_PER_PAGE;
+            var slice = rule2SortedData.slice(start, start + RULE2_PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
                 var rowIndex = start + i;
-                html += '<tr class="hover:bg-slate-50 transition-colors">';
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
                 html += getSelectionCellHtml('rule2', rowIndex, ruleSelections.rule2.has(rowIndex));
                 for (var j = 0; j < row.length; j++) {
                     if (rule2HiddenCols.has(j)) continue;
@@ -2842,8 +2895,9 @@
             var tbody = document.getElementById(tbodyId);
             if (!tbody) return;
             var ruleMeta = getRuleMeta(tbodyId);
-            var start = (page - 1) * PER_PAGE;
-            var slice = data.slice(start, start + PER_PAGE);
+            var pageSize = ruleMeta ? getRulePageSize(ruleMeta.key) : PER_PAGE;
+            var start = (page - 1) * pageSize;
+            var slice = data.slice(start, start + pageSize);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
@@ -2869,8 +2923,9 @@
             var page = ruleKey === 'rule1' ? rule1Page : rule2Page;
             var data = ruleKey === 'rule1' ? rule1SortedData : rule2SortedData;
             if (!selectAll) return;
-            var start = (page - 1) * PER_PAGE;
-            var end = Math.min(start + PER_PAGE, data.length);
+            var pageSize = getRulePageSize(ruleKey);
+            var start = (page - 1) * pageSize;
+            var end = Math.min(start + pageSize, data.length);
             var totalOnPage = Math.max(0, end - start);
             var checkedOnPage = 0;
             for (var i = start; i < end; i++) {
@@ -2893,8 +2948,9 @@
         function togglePageSelection(ruleKey, checked) {
             var page = ruleKey === 'rule1' ? rule1Page : rule2Page;
             var data = ruleKey === 'rule1' ? rule1SortedData : rule2SortedData;
-            var start = (page - 1) * PER_PAGE;
-            var end = Math.min(start + PER_PAGE, data.length);
+            var pageSize = getRulePageSize(ruleKey);
+            var start = (page - 1) * pageSize;
+            var end = Math.min(start + pageSize, data.length);
             for (var i = start; i < end; i++) {
                 if (checked) ruleSelections[ruleKey].add(i);
                 else ruleSelections[ruleKey].delete(i);
@@ -3280,17 +3336,18 @@
             var activeField = rs3State[type].sortField;
             var order = rs3State[type].sortOrder;
             if (!sortField || activeField !== sortField) {
-                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+                return '<svg class="w-3 h-3 text-white/80 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
             }
             if (order === 'asc') {
-                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+                return '<svg class="w-3 h-3 text-white flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
             }
-            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+            return '<svg class="w-3 h-3 text-white flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
         }
 
         function renderRs3TableHead(type, columns) {
             var headRow = document.getElementById('rs3-' + type + '-head-row');
             if (!headRow) return;
+            headRow.className = 'results-table-header-row';
             var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
             var html = '';
             for (var i = 0; i < columns.length; i++) {
@@ -3298,11 +3355,12 @@
                 var label = formatRs3Display(columns[i]);
                 var sortField = getRs3ApiFieldForColumn(type, columns[i]);
                 if (sortField) {
-                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50"><button type="button" class="inline-flex items-center gap-1 hover:text-slate-700" data-rs3-sort-type="' + escapeHtml(type) + '" data-rs3-sort-field="' + escapeHtml(sortField) + '" data-rs3-col-idx="' + i + '">' + escapeHtml(label) + rs3SortIconSvg(type, sortField) + '</button></th>';
+                    html += '<th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap"><button type="button" class="results-table-header-button inline-flex items-center gap-1" data-rs3-sort-type="' + escapeHtml(type) + '" data-rs3-sort-field="' + escapeHtml(sortField) + '" data-rs3-col-idx="' + i + '">' + escapeHtml(label) + rs3SortIconSvg(type, sortField) + '</button></th>';
                 } else {
-                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
+                    html += '<th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">' + escapeHtml(label) + '</th>';
                 }
             }
+            html += '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>';
             headRow.innerHTML = html;
         }
 
@@ -3384,11 +3442,12 @@
             var slice = records.slice(start, start + RS3_PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
-                html += '<tr class="hover:bg-slate-50 transition-colors">';
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
                 for (var j = 0; j < columns.length; j++) {
                     if (hiddenCols.has(j)) continue;
                     html += renderRs3RecommendationCell(columns[j], slice[i][columns[j]]);
                 }
+                html += getActionCellHtml();
                 html += '</tr>';
             }
             tbody.innerHTML = html;
@@ -4120,12 +4179,12 @@
         function critSortIcon(type, colIdx) {
             var st = critState[type];
             if (st.sortColIdx !== colIdx) {
-                return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+                return '<svg class="w-3 h-3 text-white/80 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
             }
             if (st.sortOrder === 'asc') {
-                return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+                return '<svg class="w-3 h-3 text-white flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
             }
-            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+            return '<svg class="w-3 h-3 text-white flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
         }
 
         function doSortCrit(type) {
@@ -4150,16 +4209,18 @@
         function renderCritHead(type) {
             var headRow = document.getElementById('crit-' + type + '-head-row');
             if (!headRow) return;
+            headRow.className = 'results-table-header-row';
             var cols = critColDefs[type];
             var hidden = critState[type].hiddenCols;
             var html = '';
             for (var i = 0; i < cols.length; i++) {
                 if (hidden.has(i)) continue;
-                html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">'
-                      + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 crit-sort-btn" data-crit-type="' + type + '" data-crit-col="' + i + '">'
+                html += '<th class="results-table-header-cell px-4 py-3 text-sm font-semibold tracking-[0.12em] whitespace-nowrap">'
+                      + '<button type="button" class="results-table-header-button inline-flex items-center gap-1 crit-sort-btn" data-crit-type="' + type + '" data-crit-col="' + i + '">'
                       + escHtml(cols[i].label) + critSortIcon(type, i)
                       + '</button></th>';
             }
+            html += '<th class="results-table-header-cell px-4 py-3 text-center text-sm font-semibold tracking-[0.12em] whitespace-nowrap">Actions</th>';
             headRow.innerHTML = html;
         }
 
@@ -4185,7 +4246,7 @@
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
-                html += '<tr class="hover:bg-orange-50/40 transition-colors">';
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
                 for (var j = 0; j < cols.length; j++) {
                     if (hidden.has(j)) continue;
                     var val = row[cols[j].key];
@@ -4197,13 +4258,14 @@
                         var isIncreased = /^(increase|increased)\b/i.test(text);
                         var dot = isReduced ? '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#ef4444;"></span>'
                                 : isIncreased ? '<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-2" style="background:#22c55e;"></span>' : '';
-                        html += '<td class="px-4 py-3 text-[10px] font-semibold whitespace-nowrap text-slate-800 max-w-xs"><span class="flex items-center">' + dot + escHtml(text) + '</span></td>';
+                        html += '<td class="px-4 py-3 text-xs font-semibold whitespace-nowrap text-slate-800 max-w-xs"><span class="flex items-center">' + dot + escHtml(text) + '</span></td>';
                     } else if (cols[j].key === 'Recommended_vCPU' || cols[j].key === 'Recommended_RAM_GiB') {
-                        html += '<td class="px-4 py-3 font-semibold text-emerald-700 whitespace-nowrap text-[10px]">' + escHtml(text) + '</td>';
+                        html += '<td class="px-4 py-3 font-semibold text-emerald-700 whitespace-nowrap text-xs">' + escHtml(text) + '</td>';
                     } else {
-                        html += '<td class="px-4 py-3 text-[10px] text-slate-700 whitespace-nowrap">' + escHtml(text) + '</td>';
+                        html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escHtml(text) + '</td>';
                     }
                 }
+                html += getActionCellHtml();
                 html += '</tr>';
             }
             tbody.innerHTML = html;

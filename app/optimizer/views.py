@@ -1003,21 +1003,24 @@ def results(request):
     render_context["analysis_created_at"] = context.get("data_refreshed_at")
     render_context["data_source"] = "database"
 
-    # Pagination for Rule 1 and Rule 2 raw data (6 rows per page, no scrolling)
+    # Pagination for Rule 1 and Rule 2 raw data
+    rule1_per_page = 10
+    rule2_per_page = 10
     per_page = 6
+    rs3_per_page = 10
     rr = context.get("rule_results") or {}
     azure_full = rr.get("azure_payg") or []
     retired_full = rr.get("retired_devices") or []
     requested_rule1_page = _get_page_number(request, "rule1_page")
     requested_rule2_page = _get_page_number(request, "rule2_page")
-    total_rule1_pages = max(1, (len(azure_full) + per_page - 1) // per_page)
-    total_rule2_pages = max(1, (len(retired_full) + per_page - 1) // per_page)
+    total_rule1_pages = max(1, (len(azure_full) + rule1_per_page - 1) // rule1_per_page)
+    total_rule2_pages = max(1, (len(retired_full) + rule2_per_page - 1) // rule2_per_page)
     rule1_page = min(requested_rule1_page, total_rule1_pages)
     rule2_page = min(requested_rule2_page, total_rule2_pages)
     rule1_keys = list(azure_full[0].keys()) if azure_full else []
     rule2_keys = list(retired_full[0].keys()) if retired_full else []
-    azure_slice = azure_full[(rule1_page - 1) * per_page : rule1_page * per_page]
-    retired_slice = retired_full[(rule2_page - 1) * per_page : rule2_page * per_page]
+    azure_slice = azure_full[(rule1_page - 1) * rule1_per_page : rule1_page * rule1_per_page]
+    retired_slice = retired_full[(rule2_page - 1) * rule2_per_page : rule2_page * rule2_per_page]
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
     render_context["retired_devices_page"] = [[r.get(k) for k in rule2_keys] for r in retired_slice]
     render_context["rule1_page"] = rule1_page
@@ -1062,18 +1065,18 @@ def results(request):
     rs3_source_records = ram_full if rs3_workload == "RAM" else cpu_full
     rs3_filtered_records = _filter_rs3_records(rs3_source_records, rs3_filter)
     rs3_page = _get_page_number(request, "rs3_page")
-    total_rs3_pages = max(1, (len(rs3_filtered_records) + per_page - 1) // per_page)
+    total_rs3_pages = max(1, (len(rs3_filtered_records) + rs3_per_page - 1) // rs3_per_page)
     rs3_page = min(rs3_page, total_rs3_pages)
 
     rs3_columns = _get_rs3_columns(rs3_workload, rs3_filter)
     rs3_keys = [key for key in rs3_columns if any(key in row for row in rs3_filtered_records)]
-    rs3_slice = rs3_filtered_records[(rs3_page - 1) * per_page : rs3_page * per_page]
+    rs3_slice = rs3_filtered_records[(rs3_page - 1) * rs3_per_page : rs3_page * rs3_per_page]
     rs3_summary = _get_rs3_summary(rs, rs3_workload, rs3_filter, rs3_source_records)
 
     rs_cpu_page = _get_page_number(request, "rs3_cpu_page")
     rs_ram_page = _get_page_number(request, "rs3_ram_page")
-    total_rs_cpu_pages = max(1, (len(cpu_full) + per_page - 1) // per_page)
-    total_rs_ram_pages = max(1, (len(ram_full) + per_page - 1) // per_page)
+    total_rs_cpu_pages = max(1, (len(cpu_full) + rs3_per_page - 1) // rs3_per_page)
+    total_rs_ram_pages = max(1, (len(ram_full) + rs3_per_page - 1) // rs3_per_page)
     rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
 
@@ -1085,12 +1088,12 @@ def results(request):
     ram_initial_records = _filter_rs3_records(ram_full, ram_initial_filter)
     ram_initial_columns = _get_rs3_columns("RAM", ram_initial_filter)
     ram_keys = [key for key in ram_initial_columns if any(key in row for row in ram_initial_records)]
-    total_rs_cpu_pages = max(1, (len(cpu_initial_records) + per_page - 1) // per_page)
-    total_rs_ram_pages = max(1, (len(ram_initial_records) + per_page - 1) // per_page)
+    total_rs_cpu_pages = max(1, (len(cpu_initial_records) + rs3_per_page - 1) // rs3_per_page)
+    total_rs_ram_pages = max(1, (len(ram_initial_records) + rs3_per_page - 1) // rs3_per_page)
     rs_cpu_page = min(rs_cpu_page, total_rs_cpu_pages)
     rs_ram_page = min(rs_ram_page, total_rs_ram_pages)
-    cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * per_page : rs_cpu_page * per_page]
-    ram_slice = ram_initial_records[(rs_ram_page - 1) * per_page : rs_ram_page * per_page]
+    cpu_slice = cpu_initial_records[(rs_cpu_page - 1) * rs3_per_page : rs_cpu_page * rs3_per_page]
+    ram_slice = ram_initial_records[(rs_ram_page - 1) * rs3_per_page : rs_ram_page * rs3_per_page]
     _cpu_hz = str(request.GET.get("rs3_cpu_hosting_zone") or "").strip()
     if _cpu_hz:
         _cpu_hz = _normalize_rs3_hosting_zone_value(_cpu_hz)
@@ -1376,7 +1379,6 @@ def results(request):
         flatfile_qs = (
             CPUUtilisation.objects
             .select_related("server")
-            .filter(source__in=["boones_public", "boones_private"])
             .order_by("-period_month")[:300]
         )
         dq_flatfile_rows = [
@@ -1394,7 +1396,7 @@ def results(request):
             for f in flatfile_qs
         ]
     except Exception as _dq_exc:
-        logger.warning("Data Quality fetch failed: %s", _dq_exc)
+        logger.exception("Data Quality fetch failed: %s", _dq_exc)
         dq_usu_rows, dq_grafana_rows, dq_flatfile_rows = [], [], []
         dq_grafana_metric_avg, dq_grafana_timeline, dq_grafana_top_servers = [], {}, {}
         dq_grafana_connections_by_server = []
@@ -1865,7 +1867,7 @@ def api_savings_summary(request):
             "name": "CPU Right-Sizing",
             "candidates": int(rs_meta.get("cpu_count") or rs.get("cpu_count") or 0),
             "label": "servers",
-            "savings_eur": float(rws.get("rightsizing") or 0),
+            "savings_eur": float(rws.get("rightsizing_cpu") or 0),
             "vcpu_reduction": int(rs_meta.get("total_vcpu_reduction") or rs.get("total_vcpu_reduction") or 0),
             "ram_reduction_gib": float(rs_meta.get("total_ram_reduction_gib") or rs.get("total_ram_reduction_gib") or 0),
             "avg_cost_per_core_pair_eur": float(rs_meta.get("avg_cost_per_core_pair_eur") or rs.get("avg_cost_per_core_pair_eur") or 0),
@@ -1988,7 +1990,7 @@ def api_oracle_data(request):
 
         qs = (
             USUInstallation.objects
-            .filter(product_family=db_pf, server__is_active=True)
+            .filter(product_family=db_pf)
             .select_related("server")
             .order_by("server__server_name")
         )
