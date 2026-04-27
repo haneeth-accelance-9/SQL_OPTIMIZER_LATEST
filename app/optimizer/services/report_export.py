@@ -240,6 +240,16 @@ def _append_paragraph_block(blocks, lines):
         blocks.append({"kind": "paragraph", "text": text})
 
 
+def _parse_table_row(line: str) -> list[str]:
+    """Extract cell values from a markdown table row like | col1 | col2 |."""
+    return [cell.strip() for cell in line.strip("|").split("|")]
+
+
+def _is_table_separator(line: str) -> bool:
+    """Return True for markdown table separator rows like |---|---:|."""
+    return bool(re.fullmatch(r"\|[-: |]+\|", line))
+
+
 def _parse_report_blocks(report_text: str):
     report_text = normalize_report_title_text(report_text)
     title = None
@@ -281,6 +291,14 @@ def _parse_report_blocks(report_text: str):
             match = re.match(r"^(\d+\.)\s+(.*)$", line)
             if match:
                 blocks.append({"kind": "numbered", "label": match.group(1), "text": match.group(2)})
+            continue
+        # Markdown table rows
+        if line.startswith("|") and line.endswith("|"):
+            flush_paragraph()
+            if _is_table_separator(line):
+                continue  # skip separator lines
+            cells = _parse_table_row(line)
+            blocks.append({"kind": "table_row", "cells": cells})
             continue
         if re.match(r"^[A-Z][A-Za-z0-9/&() ,' -]{0,80}:$", line):
             flush_paragraph()
@@ -499,6 +517,9 @@ def build_report_markdown(report_text: str, report_context=None) -> str:
             lines.append(f"{block.get('label', '1.')} {text}")
         elif kind == "rule":
             lines.extend(["", "---"])
+        elif kind == "table_row":
+            cells = block.get("cells") or []
+            lines.append("| " + " | ".join(cells) + " |")
         else:
             lines.extend(["", text])
 
@@ -629,6 +650,10 @@ def export_pdf(report_text: str, generated_at=None, report_context=None) -> Opti
             story.append(Paragraph(_markdown_to_reportlab(block["text"]), bullet_style, bulletText=block["label"]))
         elif kind == "rule":
             story.append(HRFlowable(width="100%", thickness=0.6, color=palette["rule"], spaceBefore=8, spaceAfter=8))
+        elif kind == "table_row":
+            cells = block.get("cells") or []
+            row_text = "  |  ".join(_markdown_to_reportlab(c) for c in cells if c)
+            story.append(Paragraph(row_text, bullet_style))
         else:
             story.append(Paragraph(_markdown_to_reportlab(block["text"]), body_style))
 
@@ -722,6 +747,11 @@ def export_docx(report_text: str, generated_at=None, report_context=None) -> Opt
             doc.add_paragraph(text, style="List Number")
         elif kind == "rule":
             doc.add_paragraph("")
+        elif kind == "table_row":
+            cells = block.get("cells") or []
+            row_text = "  |  ".join(_markdown_to_plain(c) for c in cells if c)
+            if row_text:
+                doc.add_paragraph(row_text)
         elif text:
             doc.add_paragraph(text)
 
@@ -803,6 +833,13 @@ def export_xlsx(report_text: str, generated_at=None, report_context=None) -> Opt
             cell = sheet.cell(row=current_row, column=1, value=f"{label}{raw_text}")
             cell.font = Font(name="Calibri", size=10)
             cell.alignment = wrap_alignment
+        elif kind == "table_row":
+            current_row += 1
+            cells = block.get("cells") or []
+            for col_idx, cell_value in enumerate(cells[:4], start=1):
+                cell = sheet.cell(row=current_row, column=col_idx, value=_markdown_to_plain(cell_value))
+                cell.font = Font(name="Calibri", size=10)
+                cell.alignment = wrap_alignment
         elif kind == "rule":
             current_row += 1
             for col in range(1, 5):

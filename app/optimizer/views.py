@@ -1601,7 +1601,7 @@ def report_page(request):
 @require_GET
 @login_required
 def report_download(request, format_type):
-    """Download report as PDF, Word, or Excel — data from live DB."""
+    """Download report as PDF, Word, or Excel — uses agent AI report markdown."""
     normalized_format = REPORT_FORMAT_ALIASES.get(format_type, format_type)
     if normalized_format not in ALLOWED_REPORT_FORMATS:
         return HttpResponse("Invalid format.", status=400)
@@ -1610,25 +1610,26 @@ def report_download(request, format_type):
 
     report_text = _resolve_report_markdown(context, agentic=get_latest_agentic_context())
     report_text = normalize_report_content_text(report_text or "")
-    report_export_context = _build_report_render_context(context)
     generated_at = timezone.localtime()
     base_name = "sql_license_optimization_report_db"
+    # Pass report_context=None so export functions use _parse_report_blocks(report_text)
+    # instead of the old _build_template_blocks — this preserves the agent AI report structure.
     if normalized_format == "pdf":
-        content = export_pdf(report_text, generated_at=generated_at, report_context=report_export_context)
+        content = export_pdf(report_text, generated_at=generated_at, report_context=None)
         if content is None:
             return HttpResponse("PDF export not available (install reportlab).", status=501)
         response = HttpResponse(content, content_type="application/pdf")
         response["Content-Disposition"] = _safe_content_disposition(f"{base_name}.pdf")
         return response
     if normalized_format == "docx":
-        content = export_docx(report_text, generated_at=generated_at, report_context=report_export_context)
+        content = export_docx(report_text, generated_at=generated_at, report_context=None)
         if content is None:
             return HttpResponse("Word export not available (install python-docx).", status=501)
         response = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         response["Content-Disposition"] = _safe_content_disposition(f"{base_name}.docx")
         return response
     if normalized_format == "xlsx":
-        content = export_xlsx(report_text, generated_at=generated_at, report_context=report_export_context)
+        content = export_xlsx(report_text, generated_at=generated_at, report_context=None)
         if content is None:
             return HttpResponse("Excel export not available (install openpyxl).", status=501)
         response = HttpResponse(
