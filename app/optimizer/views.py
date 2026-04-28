@@ -269,6 +269,9 @@ def _format_metric_label(metric_name):
 
 RS3_CPU_OPTIMIZATION_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Avg_CPU_12m",
     "Peak_CPU_12m",
@@ -278,6 +281,9 @@ RS3_CPU_OPTIMIZATION_COLUMNS = [
 
 RS3_CPU_RIGHTSIZING_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Avg_CPU_12m",
     "Peak_CPU_12m",
@@ -288,6 +294,9 @@ RS3_CPU_RIGHTSIZING_COLUMNS = [
 
 RS3_RAM_OPTIMIZATION_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Avg_FreeMem_12m",
     "Min_FreeMem_12m",
@@ -297,6 +306,9 @@ RS3_RAM_OPTIMIZATION_COLUMNS = [
 
 RS3_RAM_RIGHTSIZING_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Avg_FreeMem_12m",
     "Min_FreeMem_12m",
@@ -307,6 +319,9 @@ RS3_RAM_RIGHTSIZING_COLUMNS = [
 
 RS3_CPU_RECOMMENDATION_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Current_vCPU",
     "Recommended_vCPU",
@@ -315,6 +330,9 @@ RS3_CPU_RECOMMENDATION_COLUMNS = [
 
 RS3_RAM_RECOMMENDATION_COLUMNS = [
     "server_name",
+    "product_family",
+    "product_name",
+    "product_description",
     "Env_Type",
     "Current_RAM_GiB",
     "Recommended_RAM_GiB",
@@ -365,6 +383,9 @@ RS3_API_DEFAULT_PAGE_SIZE = 25
 RS3_API_MAX_PAGE_SIZE = 200
 RS3_API_CPU_COLUMNS = [
     {"key": "server_name", "label": "Server Name"},
+    {"key": "product_family", "label": "Product Family"},
+    {"key": "product_name", "label": "Product Name"},
+    {"key": "product_description", "label": "Product Description"},
     {"key": "env_type", "label": "Env Type"},
     {"key": "avg_cpu_12m", "label": "Avg CPU 12m"},
     {"key": "peak_cpu_12m", "label": "Peak CPU 12m"},
@@ -375,6 +396,9 @@ RS3_API_CPU_COLUMNS = [
 ]
 RS3_API_RAM_COLUMNS = [
     {"key": "server_name", "label": "Server Name"},
+    {"key": "product_family", "label": "Product Family"},
+    {"key": "product_name", "label": "Product Name"},
+    {"key": "product_description", "label": "Product Description"},
     {"key": "env_type", "label": "Env Type"},
     {"key": "avg_free_mem_12m", "label": "Avg Freemem 12m"},
     {"key": "min_free_mem_12m", "label": "Min Freemem 12m"},
@@ -717,6 +741,9 @@ def _get_rs3_api_columns(workload):
 def _serialize_rs3_api_record(record, workload):
     serialized = {
         "server_name": record.get("server_name"),
+        "product_family": record.get("product_family") or "",
+        "product_name": record.get("product_name") or "",
+        "product_description": record.get("product_description") or "",
         "environment": record.get("Environment"),
         "env_type": record.get("Env_Type"),
         "hosting_zone": _normalize_rs3_hosting_zone_value(record.get("hosting_zone")),
@@ -1205,6 +1232,19 @@ def results(request):
             for i in usu_qs
         ]
 
+        # Build server → product lookup for Grafana and Flat Files enrichment
+        _srv_product = {}
+        for _inst in USUInstallation.objects.select_related("server").filter(server__isnull=False).only(
+            "server__server_name", "product_family", "product_description"
+        ):
+            _sn = _inst.server.server_name if _inst.server else None
+            if _sn and _sn not in _srv_product:
+                _srv_product[_sn] = {
+                    "Product Family": _inst.product_family or "",
+                    "Product Name": _inst.product_description or "",
+                    "Product Description": _inst.product_description or "",
+                }
+
         from django.db.models import Avg, Max, Min, Count
 
         dq_grafana_connections_by_server = []
@@ -1221,6 +1261,9 @@ def results(request):
             dq_grafana_rows = [
                 {
                     "Server": g.server.server_name if g.server else "",
+                    "Product Family": _srv_product.get(g.server.server_name if g.server else "", {}).get("Product Family", ""),
+                    "Product Name": _srv_product.get(g.server.server_name if g.server else "", {}).get("Product Name", ""),
+                    "Product Description": _srv_product.get(g.server.server_name if g.server else "", {}).get("Product Description", ""),
                     "Dashboard": g.dashboard or "",
                     "Metric": g.metric_name or "",
                     "Value": str(round(float(g.metric_value), 4)) if g.metric_value is not None else "",
