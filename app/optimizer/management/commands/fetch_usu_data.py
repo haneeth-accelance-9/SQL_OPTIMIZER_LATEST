@@ -1,7 +1,7 @@
 """
 Management command: fetch_usu_data
 ===================================
-Pulls MySQL installation and demand-detail records from the USU API
+Pulls SQL Server installation and demand-detail records from the USU API
 and stores them in the correct PostgreSQL tables:
 
   API endpoint          → Django model      → DB table
@@ -12,9 +12,9 @@ and stores them in the correct PostgreSQL tables:
 Both endpoints also create/update the parent Server row so that
 every installation/demand record has a valid FK before insertion.
 
-Record volumes:
-  - Installations  : ~36 182   → 2 pages   (page size 35 000), sequential
-  - Demand Details : ~7 703 892 → ~309 pages (page size 25 000), parallel
+API URLs used:
+  installations : https://lima.bayer.cloud.usu.com/prod/index.php/api/customization/v1.0/installations?product_family=SQL Server&$top=100&$skip=0
+  demanddetails : https://lima.bayer.cloud.usu.com/prod/index.php/api/customization/v1.0/demanddetails?product_family=SQL Server&$top=30000&$skip=0
 
 Scheduling — django-crontab (works on Windows, Linux, Mac):
     Configured in settings.py → CRONJOBS (runs every Monday at 02:00).
@@ -42,7 +42,8 @@ from decimal import Decimal, InvalidOperation
 import requests
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.utils import OperationalError
 from requests.auth import HTTPBasicAuth
 
 from optimizer.models import Server, Tenant, USUDemandDetail, USUInstallation
@@ -54,14 +55,13 @@ logger = logging.getLogger(__name__)
 BASE_URL           = "https://lima.bayer.cloud.usu.com"
 INSTALL_ENDPOINT   = "/prod/index.php/api/customization/v1.0/installations"
 DEMAND_ENDPOINT    = "/prod/index.php/api/customization/v1.0/demanddetails"
-PRODUCT_FAMILY     = "MySQL"
+PRODUCT_FAMILY     = "SQL Server"
 
-# Installations: ~36 182 records. 35 000 per page = 2 pages — sequential is fine.
-INSTALL_PAGE_SIZE  = 35_000
+# Installations: $top=100 as specified (SQL Server records are far fewer than MySQL).
+INSTALL_PAGE_SIZE  = 100
 
-# Demand details: ~7.7 M records. 25 000 per page = ~309 pages.
-# Fetched in parallel using DEMAND_WORKERS threads to finish in minutes, not hours.
-DEMAND_PAGE_SIZE   = 10_000
+# Demand details: $top=30000 — single-page fetch covers the full SQL Server dataset.
+DEMAND_PAGE_SIZE   = 30_000
 
 # How many ORM objects to pass to bulk_create in a single DB call.
 # 500 rows × ~20 fields is safely under PostgreSQL's 65 535 parameter limit.
@@ -186,6 +186,35 @@ def _fetch_page(session: requests.Session, url: str, params: dict | None = None)
             time.sleep(wait)
 
 
+# ── DB connection helpers ─────────────────────────────────────────────────────
+
+def _reset_db_connection() -> None:
+    """Close the current DB connection so Django reopens it on the next query.
+    Needed after long-running API fetches where the server-side connection may
+    have timed out (Azure PostgreSQL drops idle connections after ~10 min).
+    """
+    try:
+        connection.close()
+    except Exception:
+        pass
+
+
+def _get_or_create_with_retry(model_class, max_attempts: int = 3, **kwargs):
+    """Wrapper around get_or_create that reconnects on OperationalError (dropped connection)."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return model_class.objects.get_or_create(**kwargs)
+        except OperationalError:
+            if attempt == max_attempts:
+                raise
+            logger.warning(
+                "DB connection dropped during get_or_create (attempt %d/%d) — reconnecting",
+                attempt, max_attempts,
+            )
+            _reset_db_connection()
+            time.sleep(1)
+
+
 # ── Tenant / Server resolution ────────────────────────────────────────────────
 
 def _get_or_create_tenant(name: str) -> Tenant:
@@ -229,7 +258,8 @@ def _resolve_server_from_installation(tenant: Tenant, raw: dict) -> Server:
     # Canonical cross-source key: prefer the USU device key
     server_key = usu_key or f"{server_name}|{environment or ''}|{hosting or ''}".lower()
 
-    server, _ = Server.objects.get_or_create(
+    server, _ = _get_or_create_with_retry(
+        Server,
         tenant=tenant,
         server_key=server_key,
         defaults={
@@ -278,7 +308,8 @@ def _resolve_server_from_demand(tenant: Tenant, raw: dict) -> Server:
 
     server_key = usu_key or f"{server_name}|{environment or ''}|{hosting or ''}".lower()
 
-    server, _ = Server.objects.get_or_create(
+    server, _ = _get_or_create_with_retry(
+        Server,
         tenant=tenant,
         server_key=server_key,
         defaults={
@@ -437,6 +468,7 @@ def save_installations(
         stdout.write(f"  [dry-run] Would write {len(records):,} installations — skipped")
         return
 
+    _reset_db_connection()
     stdout.write(f"  Writing {len(records):,} installations -> usu_installation ...")
     t0 = time.time()
 
@@ -525,6 +557,7 @@ def save_demand_details(
         stdout.write(f"  [dry-run] Would write {len(records):,} demand rows — skipped")
         return
 
+    _reset_db_connection()
     stdout.write(f"  Writing {len(records):,} demand details -> usu_demand_detail ...")
     t0 = time.time()
 
@@ -592,7 +625,7 @@ def save_demand_details(
 
 class Command(BaseCommand):
     help = (
-        "Weekly USU sync: fetch MySQL installations (~36K) and demand details (~7.7M) "
+        "Weekly USU sync: fetch SQL Server installations and demand details "
         "and store them in usu_installation and usu_demand_detail tables."
     )
 

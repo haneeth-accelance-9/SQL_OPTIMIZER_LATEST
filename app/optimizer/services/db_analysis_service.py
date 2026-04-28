@@ -25,6 +25,11 @@ from optimizer.services.rule_engine import compute_license_metrics, run_rules
 
 logger = logging.getLogger(__name__)
 
+# Product families that are stored in the DB for showcase/display purposes only.
+# They must NOT be included in UC1 (PAYG), UC2 (Retired Assets), or the
+# demand/cost metrics that feed savings calculations.
+SHOWCASE_ONLY_PRODUCT_FAMILIES = frozenset({"Java"})
+
 RIGHTSIZING_REPORT_METADATA_HEADERS = [
     "Number",
     "Server name",
@@ -225,11 +230,15 @@ def _build_installations_df() -> pd.DataFrame:
     """
     Build an installations DataFrame from USUInstallation + Server, matching
     the column schema expected by rule_azure_payg and rule_retired_devices.
+    Excludes showcase-only product families (e.g. Java/Oracle) so they do not
+    affect UC1 (PAYG), UC2 (Retired Assets), or savings calculations.
     """
     from optimizer.models import USUInstallation
 
     rows = USUInstallation.objects.filter(
         server__is_active=True
+    ).exclude(
+        product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
     ).select_related("server").values(
         "inv_status_std_name",
         "device_status",
@@ -291,11 +300,17 @@ def _build_installations_df() -> pd.DataFrame:
 
 
 def _build_demand_df() -> pd.DataFrame:
-    """Build a demand DataFrame from USUDemandDetail."""
+    """
+    Build a demand DataFrame from USUDemandDetail.
+    Excludes showcase-only product families (e.g. Java/Oracle) so they do not
+    inflate Total Demand or Current Cost metrics.
+    """
     from optimizer.models import USUDemandDetail
 
     rows = USUDemandDetail.objects.filter(
         server__is_active=True
+    ).exclude(
+        product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
     ).select_related("server").values(
         "product_description",
         "product_edition",

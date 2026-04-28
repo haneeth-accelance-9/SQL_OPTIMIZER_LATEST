@@ -185,12 +185,23 @@ def compute_license_metrics(
     Demand: prefer actual demand from Helpful Reports (sheet 5); else use demand row count to avoid overcounting.
     Formula: Total license price = (Product price × Quantity effective) / 2
     """
-    if demand_df is None or demand_df.empty or prices_df is None or prices_df.empty:
+    if demand_df is None or demand_df.empty:
         return {
             "total_demand_quantity": 0,
             "total_license_cost": 0.0,
             "by_product": [],
             "demand_row_count": 0,
+            "price_distribution": [],
+            "cost_reduction_tips": [],
+        }
+    if prices_df is None or prices_df.empty:
+        actual = _get_actual_demand_from_helpful_reports(helpful_reports_df)
+        qty = int(actual) if actual is not None else int(demand_df.shape[0])
+        return {
+            "total_demand_quantity": qty,
+            "total_license_cost": 0.0,
+            "by_product": [],
+            "demand_row_count": int(demand_df.shape[0]),
             "price_distribution": [],
             "cost_reduction_tips": [],
         }

@@ -1,17 +1,20 @@
 """
 Management command: fetch_demand_data
 ======================================
-Streams all demand-detail records from the USU API in 10 000-record chunks
+Streams all demand-detail records from the USU API in 30 000-record chunks
 and writes them to:
   1. A rolling JSON checkpoint file   (always, for auditing / replay)
   2. The usu_demand_detail DB table   (default; disable with --no-db)
+
+API URL:
+    GET /demanddetails?product_family=SQL Server&$top=30000&$skip=0
 
 Pagination strategy
 -------------------
 The endpoint supports offset-based pagination via $skip / $top query params:
 
-    GET /demanddetails?product_family=MySQL&$top=10000&$skip=0
-    GET /demanddetails?product_family=MySQL&$top=10000&$skip=10000
+    GET /demanddetails?product_family=SQL Server&$top=30000&$skip=0
+    GET /demanddetails?product_family=SQL Server&$top=30000&$skip=30000
     ...
 
 10 000 rows per request keeps each API call well within the 120 s server
@@ -61,10 +64,10 @@ logger = logging.getLogger(__name__)
 
 BASE_URL        = "https://lima.bayer.cloud.usu.com"
 ENDPOINT        = "/prod/index.php/api/customization/v1.0/demanddetails"
-PRODUCT_FAMILY  = "MySQL"
+PRODUCT_FAMILY  = "SQL Server"
 
-# 10 K rows/request keeps API response times well under 120 s for 7.6 M records.
-PAGE_SIZE       = 10_000
+# 30 K rows/request as per the SQL Server API spec.
+PAGE_SIZE       = 30_000
 
 # How many ORM objects per bulk_create call (<= 65 535 PG params).
 DB_BATCH_SIZE   = 500
@@ -310,7 +313,7 @@ def _close_json(output_file: str) -> None:
 
 class Command(BaseCommand):
     help = (
-        "Stream all USU demand-detail records (~7.66 M) in 10 000-record chunks "
+        "Stream all USU SQL Server demand-detail records in 30 000-record chunks "
         "to usu_demand_detail DB table and a JSON checkpoint file. "
         "Safe to interrupt and resume with --resume."
     )
