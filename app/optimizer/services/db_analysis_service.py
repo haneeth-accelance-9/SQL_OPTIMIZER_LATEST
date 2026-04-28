@@ -777,6 +777,29 @@ def _build_rightsizing_df() -> pd.DataFrame:
         _set_if_present(record, RIGHTSIZING_ALLOCATED_STORAGE_HEADER_BY_MONTH, month_key, util.allocated_storage_gb)
         _set_if_present(record, RIGHTSIZING_USED_STORAGE_HEADER_BY_MONTH, month_key, util.used_storage_gb)
 
+    # Enrich each server record with product fields from USUInstallation
+    from optimizer.models import USUInstallation as _USUInst
+    _product_qs = (
+        _USUInst.objects
+        .filter(server_id__in=list(server_records.keys()))
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values("server_id", "product_family", "product_description")
+    )
+    _product_lookup: dict = {}
+    for _row in _product_qs:
+        _sid = _row["server_id"]
+        if _sid not in _product_lookup:
+            _product_lookup[_sid] = {
+                "product_family": _row.get("product_family") or "",
+                "product_name": _row.get("product_description") or "",
+                "product_description": _row.get("product_description") or "",
+            }
+    for _sid, _rec in server_records.items():
+        _prod = _product_lookup.get(_sid, {})
+        _rec["product_family"] = _prod.get("product_family", "")
+        _rec["product_name"] = _prod.get("product_name", "")
+        _rec["product_description"] = _prod.get("product_description", "")
+
     df = pd.DataFrame(server_records.values())
     for header in RIGHTSIZING_REPORT_BASE_HEADERS:
         if header not in df.columns:
@@ -905,6 +928,9 @@ def compute_rightsizing_metrics() -> dict:
     # ── Column subsets for display ─────────────────────────────────────────────
     _CPU_COLS = [
         "server_name",
+        "product_family",
+        "product_name",
+        "product_description",
         "hosting_zone",
         "installed_status_usu",
         "is_virtual",
@@ -923,6 +949,9 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _RAM_COLS = [
         "server_name",
+        "product_family",
+        "product_name",
+        "product_description",
         "hosting_zone",
         "installed_status_usu",
         "is_virtual",
