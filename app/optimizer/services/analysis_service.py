@@ -56,6 +56,8 @@ def _calculate_savings(
     rs_cpu_count = 0
     rs_ram_count = 0
     rs_total_ram_reduction_gib = 0.0
+    rs_cpu_savings_direct = None
+    rs_ram_savings_direct = None
     if rightsizing:
         rs_vcpu_reduction = int(rightsizing.get("total_vcpu_reduction") or 0)
         rs_avg_cost_per_core_pair = float(rightsizing.get("avg_cost_per_core_pair_eur") or 0)
@@ -63,10 +65,18 @@ def _calculate_savings(
         rs_cpu_count = int(rightsizing.get("cpu_count") or 0)
         rs_ram_count = int(rightsizing.get("ram_count") or 0)
         rs_total_ram_reduction_gib = float(rightsizing.get("total_ram_reduction_gib") or 0)
+        rs_cpu_savings_direct = rightsizing.get("cpu_savings_eur")
+        rs_ram_savings_direct = rightsizing.get("ram_savings_eur")
 
     # Strategy 3 savings: CPU (core pairs saved × cost per pair) + RAM (GiB freed × cost per GiB)
-    cpu_rightsizing_savings = round((rs_vcpu_reduction / 2) * rs_avg_cost_per_core_pair, 2) if rs_avg_cost_per_core_pair > 0 else 0.0
-    ram_rightsizing_savings = round(rs_total_ram_reduction_gib * rs_avg_cost_per_gib, 2) if rs_avg_cost_per_gib > 0 else 0.0
+    if rs_cpu_savings_direct is not None:
+        cpu_rightsizing_savings = round(float(rs_cpu_savings_direct or 0), 2)
+    else:
+        cpu_rightsizing_savings = round((rs_vcpu_reduction / 2) * rs_avg_cost_per_core_pair, 2) if rs_avg_cost_per_core_pair > 0 else 0.0
+    if rs_ram_savings_direct is not None:
+        ram_rightsizing_savings = round(float(rs_ram_savings_direct or 0), 2)
+    else:
+        ram_rightsizing_savings = round(rs_total_ram_reduction_gib * rs_avg_cost_per_gib, 2) if rs_avg_cost_per_gib > 0 else 0.0
     rightsizing_savings = round(cpu_rightsizing_savings + ram_rightsizing_savings, 2)
 
     if total_demand_quantity <= 0 or total_license_cost <= 0:
@@ -90,6 +100,8 @@ def _calculate_savings(
                 "total_ram_reduction_gib": rs_total_ram_reduction_gib,
                 "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
                 "avg_cost_per_gib_eur": rs_avg_cost_per_gib,
+                "cpu_savings_eur": cpu_rightsizing_savings,
+                "ram_savings_eur": ram_rightsizing_savings,
             },
             "total_savings": rightsizing_savings,
         }
@@ -128,6 +140,8 @@ def _calculate_savings(
             "total_ram_reduction_gib": rs_total_ram_reduction_gib,
             "avg_cost_per_core_pair_eur": rs_avg_cost_per_core_pair,
             "avg_cost_per_gib_eur": rs_avg_cost_per_gib,
+            "cpu_savings_eur": cpu_rightsizing_savings,
+            "ram_savings_eur": ram_rightsizing_savings,
         },
         "total_savings": total_savings,
     }
@@ -285,6 +299,8 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
         "ram_count": rs_ctx.get("ram_count") or 0,
         "avg_cost_per_core_pair_eur": rs_ctx.get("avg_cost_per_core_pair_eur") or 0,
         "avg_cost_per_gib_eur": rs_ctx.get("avg_cost_per_gib_eur") or 0,
+        "cpu_savings_eur": rs_ctx.get("cpu_savings_eur"),
+        "ram_savings_eur": rs_ctx.get("ram_savings_eur"),
     } if rs_ctx else None
     savings = _calculate_savings(rr, lm, rightsizing=rightsizing_for_savings)
     out["rule_wise_savings"] = context.get("rule_wise_savings") or savings["rule_wise_savings"]

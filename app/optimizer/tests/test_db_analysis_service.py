@@ -96,6 +96,44 @@ def test_compute_rightsizing_metrics_retains_hosting_zone_and_installed_status_f
     assert result["ram_optimizations"][0]["installed_status_usu"] == "Installed"
 
 
+def test_compute_rightsizing_metrics_calculates_cpu_cost_savings_from_product_edition(monkeypatch):
+    source_df = pd.DataFrame([
+        {
+            "server_name": "prod-sql-01",
+            "product_edition": "Enterprise Edition",
+            "Environment": "Production",
+            "Avg_CPU_12m": 8,
+            "Peak_CPU_12m": 55,
+            "Avg_FreeMem_12m": 45,
+            "Min_FreeMem_12m": 30,
+            "Current_vCPU": 8,
+            "Current_RAM_GiB": 32,
+        },
+        {
+            "server_name": "prod-sql-02",
+            "product_edition": "Standard Edition",
+            "Environment": "Production",
+            "Avg_CPU_12m": 9,
+            "Peak_CPU_12m": 50,
+            "Avg_FreeMem_12m": 40,
+            "Min_FreeMem_12m": 25,
+            "Current_vCPU": 8,
+            "Current_RAM_GiB": 24,
+        },
+    ])
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service._build_rightsizing_df",
+        lambda: source_df,
+    )
+
+    result = compute_rightsizing_metrics()
+
+    assert result["cpu_optimizations"][0]["Cost_Savings_EUR"] == 5275.92
+    assert result["cpu_optimizations"][1]["Cost_Savings_EUR"] == 1575.92
+    assert result["cpu_savings_eur"] == 6851.84
+
+
 def test_build_rightsizing_sheet_export_matches_report_columns(monkeypatch):
     source_df = pd.DataFrame([
         {

@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 # They must NOT be included in UC1 (PAYG), UC2 (Retired Assets), or the
 # demand/cost metrics that feed savings calculations.
 SHOWCASE_ONLY_PRODUCT_FAMILIES = frozenset({"Java"})
+RIGHTSIZING_CPU_LICENSE_COSTS_EUR = {
+    "enterprise": 1318.98,
+    "standard": 393.98,
+}
 
 RIGHTSIZING_REPORT_METADATA_HEADERS = [
     "Number",
@@ -496,6 +500,35 @@ def compute_db_metrics() -> dict:
     )
 
     # ── Calculate savings (same formula as upload path) ───────────────────────
+    rightsizing = compute_rightsizing_metrics()
+
+    avg_cost_per_core_pair_eur = 0.0
+    if not prices_df.empty and "price" in prices_df.columns:
+        valid_prices = prices_df["price"].dropna()
+        if not valid_prices.empty:
+            avg_cost_per_core_pair_eur = round(float(valid_prices.mean()), 2)
+
+    avg_cost_per_gib_eur = 0.0
+    total_current_ram_gib = float(rightsizing.get("total_current_ram_gib") or 0)
+    total_license_cost = float(license_metrics.get("total_license_cost") or 0)
+    if total_current_ram_gib > 0 and total_license_cost > 0:
+        avg_cost_per_gib_eur = round(total_license_cost / total_current_ram_gib, 2)
+
+    rightsizing["avg_cost_per_core_pair_eur"] = avg_cost_per_core_pair_eur
+    rightsizing["avg_cost_per_gib_eur"] = avg_cost_per_gib_eur
+    _apply_rightsizing_cost_savings(rightsizing, avg_cost_per_gib_eur=avg_cost_per_gib_eur)
+
+    rightsizing_for_savings = {
+        "total_vcpu_reduction": rightsizing.get("total_vcpu_reduction") or 0,
+        "total_ram_reduction_gib": rightsizing.get("total_ram_reduction_gib") or 0,
+        "cpu_count": rightsizing.get("cpu_count") or 0,
+        "ram_count": rightsizing.get("ram_count") or 0,
+        "avg_cost_per_core_pair_eur": avg_cost_per_core_pair_eur,
+        "avg_cost_per_gib_eur": avg_cost_per_gib_eur,
+        "cpu_savings_eur": rightsizing.get("cpu_savings_eur"),
+        "ram_savings_eur": rightsizing.get("ram_savings_eur"),
+    }
+
     context = {
         "rule_results": rule_results,
         "license_metrics": license_metrics,
@@ -507,8 +540,9 @@ def compute_db_metrics() -> dict:
         "cost_reduction_ai_recommendations": "",
         "data_source": "database",
         "data_refreshed_at": timezone.now(),
+        "rightsizing": rightsizing,
     }
-    context.update(_calculate_savings(rule_results, license_metrics))
+    context.update(_calculate_savings(rule_results, license_metrics, rightsizing=rightsizing_for_savings))
 
     # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
     rws = context.get("rule_wise_savings") or {}
@@ -517,8 +551,6 @@ def compute_db_metrics() -> dict:
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
 
     # ── Strategy 3: CPU & RAM right-sizing ────────────────────────────────────
-    context["rightsizing"] = compute_rightsizing_metrics()
-
     return context
 
 
@@ -526,6 +558,155 @@ def compute_db_metrics() -> dict:
 # Strategy 3 – CPU & RAM Right-Sizing
 # Data source: CPUUtilisation + Server
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _classify_rightsizing_license_type(product_edition: Any) -> str:
+    edition = str(product_edition or "").strip().lower()
+    if not edition:
+        return ""
+    if edition == "enterprise" or "enterprise" in edition or "enterprise edition" in edition:
+        return "enterprise"
+    if edition == "standard" or "standard" in edition or "standard edition" in edition:
+        return "standard"
+    if edition in {"ent", "enterprise"} or " ent " in f" {edition} ":
+        return "enterprise"
+    if edition in {"std", "standard"} or " std " in f" {edition} ":
+        return "standard"
+    return ""
+
+
+def _get_rightsizing_cpu_license_cost_eur(product_edition: Any) -> float:
+    license_type = _classify_rightsizing_license_type(product_edition)
+    return float(RIGHTSIZING_CPU_LICENSE_COSTS_EUR.get(license_type, 0.0))
+
+
+def _coerce_non_negative_float(value: Any) -> float:
+    try:
+        return max(float(value or 0), 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _resolve_cpu_rightsizing_reduction(current_vcpu=None, recommended_vcpu=None, reduction=None) -> float:
+    reduction_value = _coerce_non_negative_float(reduction)
+    if reduction_value > 0:
+        return reduction_value
+    current_value = _coerce_non_negative_float(current_vcpu)
+    recommended_value = _coerce_non_negative_float(recommended_vcpu)
+    return max(current_value - recommended_value, 0.0)
+
+
+def _calculate_cpu_rightsizing_savings_eur(
+    product_edition: Any,
+    *,
+    current_vcpu=None,
+    recommended_vcpu=None,
+    reduction=None,
+) -> float:
+    license_cost = _get_rightsizing_cpu_license_cost_eur(product_edition)
+    reduction_value = _resolve_cpu_rightsizing_reduction(
+        current_vcpu=current_vcpu,
+        recommended_vcpu=recommended_vcpu,
+        reduction=reduction,
+    )
+    if license_cost <= 0 or reduction_value <= 0:
+        return 0.0
+    return round(reduction_value * license_cost, 2)
+
+
+def _build_server_product_edition_map(server_ids: list[Any]) -> dict[Any, str]:
+    from optimizer.models import USUDemandDetail, USUInstallation
+
+    unique_server_ids = list(dict.fromkeys(server_ids or []))
+    if not unique_server_ids:
+        return {}
+
+    def _select_best_editions(rows) -> dict[Any, str]:
+        preferred: dict[Any, str] = {}
+        fallback: dict[Any, str] = {}
+        for row in rows:
+            server_id = row["server_id"]
+            edition = str(row.get("product_edition") or "").strip()
+            if not edition:
+                continue
+            fallback.setdefault(server_id, edition)
+            if server_id not in preferred and _get_rightsizing_cpu_license_cost_eur(edition) > 0:
+                preferred[server_id] = edition
+        return {
+            server_id: preferred.get(server_id) or edition
+            for server_id, edition in fallback.items()
+        }
+
+    demand_rows = (
+        USUDemandDetail.objects.filter(server_id__in=unique_server_ids)
+        .exclude(product_edition__isnull=True)
+        .exclude(product_edition__exact="")
+        .order_by("server_id", "-fetched_at")
+        .values("server_id", "product_edition")
+    )
+    edition_map = _select_best_editions(demand_rows)
+
+    remaining_server_ids = [server_id for server_id in unique_server_ids if server_id not in edition_map]
+    if not remaining_server_ids:
+        return edition_map
+
+    installation_rows = (
+        USUInstallation.objects.filter(server_id__in=remaining_server_ids)
+        .exclude(product_edition__isnull=True)
+        .exclude(product_edition__exact="")
+        .order_by("server_id", "-fetched_at")
+        .values("server_id", "product_edition")
+    )
+    edition_map.update(_select_best_editions(installation_rows))
+    return edition_map
+
+
+def _apply_rightsizing_cost_savings(rightsizing: dict, *, avg_cost_per_gib_eur: float = 0.0) -> dict:
+    if not isinstance(rightsizing, dict):
+        return rightsizing
+
+    seen_lists: set[int] = set()
+
+    def _visit_record_lists(keys, callback):
+        for key in keys:
+            records = rightsizing.get(key) or []
+            if not isinstance(records, list) or id(records) in seen_lists:
+                continue
+            seen_lists.add(id(records))
+            for record in records:
+                if isinstance(record, dict):
+                    callback(record)
+
+    def _apply_cpu_cost(record: dict):
+        record["Cost_Savings_EUR"] = _calculate_cpu_rightsizing_savings_eur(
+            record.get("product_edition"),
+            current_vcpu=record.get("Current_vCPU"),
+            recommended_vcpu=record.get("Recommended_vCPU"),
+            reduction=record.get("Potential_vCPU_Reduction"),
+        )
+
+    def _apply_ram_cost(record: dict):
+        reduction_value = _coerce_non_negative_float(record.get("Potential_RAM_Reduction_GiB"))
+        record["Cost_Savings_EUR"] = round(reduction_value * float(avg_cost_per_gib_eur or 0), 2)
+
+    _visit_record_lists(("cpu_optimizations", "cpu_candidates", "crit_cpu_optimizations"), _apply_cpu_cost)
+    _visit_record_lists(("ram_optimizations", "ram_candidates", "crit_ram_optimizations"), _apply_ram_cost)
+
+    def _sum_cost_savings(records) -> float:
+        total = 0.0
+        for record in records or []:
+            total += _coerce_non_negative_float(record.get("Cost_Savings_EUR"))
+        return round(total, 2)
+
+    cpu_source_records = rightsizing.get("cpu_optimizations") or rightsizing.get("cpu_candidates") or []
+    ram_source_records = rightsizing.get("ram_optimizations") or rightsizing.get("ram_candidates") or []
+    rightsizing["cpu_savings_eur"] = _sum_cost_savings(cpu_source_records)
+    rightsizing["ram_savings_eur"] = _sum_cost_savings(ram_source_records)
+    rightsizing["total_cost_savings_eur"] = round(
+        float(rightsizing.get("cpu_savings_eur") or 0) + float(rightsizing.get("ram_savings_eur") or 0),
+        2,
+    )
+    return rightsizing
+
 
 def _build_rightsizing_df() -> pd.DataFrame:
     """
@@ -551,6 +732,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
+    product_edition_by_server_id = _build_server_product_edition_map([util.server_id for util in rows])
     server_records: dict = {}
     for util in rows:
         server = util.server
@@ -579,6 +761,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "server_name": server.server_name or "",
                 "hosting_zone": _normalize_hosting_zone(server.hosting_zone or ""),
                 "installed_status_usu": server.installed_status_usu or "",
+                "product_edition": product_edition_by_server_id.get(server.id, ""),
             })
             server_records[server.id] = record
 
@@ -664,6 +847,9 @@ def compute_rightsizing_metrics() -> dict:
             "CPU": {k: {"count": 0, "prod_count": 0, "nonprod_count": 0, "reduction_total": 0.0} for k in cpu_filter_options},
             "RAM": {k: {"count": 0, "prod_count": 0, "nonprod_count": 0, "reduction_total": 0.0} for k in ram_filter_options},
         },
+        "cpu_savings_eur": 0.0,
+        "ram_savings_eur": 0.0,
+        "total_cost_savings_eur": 0.0,
         "total_vcpu_reduction": 0,
         "total_ram_reduction_gib": 0.0,
         "total_current_ram_gib": 0.0,
@@ -730,6 +916,8 @@ def compute_rightsizing_metrics() -> dict:
         "Recommended_vCPU",
         "Potential_vCPU_Reduction",
         "CPU_Recommendation",
+        "product_edition",
+        "Cost_Savings_EUR",
         "Optimization_Type",
         "Recommendation_Type",
     ]
@@ -746,6 +934,7 @@ def compute_rightsizing_metrics() -> dict:
         "Recommended_RAM_GiB",
         "Potential_RAM_Reduction_GiB",
         "RAM_Recommendation",
+        "Cost_Savings_EUR",
         "Optimization_Type",
         "Recommendation_Type",
     ]
@@ -759,6 +948,8 @@ def compute_rightsizing_metrics() -> dict:
         "Current_vCPU",
         "Recommended_vCPU",
         "CPU_Recommendation",
+        "product_edition",
+        "Cost_Savings_EUR",
         "Lifecycle_Flag",
         "Optimization_Type",
     ]
@@ -772,6 +963,7 @@ def compute_rightsizing_metrics() -> dict:
         "Current_RAM_GiB",
         "Recommended_RAM_GiB",
         "RAM_Recommendation",
+        "Cost_Savings_EUR",
         "Lifecycle_Flag",
         "Optimization_Type",
     ]
@@ -966,7 +1158,7 @@ def compute_rightsizing_metrics() -> dict:
                 "ram": round(float(row.get("Current_RAM_GiB") or 0), 1),
             })
 
-    return {
+    result = {
         "cpu_optimizations": cpu_records,
         "cpu_candidates": cpu_records,
         "cpu_optimization_count": len(cpu_records),
@@ -1008,6 +1200,8 @@ def compute_rightsizing_metrics() -> dict:
         "ram_chart_data": ram_chart,
         "error": None,
     }
+    _apply_rightsizing_cost_savings(result, avg_cost_per_gib_eur=0.0)
+    return result
 
 
 def _get_rightsizing_sheet_export_headers(sheet_key: str) -> list[str]:
@@ -1261,6 +1455,7 @@ def compute_live_db_metrics() -> dict:
 
     rightsizing["avg_cost_per_core_pair_eur"] = avg_cost_per_core_pair_eur
     rightsizing["avg_cost_per_gib_eur"] = avg_cost_per_gib_eur
+    _apply_rightsizing_cost_savings(rightsizing, avg_cost_per_gib_eur=avg_cost_per_gib_eur)
 
     rightsizing_for_savings = {
         "total_vcpu_reduction": rightsizing.get("total_vcpu_reduction") or 0,
@@ -1269,6 +1464,8 @@ def compute_live_db_metrics() -> dict:
         "ram_count": rightsizing.get("ram_count") or 0,
         "avg_cost_per_core_pair_eur": avg_cost_per_core_pair_eur,
         "avg_cost_per_gib_eur": avg_cost_per_gib_eur,
+        "cpu_savings_eur": rightsizing.get("cpu_savings_eur"),
+        "ram_savings_eur": rightsizing.get("ram_savings_eur"),
     }
 
     context = {

@@ -3358,16 +3358,22 @@
 
                     rs3State.cpu.data = (rs3State.cpu.data || []).map(function(record) {
                         var nextRecord = Object.assign({}, record);
-                        var reduction = Number(nextRecord.Potential_vCPU_Reduction || 0);
-                        var costSavings = (isNaN(reduction) || isNaN(avgCpuCost) || avgCpuCost <= 0) ? 0 : ((reduction / 2) * avgCpuCost);
-                        nextRecord.Cost_Savings_EUR = Math.round(costSavings * 100) / 100;
+                        var existingCostSavings = Number(nextRecord.Cost_Savings_EUR);
+                        nextRecord.Cost_Savings_EUR = (nextRecord.Cost_Savings_EUR === '' || nextRecord.Cost_Savings_EUR == null || isNaN(existingCostSavings))
+                            ? 0
+                            : (Math.round(existingCostSavings * 100) / 100);
                         return nextRecord;
                     });
                     rs3State.ram.data = (rs3State.ram.data || []).map(function(record) {
                         var nextRecord = Object.assign({}, record);
-                        var reduction = Number(nextRecord.Potential_RAM_Reduction_GiB || 0);
-                        var costSavings = (isNaN(reduction) || isNaN(avgRamCost) || avgRamCost <= 0) ? 0 : (reduction * avgRamCost);
-                        nextRecord.Cost_Savings_EUR = Math.round(costSavings * 100) / 100;
+                        var existingCostSavings = Number(nextRecord.Cost_Savings_EUR);
+                        if (nextRecord.Cost_Savings_EUR === '' || nextRecord.Cost_Savings_EUR == null || isNaN(existingCostSavings)) {
+                            var reduction = Number(nextRecord.Potential_RAM_Reduction_GiB || 0);
+                            var costSavings = (isNaN(reduction) || isNaN(avgRamCost) || avgRamCost <= 0) ? 0 : (reduction * avgRamCost);
+                            nextRecord.Cost_Savings_EUR = Math.round(costSavings * 100) / 100;
+                        } else {
+                            nextRecord.Cost_Savings_EUR = Math.round(existingCostSavings * 100) / 100;
+                        }
                         return nextRecord;
                     });
                     renderRs3Screen('cpu');

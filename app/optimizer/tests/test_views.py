@@ -313,6 +313,7 @@ def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeyp
                     "server_name": "prod-sql-02",
                     "Environment": "Production",
                     "Env_Type": "PROD",
+                    "product_edition": "Enterprise Edition",
                     "hosting_zone": "Public Cloud",
                     "installed_status_usu": "Installed",
                     "Avg_CPU_12m": 4.1,
@@ -328,6 +329,7 @@ def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeyp
                     "server_name": "prod-sql-01",
                     "Environment": "Production",
                     "Env_Type": "PROD",
+                    "product_edition": "Standard Edition",
                     "hosting_zone": "Public Cloud",
                     "installed_status_usu": "Installed",
                     "Avg_CPU_12m": 2.5,
@@ -343,6 +345,7 @@ def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeyp
                     "server_name": "retired-sql-01",
                     "Environment": "Production",
                     "Env_Type": "PROD",
+                    "product_edition": "Standard Edition",
                     "hosting_zone": "Private Cloud",
                     "installed_status_usu": "Retired",
                     "Avg_CPU_12m": 1.0,
@@ -413,12 +416,15 @@ def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeyp
         "prod_count": 2,
         "nonprod_count": 0,
         "reduction_total": 12.0,
+        "savings_eur": 12127.76,
     }
     assert [item["server_name"] for item in payload["items"]] == [
         "prod-sql-02",
         "prod-sql-01",
     ]
     assert payload["items"][0]["potential_vcpu_reduction"] == 8
+    assert payload["items"][0]["cost_savings_eur"] == 10551.84
+    assert payload["items"][1]["cost_savings_eur"] == 1575.92
     assert payload["filters"] == {
         "hosting_zone": ["Public Cloud"],
         "installed_status_usu": ["Installed"],
@@ -537,6 +543,7 @@ def test_api_strategy3_rightsizing_filters_and_sorts_ram_records(client, monkeyp
         "prod_count": 2,
         "nonprod_count": 0,
         "reduction_total": 24.0,
+        "savings_eur": 0.0,
     }
     assert [item["server_name"] for item in payload["items"]] == [
         "ram-sql-02",
@@ -551,6 +558,7 @@ def test_api_strategy3_rightsizing_filters_and_sorts_ram_records(client, monkeyp
         "current_ram_gib",
         "recommended_ram_gib",
         "ram_recommendation",
+        "cost_savings_eur",
     ]
 
 

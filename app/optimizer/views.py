@@ -673,19 +673,27 @@ def _build_rs3_api_summary(records, workload):
 
 
 def _enrich_rs3_api_records_with_cost_savings(records, workload, rightsizing_meta=None):
+    from optimizer.services.db_analysis_service import _calculate_cpu_rightsizing_savings_eur
+
     rightsizing_meta = rightsizing_meta or {}
     normalized_workload = str(workload or "").upper()
-    avg_cpu_cost = _coerce_float(rightsizing_meta.get("avg_cost_per_core_pair_eur"))
     avg_ram_cost = _coerce_float(rightsizing_meta.get("avg_cost_per_gib_eur"))
     enriched = []
     for record in records or []:
         next_record = dict(record)
-        if normalized_workload == "RAM":
+        existing_savings = next_record.get("Cost_Savings_EUR")
+        if existing_savings not in (None, ""):
+            savings = _coerce_float(existing_savings)
+        elif normalized_workload == "RAM":
             reduction = _coerce_float(next_record.get("Potential_RAM_Reduction_GiB"))
             savings = reduction * avg_ram_cost if avg_ram_cost > 0 else 0.0
         else:
-            reduction = _coerce_float(next_record.get("Potential_vCPU_Reduction"))
-            savings = (reduction / 2) * avg_cpu_cost if avg_cpu_cost > 0 else 0.0
+            savings = _calculate_cpu_rightsizing_savings_eur(
+                next_record.get("product_edition"),
+                current_vcpu=next_record.get("Current_vCPU"),
+                recommended_vcpu=next_record.get("Recommended_vCPU"),
+                reduction=next_record.get("Potential_vCPU_Reduction"),
+            )
         next_record["Cost_Savings_EUR"] = round(savings, 2)
         enriched.append(next_record)
     return enriched
