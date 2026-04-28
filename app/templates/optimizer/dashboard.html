@@ -3,6 +3,32 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  /* Blue-to-green gradient spanning the full header row */
+  table thead tr {
+    background: linear-gradient(to right, #1a78c0, #00BCFF, #84D91D) !important;
+  }
+  table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    border-bottom: none !important;
+  }
+  table thead {
+    background: linear-gradient(to right, #1a78c0, #00BCFF, #84D91D) !important;
+  }
+  /* Larger font for table body cells */
+  table tbody td {
+    font-size: 13px !important;
+  }
+  /* Keep checkboxes visible on green background */
+  table thead th input[type="checkbox"] {
+    accent-color: #ffffff;
+    border-color: #ffffff;
+  }
+</style>
 {% endblock %}
 {% block content %}
 <div class="h-full flex flex-col mx-4 lg:mx-8 my-6 rounded-[28px] overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.12)] bg-[#f6f8fb] border border-slate-200">
@@ -86,7 +112,7 @@
                 </div>
                 <div class="results-kpi-item">
                     <span class="results-kpi-label">Current Cost</span>
-                    <span class="results-kpi-value">€{{ total_license_cost }}</span>
+                    <span class="results-kpi-value">{{ total_license_cost_eu }}</span>
                 </div>
             </div>
         </div>
@@ -144,13 +170,13 @@
                             <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">PAYG</span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ azure_payg_savings_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4">
                             <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost_eu }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
@@ -164,7 +190,7 @@
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_savings_eu }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">PAYG Candidates</p>
@@ -269,7 +295,11 @@
                 <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
                     <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
                     <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ azure_payg_count }}</span>
+                        <label for="rule1-hosting-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting Zone</label>
+                        <select id="rule1-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                            <option value="">All</option>
+                        </select>
+                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: <span id="rule1-filtered-count">{{ azure_payg_count }}</span></span>
                         <button id="rule1-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
                             Send Email
                         </button>
@@ -376,17 +406,17 @@
                             <!-- <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ retired_devices_savings_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4 text-[11px]">
                             <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ total_license_cost|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost_eu }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
@@ -426,7 +456,11 @@
                 <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
                     <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
                     <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ retired_count }}</span>
+                        <label for="rule2-hosting-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting Zone</label>
+                        <select id="rule2-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                            <option value="">All</option>
+                        </select>
+                        <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: <span id="rule2-filtered-count">{{ retired_count }}</span></span>
                         <button id="rule2-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
                             Send Email
                         </button>
@@ -534,8 +568,8 @@
                     </div>
                     <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm">
                         <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Analyzed Cost</h3>
-                        <p class="text-3xl font-extrabold text-slate-900">&euro;{{ total_license_cost|floatformat:0 }}</p>
-                        <p class="text-xs text-slate-500 font-medium mt-2">Potential savings from this analyzed file: &euro;{{ potential_savings|floatformat:0 }}</p>
+                        <p class="text-3xl font-extrabold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
+                        <p class="text-xs text-slate-500 font-medium mt-2">Potential savings from this analyzed file: {{ potential_savings_eu }}</p>
                     </div>
                 </div>
 
@@ -595,31 +629,31 @@
                             <!-- <span class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-4 flex items-end gap-2">
-                            <span class="text-4xl font-extrabold text-slate-900">€{{ potential_savings|floatformat:0 }}</span>
+                            <span class="text-4xl font-extrabold text-slate-900">{{ potential_savings_eu }}</span>
                             <span class="pb-1 text-sm font-medium text-emerald-600">estimated</span>
                         </div>
                         <p class="mt-4 text-sm leading-6 text-slate-600">Savings are driven primarily by Azure BYOL to PAYG switches, workload right-sizing, and cleanup of inactive or retired software footprints.</p>
                         <div class="mt-6 grid grid-cols-2 gap-3">
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">BYOL to PAYG</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ azure_payg_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ azure_payg_savings_eu }}</p>
                                 <p class="mt-2 text-base font-semibold text-slate-700">{{ azure_payg_count }} candidates</p>
                             </div>
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Retired but reporting</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">€{{ retired_devices_savings|floatformat:0 }}</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
                                 <p class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
                             </div>
-                        </div>
-                        <div class="mt-3 rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
-                            <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Workload Rightsizing</p>
-                            <p class="mt-2 text-2xl font-bold text-slate-900">€{{ rightsizing_savings|floatformat:0 }}</p>
-                            <div class="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-700">
-                                <span>CPU: €{{ rightsizing_cpu_savings|floatformat:0 }}</span>
-                                <span class="text-slate-300">|</span>
-                                <span>RAM: €{{ rightsizing_ram_savings|floatformat:0 }}</span>
+                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">CPU Estimate Savings</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing_cpu_savings_eu }}</p>
+                                <p class="mt-2 text-xs text-slate-400">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs potential reduction</p>
                             </div>
-                            <p class="mt-1 text-xs text-slate-400">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs · {{ rightsizing.total_ram_reduction_gib|default:0 }} GiB potential reduction</p>
+                            <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">RAM Reduction</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }} GiB</p>
+                                <p class="mt-2 text-xs text-slate-400">{{ rightsizing.total_ram_reduction_gib|default:0 }} GiB potential reduction</p>
+                            </div>
                         </div>
                     </div>
 
@@ -656,7 +690,7 @@
                         </div>
                         <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
                             <span class="dashboard-section-label">Current Cost</span>
-                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_license_cost|floatformat:0 }}</p>
+                            <p class="mt-3 text-3xl font-bold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
                             <p class="mt-1 text-sm text-slate-500">Observed SQL licensing spend.</p>
                         </div>
                     </div>
@@ -727,19 +761,17 @@
                             <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
                                 <span class="dashboard-section-label">PAYG Recommendations</span>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
-                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
                                 <span class="dashboard-section-label">Retired Assets</span>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
-                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                             <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
                                 <span class="dashboard-section-label">Rightsizing</span>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">100%</p>
-                                <p class="mt-3 text-sm text-slate-500">Compared to Manual Optimization data : Last 12 Months</p>
                             </div>
                         </div>
+                        <p class="mt-3 text-sm text-slate-500 text-right"><strong>* Compared to Manual Optimization data : Last 12 Months</strong></p>
                     </div>
                 </div>
             </section>
@@ -758,8 +790,8 @@
                             <div class="dashboard-license-card dashboard-license-card-compact {% if item.type == 'Standard' %}dashboard-license-standard{% elif item.type == 'Developer' %}dashboard-license-developer{% elif item.type == 'Enterprise' %}dashboard-license-enterprise{% else %}dashboard-license-neutral{% endif %}">
                                 <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ item.type }}</p>
                                 <p class="mt-3 text-3xl font-bold text-slate-900">{{ item.quantity }} <span class="text-base font-medium text-slate-400">qty</span></p>
-                                <p class="mt-1 text-xs text-slate-500">Total cost: {{ item.total_cost|floatformat:2 }}</p>
-                                <p class="mt-1 text-xs text-slate-500">Avg price: <span class="font-semibold text-slate-700">{{ item.avg_price|floatformat:2 }}</span></p>
+                                <p class="mt-1 text-xs text-slate-500">Total cost: {{ item.total_cost_eu }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Avg price: <span class="font-semibold text-slate-700">{{ item.avg_price_eu }}</span></p>
                             </div>
                             {% endif %}
                             {% endfor %}
@@ -849,7 +881,7 @@
                                 </div>
                                 <p class="font-semibold text-slate-900">Switch BYOL Candidates to Pay-As-You-Go</p>
                                 <p class="mt-2 text-slate-600">{{ tip }}</p>
-                                <p class="mt-3 text-xs text-slate-500">Estimated Savings : {{ potential_savings|floatformat:0 }}</p>
+                                <p class="mt-3 text-xs text-slate-500">Estimated Savings : {{ potential_savings_eu }}</p>
                             </div>
                             {% endfor %}
                         </div>
@@ -920,7 +952,7 @@
             </section>
             -->
 
-            <section class="flex-shrink-0 mb-0">
+            <!-- <section class="flex-shrink-0 mb-0">
                 <div class="dashboard-panel-card">
                     <div class="mb-4 flex items-center justify-between">
                         <div>
@@ -949,7 +981,7 @@
                         </div>
                     </div>
                 </div>
-            </section>
+            </section> -->
         </div>
 
         <!-- RULE 3: CPU & RAM Right-Sizing -->
@@ -994,12 +1026,10 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
-                            <span class="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">
-                                <span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> vCPUs
-                            </span>
+                            <p class="text-5xl font-extrabold tracking-tight text-sky-600"><span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-2xl font-bold">vCPUs</span></p>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings_eu }}</span></p>
                         </div>
                         <p class="mt-1 text-xs text-slate-500">Estimated annual savings from CPU rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
@@ -1048,11 +1078,11 @@
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">€<span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings|floatformat:0 }}</span></p>
+                                    <p class="mt-1 text-xl font-bold text-emerald-700"><span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings_eu }}</span></p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / Core Pair</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€<span id="rs3-cpu-avg-cost-value">0</span></p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900"><span id="rs3-cpu-avg-cost-value">—</span></p>
                                 </div>
                             </div>
                         </div>
@@ -1169,7 +1199,7 @@
                 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_535px] gap-4 items-start mb-4">
                     <div class="pt-2">
                         <h2 id="rs3-ram-title" class="text-[2rem] leading-tight font-extrabold text-slate-900">RAM Right-Sizing</h2>
-                        <p class="mt-2 max-w-full whitespace-nowrap text-sm text-slate-500">VMs with average free memory ≥ 35% (PROD) or ≥ 30% (NON-PROD) and more than 8 GiB (PROD) or 4 GiB (NON-PROD) allocated.</p>
+                        <p class="mt-2 max-w-full whitespace-nowrap text-sm text-slate-500">Identifying underutilized RAM within MS SQL databases for downsizing and performance optimization..</p>
                     </div>
                 </div>
 
@@ -1177,17 +1207,12 @@
                     <!-- RAM estimated savings tile -->
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
-                            <span class="inline-flex items-center gap-1 rounded-full bg-lime-100 px-2.5 py-1 text-[10px] font-bold text-lime-700">
-                                <span id="rs3-ram-reduction-badge">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB
-                            </span>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">RAM Reduction</p>
+                            <p class="text-5xl font-extrabold tracking-tight text-lime-600"><span id="rs3-ram-reduction-badge">{{ rs.total_ram_reduction_gib|default:0 }}</span> <span class="text-2xl font-bold">GiB</span></p>
                         </div>
-                        <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">€<span id="rs3-ram-savings-total">{{ rightsizing_ram_savings|floatformat:0 }}</span></p>
-                        </div>
-                        <p class="mt-1 text-xs text-slate-500">Estimated annual savings from RAM rightsizing</p>
+                        <p class="mt-3 text-xs text-slate-500">Estimated RAM reduction from rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
-                            <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
+                            <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <div class="flex items-center gap-1.5">
                                         <p class="text-[11px] uppercase tracking-wide text-slate-400">PROD Optimizations</p>
@@ -1217,26 +1242,6 @@
                                         </div>
                                     </div>
                                     <p id="rs3-ram-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_nonprod_count|default:0 }}</p>
-                                </div>
-                            </div>
-                            <!-- <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Candidates</p>
-                                    <p id="rs3-ram-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.ram_count|default:0 }}</p>
-                                </div>
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">RAM Reduction</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-ram-reduction-total">{{ rs.total_ram_reduction_gib|default:0 }}</span> GiB</p>
-                                </div>
-                            </div> -->
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">€<span id="rs3-ram-reduction-value">{{ rightsizing_ram_savings|floatformat:0 }}</span></p>
-                                </div>
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / GiB</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">€<span id="rs3-ram-avg-cost-value">0</span></p>
                                 </div>
                             </div>
                         </div>
@@ -1354,7 +1359,7 @@
                     <h2 class="text-xl font-extrabold text-slate-900">Critically-Aware CPU Optimization</h2>
                     <span id="crit-cpu-count-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">{{ rs.crit_cpu_count|default:0 }} systems</span>
                 </div>
-                <p class="text-sm text-slate-500 mb-4">Applies to all environments and criticality levels. Flags under-utilised (&lt;10% avg CPU), over-utilised (&gt;80%), or high-peak (&gt;95%) critical systems.</p>
+                <p class="text-sm text-slate-500 mb-4">Identifying underutilized critically-aware CPUs within MS SQL databases for downsizing and performance optimization..</p>
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
                     <div class="px-4 py-3 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-2">
                         <span id="crit-cpu-total-badge" class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: {{ rs.crit_cpu_count|default:0 }}</span>
@@ -1890,6 +1895,7 @@
         line-height: 1;
         font-weight: 800;
         color: #ffffff;
+        white-space: nowrap;
     }
 
     .optimizer-tab-link {
@@ -2561,7 +2567,7 @@
         });
 
         // Client-side pagination (no full page reload)
-        var PER_PAGE = 6;
+        var PER_PAGE = 10;
         var RS3_PER_PAGE = 10;
         var rule1DataEl = document.getElementById('rule1-data');
         var rule2DataEl = document.getElementById('rule2-data');
@@ -2604,11 +2610,82 @@
         var rule2HiddenCols = (function () {
             try {
                 var arr = JSON.parse(localStorage.getItem('rule2HiddenCols') || '[]');
-                return new Set(Array.isArray(arr) ? arr : []);
+                var hidden = new Set(Array.isArray(arr) ? arr : []);
+                // Always show product_family — remove its index if previously hidden
+                var pfIdx = rule2Keys.indexOf('product_family');
+                if (pfIdx !== -1) hidden.delete(pfIdx);
+                return hidden;
             } catch (e) { return new Set(); }
         }());
         function saveRule2HiddenCols() {
             try { localStorage.setItem('rule2HiddenCols', JSON.stringify(Array.from(rule2HiddenCols))); } catch (e) {}
+        }
+
+        // ── Rule 1 & 2: hosting zone filter state ─────────────────────────────
+        var rule1HostingFilter = '';
+        var rule2HostingFilter = '';
+        var rule1FilteredData = rule1Data.slice();
+        var rule2FilteredData = rule2Data.slice();
+
+        var rule1HzIdx = rule1Keys.indexOf('u_hosting_zone');
+        var rule2HzIdx = rule2Keys.indexOf('u_hosting_zone');
+
+        function populateHostingFilter(selectId, data, hzIdx) {
+            var sel = document.getElementById(selectId);
+            if (!sel || hzIdx < 0) return;
+            var seen = {};
+            for (var i = 0; i < data.length; i++) {
+                var v = data[i][hzIdx];
+                var s = (v === null || v === undefined) ? '' : String(v).trim();
+                if (s && !seen[s]) { seen[s] = true; }
+            }
+            var zones = Object.keys(seen).sort();
+            for (var z = 0; z < zones.length; z++) {
+                var opt = document.createElement('option');
+                opt.value = zones[z];
+                opt.textContent = zones[z];
+                sel.appendChild(opt);
+            }
+        }
+
+        function applyRule1HostingFilter(zone) {
+            rule1HostingFilter = zone;
+            if (!zone) {
+                rule1FilteredData = rule1Data.slice();
+            } else {
+                rule1FilteredData = rule1Data.filter(function(row) {
+                    var v = rule1HzIdx >= 0 ? row[rule1HzIdx] : null;
+                    return String(v || '').trim() === zone;
+                });
+            }
+            rule1SortedData = rule1FilteredData.slice();
+            doSortRule1();
+            rule1Page = 1;
+            renderRule1Headers();
+            renderRule1Body();
+            updatePagination(1, rule1Page, totalRule1Pages, rule2Page);
+            var badge = document.getElementById('rule1-filtered-count');
+            if (badge) badge.textContent = rule1FilteredData.length;
+        }
+
+        function applyRule2HostingFilter(zone) {
+            rule2HostingFilter = zone;
+            if (!zone) {
+                rule2FilteredData = rule2Data.slice();
+            } else {
+                rule2FilteredData = rule2Data.filter(function(row) {
+                    var v = rule2HzIdx >= 0 ? row[rule2HzIdx] : null;
+                    return String(v || '').trim() === zone;
+                });
+            }
+            rule2SortedData = rule2FilteredData.slice();
+            doSortRule2();
+            rule2Page = 1;
+            renderRule2Headers();
+            renderRule2Body();
+            updatePagination(2, rule2Page, totalRule2Pages, rule1Page);
+            var badge = document.getElementById('rule2-filtered-count');
+            if (badge) badge.textContent = rule2FilteredData.length;
         }
 
         // ── Rule 3: column-visibility state ───────────────────────────────────
@@ -2629,6 +2706,14 @@
         }());
         function saveRs3RamHiddenCols() {
             try { localStorage.setItem('rs3RamHiddenCols', JSON.stringify(Array.from(rs3RamHiddenCols))); } catch (e) {}
+        }
+
+        function euCurrency(value) {
+            var n = parseFloat(value);
+            if (isNaN(n)) return '—';
+            var parts = n.toFixed(2).split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return parts[0] + ',' + parts[1] + ' €';
         }
 
         function safeText(val) {
@@ -2667,10 +2752,10 @@
         function doSortRule1() {
             ruleSelections.rule1.clear();
             if (rule1SortColIdx < 0) {
-                rule1SortedData = rule1Data.slice();
+                rule1SortedData = rule1FilteredData.slice();
             } else {
                 var idx = rule1SortColIdx, asc = rule1SortOrder === 'asc';
-                rule1SortedData = rule1Data.slice().sort(function (a, b) {
+                rule1SortedData = rule1FilteredData.slice().sort(function (a, b) {
                     var av = a[idx], bv = b[idx];
                     var an = av === null || av === undefined || av === '';
                     var bn = bv === null || bv === undefined || bv === '';
@@ -2752,10 +2837,10 @@
         function doSortRule2() {
             ruleSelections.rule2.clear();
             if (rule2SortColIdx < 0) {
-                rule2SortedData = rule2Data.slice();
+                rule2SortedData = rule2FilteredData.slice();
             } else {
                 var idx = rule2SortColIdx, asc = rule2SortOrder === 'asc';
-                rule2SortedData = rule2Data.slice().sort(function (a, b) {
+                rule2SortedData = rule2FilteredData.slice().sort(function (a, b) {
                     var av = a[idx], bv = b[idx];
                     var an = av === null || av === undefined || av === '';
                     var bn = bv === null || bv === undefined || bv === '';
@@ -3353,8 +3438,8 @@
                     rs3State.savingsMeta.avgCostPerCorePairEur = isNaN(avgCpuCost) ? 0 : avgCpuCost;
                     rs3State.savingsMeta.avgCostPerGibEur = isNaN(avgRamCost) ? 0 : avgRamCost;
 
-                    setText('rs3-cpu-avg-cost-value', avgCpuCost > 0 ? avgCpuCost.toLocaleString() : '—');
-                    setText('rs3-ram-avg-cost-value', avgRamCost > 0 ? avgRamCost.toLocaleString() : '—');
+                    setText('rs3-cpu-avg-cost-value', avgCpuCost > 0 ? euCurrency(avgCpuCost) : '—');
+                    setText('rs3-ram-avg-cost-value', avgRamCost > 0 ? euCurrency(avgRamCost) : '—');
 
                     rs3State.cpu.data = (rs3State.cpu.data || []).map(function(record) {
                         var nextRecord = Object.assign({}, record);
@@ -3521,8 +3606,8 @@
             setText('rs3-' + type + '-legend-2', config.chartLabels[1]);
             if (summary.savings_eur != null) {
                 var savingsInt = Math.round(Number(summary.savings_eur) || 0);
-                setText('rs3-' + type + '-savings-total', savingsInt.toLocaleString());
-                setText('rs3-' + type + '-reduction-value', savingsInt.toLocaleString());
+                setText('rs3-' + type + '-savings-total', euCurrency(savingsInt));
+                setText('rs3-' + type + '-reduction-value', euCurrency(savingsInt));
             }
         }
 
@@ -3975,6 +4060,14 @@
                 updateRuleSelectionUi(ruleKey);
             });
         });
+        populateHostingFilter('rule1-hosting-filter', rule1Data, rule1HzIdx);
+        populateHostingFilter('rule2-hosting-filter', rule2Data, rule2HzIdx);
+        (function() {
+            var r1hf = document.getElementById('rule1-hosting-filter');
+            if (r1hf) r1hf.addEventListener('change', function(e) { applyRule1HostingFilter(e.target.value); });
+            var r2hf = document.getElementById('rule2-hosting-filter');
+            if (r2hf) r2hf.addEventListener('change', function(e) { applyRule2HostingFilter(e.target.value); });
+        })();
         renderRule1Headers();
         buildRule1ColPanel();
         renderRule1Body();

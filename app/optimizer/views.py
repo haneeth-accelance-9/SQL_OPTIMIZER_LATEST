@@ -7,6 +7,17 @@ import logging
 import os
 import re
 import uuid
+
+
+def _eu_currency(value):
+    """Format a number as European currency: 1.234.567,89 €"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    formatted = f"{number:,.2f}"
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{formatted} €"
 from django.conf import settings
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -1002,6 +1013,17 @@ def results(request):
     render_context["analysis_sheet_names"] = {}
     render_context["analysis_created_at"] = context.get("data_refreshed_at")
     render_context["data_source"] = "database"
+    render_context["total_license_cost_eu"] = _eu_currency(render_context.get("total_license_cost", 0))
+    render_context["azure_payg_savings_eu"] = _eu_currency(render_context.get("azure_payg_savings", 0))
+    render_context["retired_devices_savings_eu"] = _eu_currency(render_context.get("retired_devices_savings", 0))
+    render_context["rightsizing_cpu_savings_eu"] = _eu_currency(render_context.get("rightsizing_cpu_savings", 0))
+    render_context["rightsizing_savings_eu"] = _eu_currency(render_context.get("rightsizing_savings", 0))
+    render_context["potential_savings_eu"] = _eu_currency(render_context.get("potential_savings", 0))
+
+    # Add EU-formatted cost fields to each price_distribution item
+    for item in render_context.get("price_distribution", []):
+        item["total_cost_eu"] = _eu_currency(item.get("total_cost", 0))
+        item["avg_price_eu"] = _eu_currency(item.get("avg_price", 0))
 
     # Pagination for Rule 1 and Rule 2 raw data (6 rows per page, no scrolling)
     per_page = 6
@@ -1014,8 +1036,24 @@ def results(request):
     total_rule2_pages = max(1, (len(retired_full) + per_page - 1) // per_page)
     rule1_page = min(requested_rule1_page, total_rule1_pages)
     rule2_page = min(requested_rule2_page, total_rule2_pages)
-    rule1_keys = list(azure_full[0].keys()) if azure_full else []
-    rule2_keys = list(retired_full[0].keys()) if retired_full else []
+    RULE1_DISPLAY_COLS = [
+        "u_hosting_zone",  # "inventory_status_standard",
+        "product_family", "product_edition", "product_description", "product_name",
+        "cpu_core_count", "cpu_socket_count",
+        "topology_type", "environment", "cloud_provider", "is_cloud_device",
+    ]
+    RULE2_DISPLAY_COLS = [
+        "u_hosting_zone",  # "inventory_status_standard",
+        "product_family", "product_edition", "product_description", "product_name",
+        "cpu_core_count", "cpu_socket_count",
+        "topology_type", "environment", "cloud_provider", "is_cloud_device",
+    ]
+    all_rule1_keys = list(azure_full[0].keys()) if azure_full else []
+    all_rule2_keys = list(retired_full[0].keys()) if retired_full else []
+    rule1_keys = [c for c in RULE1_DISPLAY_COLS if c in all_rule1_keys] + \
+                 [c for c in all_rule1_keys if c not in RULE1_DISPLAY_COLS]
+    rule2_keys = [c for c in RULE2_DISPLAY_COLS if c in all_rule2_keys] + \
+                 [c for c in all_rule2_keys if c not in RULE2_DISPLAY_COLS]
     azure_slice = azure_full[(rule1_page - 1) * per_page : rule1_page * per_page]
     retired_slice = retired_full[(rule2_page - 1) * per_page : rule2_page * per_page]
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
