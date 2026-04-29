@@ -83,3 +83,36 @@ rules:
             - { op: gt, col: current_ram_gib, value: 4 }
         recommend:
           engine: ram_rightsizing_nonprod_v2
+  - id: uc_3_3_criticality_cpu_optimization
+    type: filter
+    description: "Criticality-aware CPU Optimization (Human Review)"
+    when:
+      all:
+        - { op: in_ci, col: criticality, values: ["Business Critical", "Mission Critical", "Manufacturing Critical"] }
+        - { op: gte, col: current_vcpu, value: 4 }
+        - { op: lt, col: avg_cpu_12m, value: 0.25 }
+        - { op: lte, col: peak_cpu_12m, value: 0.80 }
+  - id: uc_3_4_criticality_ram_optimization
+    type: filter
+    description: "Criticality-aware RAM Optimization (Human Review)"
+    when:
+      all:
+        - { op: in_ci, col: criticality, values: ["Business Critical", "Mission Critical", "Manufacturing Critical"] }
+        - { op: gt, col: current_ram_gib, value: 8 }
+        - { op: gte, col: avg_free_mem_12m, value: 0.30 }
+        - { op: gte, col: min_free_mem_12m, value: 0.15 }
+  - id: uc_3_5_lifecycle_risk_flags
+    type: filter
+    description: "Lifecycle Risk Flags (Human Review)"
+    when:
+      any:
+        - { op: gt, col: peak_cpu_12m, value: 0.95 }
+        - all:
+            - { op: in_ci, col: criticality, values: ["Business Critical", "Mission Critical", "Manufacturing Critical"] }
+            - { op: gt, col: peak_cpu_12m, value: 0.70 }
+  - id: uc_3_6_physical_system_review
+    type: filter
+    description: "Physical Systems Require Review"
+    when:
+      all:
+        - { op: eq, col: is_virtual, value: false }
