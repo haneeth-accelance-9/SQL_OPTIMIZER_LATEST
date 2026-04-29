@@ -153,6 +153,7 @@ class USUInstallation(TenantAwareModel):
     server              = models.ForeignKey(Server, on_delete=models.CASCADE,
                                             related_name="usu_installations")
     product_family      = models.CharField(max_length=120, blank=True, null=True)
+    product_group       = models.CharField(max_length=120, blank=True, null=True)
     manufacturer        = models.CharField(max_length=120, blank=True, null=True)
     product_description = models.CharField(max_length=255, blank=True, null=True)
     product_edition     = models.CharField(max_length=120, blank=True, null=True)
@@ -195,6 +196,7 @@ class USUDemandDetail(TenantAwareModel):
     server              = models.ForeignKey(Server, on_delete=models.CASCADE,
                                             related_name="usu_demand_details")
     product_family      = models.CharField(max_length=120, blank=True, null=True)
+    product_group       = models.CharField(max_length=120, blank=True, null=True)
     manufacturer        = models.CharField(max_length=120, blank=True, null=True)
     product_description = models.CharField(max_length=255, blank=True, null=True)
     product_edition     = models.CharField(max_length=120, blank=True, null=True)

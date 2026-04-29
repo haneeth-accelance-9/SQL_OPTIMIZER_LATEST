@@ -247,9 +247,12 @@ def _build_installations_df() -> pd.DataFrame:
         "inv_status_std_name",
         "device_status",
         "no_license_required",
+        "manufacturer",
         "product_description",
         "product_edition",
         "product_family",
+        "product_group",
+        "license_metric",
         "cpu_core_count",
         "cpu_socket_count",
         "topology_type",
@@ -272,18 +275,24 @@ def _build_installations_df() -> pd.DataFrame:
         nlr_num = (1 if nlr else 0) if nlr is not None else float("nan")
 
         records.append({
-            # ── columns required by existing rules ───────────────────────────
-            # Rule 1: exact isin(["Public Cloud", "Private Cloud AVS"])
-            "u_hosting_zone": _normalize_hosting_zone(r["server__hosting_zone"]),
-            # Rule 1: != "license included" (case-insensitive)
-            "inventory_status_standard": r["inv_status_std_name"] or "",
-            # Rule 2: == "retired" (case-insensitive) — prefer device_status,
-            #         fall back to server-level status fields
+            # display order matches RULE1_DISPLAY_COLS / user reference
+            "server_name":     r["server__server_name"] or "",
+            "topology_type":   r["topology_type"] or "",
+            "cpu_core_count":  float(r["cpu_core_count"] or 0),
+            "cpu_socket_count": r["cpu_socket_count"] or 0,
+            "manufacturer":    r["manufacturer"] or "",
+            "product_family":  r["product_family"] or "",
+            "product_group":   r["product_group"] or "",
+            "product_description": r["product_description"] or "",
+            "product_edition": r["product_edition"] or "",
+            "license_metric":  r["license_metric"] or "",
+            "no_license_required": nlr_num,
             "install_status": _normalize_install_status(
                 r["device_status"],
                 r["server__installed_status_usu"],
                 r["server__installed_status_boones"],
             ),
+<<<<<<< HEAD
             # Both rules: == 0 means license IS required → include in candidates
             "no_license_required": nlr_num,
             # Alias expected by rules.base.yaml column_map (no_license_required_product)
@@ -297,9 +306,15 @@ def _build_installations_df() -> pd.DataFrame:
             "cpu_core_count":  float(r["cpu_core_count"] or 0),
             "cpu_socket_count": r["cpu_socket_count"] or 0,
             "topology_type":   r["topology_type"] or "",
+=======
+>>>>>>> eb3b7afda52e4c720045182b301ee24c36982168
             "environment":     r["server__environment"] or "",
+            "u_hosting_zone":  _normalize_hosting_zone(r["server__hosting_zone"]),
             "cloud_provider":  r["server__cloud_provider"] or "",
             "is_cloud_device": r["server__is_cloud_device"],
+            "inventory_status_standard": r["inv_status_std_name"] or "",
+            # duplicate kept for backward compat with rule logic
+            "product_name":    r["product_description"] or "",
         })
 
     return pd.DataFrame(records)
@@ -785,7 +800,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
         _USUInst.objects
         .filter(server_id__in=list(server_records.keys()))
         .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
-        .values("server_id", "product_family", "product_description")
+        .values("server_id", "product_family", "product_group", "product_description")
     )
     _product_lookup: dict = {}
     for _row in _product_qs:
@@ -793,12 +808,14 @@ def _build_rightsizing_df() -> pd.DataFrame:
         if _sid not in _product_lookup:
             _product_lookup[_sid] = {
                 "product_family": _row.get("product_family") or "",
+                "product_group": _row.get("product_group") or "",
                 "product_name": _row.get("product_description") or "",
                 "product_description": _row.get("product_description") or "",
             }
     for _sid, _rec in server_records.items():
         _prod = _product_lookup.get(_sid, {})
         _rec["product_family"] = _prod.get("product_family", "")
+        _rec["product_group"] = _prod.get("product_group", "")
         _rec["product_name"] = _prod.get("product_name", "")
         _rec["product_description"] = _prod.get("product_description", "")
 
@@ -971,6 +988,8 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _CRIT_CPU_COLS = [
         "server_name",
+        "product_family",
+        "product_description",
         "is_virtual",
         "Criticality",
         "Environment",
@@ -986,6 +1005,8 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _CRIT_RAM_COLS = [
         "server_name",
+        "product_family",
+        "product_description",
         "is_virtual",
         "Criticality",
         "Environment",
@@ -1010,6 +1031,8 @@ def compute_rightsizing_metrics() -> dict:
     ]
     _PHYSICAL_COLS = [
         "server_name",
+        "product_family",
+        "product_description",
         "is_virtual",
         "Environment",
         "Criticality",
