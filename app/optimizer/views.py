@@ -130,7 +130,7 @@ def _get_or_create_user_profile(user):
 
 def _build_post_login_redirect_url() -> str:
     """Return the default authenticated landing page for login flows."""
-    return f"{reverse('optimizer:results')}#{POST_LOGIN_RESULTS_FRAGMENT}"
+    return f"{reverse('optimizer:dashboard')}#{POST_LOGIN_RESULTS_FRAGMENT}"
 
 
 
@@ -384,8 +384,9 @@ RS3_API_MAX_PAGE_SIZE = 200
 RS3_API_CPU_COLUMNS = [
     {"key": "server_name", "label": "Server Name"},
     {"key": "product_family", "label": "Product Family"},
-    {"key": "product_name", "label": "Product Name"},
+    {"key": "product_group", "label": "Product Group"},
     {"key": "product_description", "label": "Product Description"},
+    {"key": "product_name", "label": "Product Name"},
     {"key": "env_type", "label": "Env Type"},
     {"key": "avg_cpu_12m", "label": "Avg CPU 12m"},
     {"key": "peak_cpu_12m", "label": "Peak CPU 12m"},
@@ -397,8 +398,9 @@ RS3_API_CPU_COLUMNS = [
 RS3_API_RAM_COLUMNS = [
     {"key": "server_name", "label": "Server Name"},
     {"key": "product_family", "label": "Product Family"},
-    {"key": "product_name", "label": "Product Name"},
+    {"key": "product_group", "label": "Product Group"},
     {"key": "product_description", "label": "Product Description"},
+    {"key": "product_name", "label": "Product Name"},
     {"key": "env_type", "label": "Env Type"},
     {"key": "avg_free_mem_12m", "label": "Avg Freemem 12m"},
     {"key": "min_free_mem_12m", "label": "Min Freemem 12m"},
@@ -750,8 +752,9 @@ def _serialize_rs3_api_record(record, workload):
     serialized = {
         "server_name": record.get("server_name"),
         "product_family": record.get("product_family") or "",
-        "product_name": record.get("product_name") or "",
+        "product_group": record.get("product_group") or "",
         "product_description": record.get("product_description") or "",
+        "product_name": record.get("product_name") or "",
         "environment": record.get("Environment"),
         "env_type": record.get("Env_Type"),
         "hosting_zone": _normalize_rs3_hosting_zone_value(record.get("hosting_zone")),
@@ -1072,16 +1075,42 @@ def results(request):
     rule1_page = min(requested_rule1_page, total_rule1_pages)
     rule2_page = min(requested_rule2_page, total_rule2_pages)
     RULE1_DISPLAY_COLS = [
-        "u_hosting_zone",  # "inventory_status_standard",
-        "product_family", "product_edition", "product_description", "product_name",
-        "cpu_core_count", "cpu_socket_count",
-        "topology_type", "environment", "cloud_provider", "is_cloud_device",
+        "server_name",
+        "topology_type",
+        "cpu_core_count",
+        "cpu_socket_count",
+        "manufacturer",
+        "product_family",
+        "product_group",
+        "product_description",
+        "product_edition",
+        "license_metric",
+        "no_license_required",
+        "install_status",
+        "environment",
+        "u_hosting_zone",
+        "cloud_provider",
+        "is_cloud_device",
+        "inventory_status_standard",
     ]
     RULE2_DISPLAY_COLS = [
-        "u_hosting_zone",  # "inventory_status_standard",
-        "product_family", "product_edition", "product_description", "product_name",
-        "cpu_core_count", "cpu_socket_count",
-        "topology_type", "environment", "cloud_provider", "is_cloud_device",
+        "server_name",
+        "topology_type",
+        "cpu_core_count",
+        "cpu_socket_count",
+        "manufacturer",
+        "product_family",
+        "product_group",
+        "product_description",
+        "product_edition",
+        "license_metric",
+        "no_license_required",
+        "install_status",
+        "environment",
+        "u_hosting_zone",
+        "cloud_provider",
+        "is_cloud_device",
+        "inventory_status_standard",
     ]
     all_rule1_keys = list(azure_full[0].keys()) if azure_full else []
     all_rule2_keys = list(retired_full[0].keys()) if retired_full else []
@@ -2089,7 +2118,7 @@ def api_oracle_data(request):
             "server__server_name", "server__hosting_zone", "server__environment",
             "server__is_cloud_device", "server__cloud_provider",
             "device_status", "no_license_required", "product_description",
-            "product_edition", "product_family", "manufacturer",
+            "product_edition", "product_family", "product_group", "manufacturer",
             "inv_status_std_name", "cpu_core_count", "cpu_socket_count",
             "topology_type", "inventory_date",
         ))
@@ -2111,6 +2140,7 @@ def api_oracle_data(request):
                 "product_description": r["product_description"],
                 "product_edition":     r["product_edition"],
                 "product_family":      r["product_family"],
+                "product_group":       r["product_group"],
                 "manufacturer":        r["manufacturer"],
                 "inv_status_std_name": r["inv_status_std_name"],
                 "cpu_core_count":      float(r["cpu_core_count"]) if r["cpu_core_count"] is not None else None,
@@ -2158,7 +2188,7 @@ def api_oracle_data(request):
         rows = list(qs.values(
             "server__server_name", "server__hosting_zone", "server__environment",
             "server__is_cloud_device", "server__cloud_provider",
-            "product_description", "product_edition", "product_family",
+            "product_description", "product_edition", "product_family", "product_group",
             "manufacturer", "eff_quantity", "no_license_required",
             "device_purpose", "cpu_core_count", "topology_type", "virt_type",
         ))
@@ -2183,6 +2213,7 @@ def api_oracle_data(request):
                     "product_description": r["product_description"],
                     "product_edition":     r["product_edition"],
                     "product_family":      r["product_family"],
+                    "product_group":       r["product_group"],
                     "manufacturer":        r["manufacturer"],
                     "eff_quantity":        float(r["eff_quantity"]) if r["eff_quantity"] is not None else None,
                     "no_license_required": r["no_license_required"],

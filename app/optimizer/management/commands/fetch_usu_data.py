@@ -491,6 +491,7 @@ def save_installations(
             server              = server,
             manufacturer        = _str(raw.get("manufacturers_name"), 120),
             product_family      = _str(raw.get("product_families_description"), 120),
+            product_group       = _str(raw.get("product_groups_description"), 120),
             product_description = _str(raw.get("products_description"), 255),
             product_edition     = _str(raw.get("products_edition"), 120),
             license_metric      = _str(raw.get("license_metrics_description"), 120),

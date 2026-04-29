@@ -153,7 +153,7 @@
                 <div class="mb-4">
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">PAYG Recommendations</h2>
-                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify Azure SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
                         <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
@@ -1514,6 +1514,8 @@
                             <thead class="bg-slate-50">
                                 <tr>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Server</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Product Family</th>
+                                    <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Product Description</th>
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Env</th>
                                     <!-- <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">Criticality</th> -->
                                     <th class="px-4 py-3 font-semibold text-slate-500 uppercase tracking-wide">IsVirtual Status</th>
@@ -1525,6 +1527,8 @@
                                 {% for row in rs.physical_system_flags|slice:":50" %}
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{{ row.server_name|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.product_family|default:"—" }}</td>
+                                    <td class="px-4 py-3 text-slate-600 max-w-xs">{{ row.product_description|default:"—" }}</td>
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap">{{ row.Environment|default:"—" }}</td>
                                     <!-- <td class="px-4 py-3 whitespace-nowrap">
                                         {% if row.Criticality %}<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">{{ row.Criticality }}</span>{% else %}<span class="text-slate-400">—</span>{% endif %}
@@ -4174,6 +4178,8 @@
         var critColDefs = {
             cpu: [
                 { key: 'server_name',       label: 'Server' },
+                { key: 'product_family',    label: 'Product Family' },
+                { key: 'product_description', label: 'Product Description' },
                 { key: 'Environment',        label: 'Env' },
                 { key: 'Avg_CPU_12m',        label: 'Avg CPU%' },
                 { key: 'Peak_CPU_12m',       label: 'Peak CPU%' },
@@ -4184,6 +4190,8 @@
             ],
             ram: [
                 { key: 'server_name',           label: 'Server' },
+                { key: 'product_family',         label: 'Product Family' },
+                { key: 'product_description',    label: 'Product Description' },
                 { key: 'Environment',            label: 'Env' },
                 { key: 'Avg_FreeMem_12m',        label: 'Avg Free Mem%' },
                 { key: 'Min_FreeMem_12m',        label: 'Min Free Mem%' },

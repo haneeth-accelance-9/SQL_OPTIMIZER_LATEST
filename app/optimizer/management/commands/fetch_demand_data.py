@@ -259,6 +259,7 @@ def _save_chunk_to_db(tenant: Tenant, records: list[dict]) -> int:
             server              = server,
             manufacturer        = _str(raw.get("man_name"), 120),
             product_family      = _str(raw.get("pf_description"), 120),
+            product_group       = _str(raw.get("pg_description"), 120),
             product_description = _str(raw.get("products_description"), 255),
             product_edition     = _str(raw.get("products_edition"), 120),
             eff_quantity        = _decimal(raw.get("imec_eff_quantity")),
