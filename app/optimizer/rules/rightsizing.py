@@ -17,7 +17,7 @@ PROD eligibility (UC 3.1):
 - Current_vCPU >= 4   (was > 2; updated to match business rule)
 
 NON-PROD eligibility (UC 3.1):
-- Avg_CPU_12m  < 15%
+- Avg_CPU_12m  < 25%  (expanded to 25% so the 15–25% recommendation tier is reachable)
 - Peak_CPU_12m <= 80%
 - Current_vCPU >= 4   (was > 2; updated to match business rule)
 
@@ -193,9 +193,11 @@ def _cpu_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFra
 
 
 def _cpu_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
+    # FIX 1: Eligibility expanded to Avg_CPU_12m < 25% (was < 15%) so that the
+    # second recommendation tier (Avg in 15–25%) is reachable and not dead code.
     nonprod = df[df["Environment"].isin(non_prod_envs)]
     return nonprod[
-        (nonprod["Avg_CPU_12m"]  < 15) &
+        (nonprod["Avg_CPU_12m"]  < 25) &
         (nonprod["Peak_CPU_12m"] <= 80) &
         (nonprod["Current_vCPU"] >= 4)  # UC 3.1: Current vCPU >= 4
     ].copy()
@@ -396,7 +398,8 @@ def find_criticality_cpu_optimizations(df: pd.DataFrame) -> pd.DataFrame:
     Applies to ALL rows (all environments, all criticality levels).
 
     Eligible rows = any of:
-      Avg_CPU_12m  < 10%    → candidate for cautious downsize
+      Avg_CPU_12m  < 20%    → normal systems candidate for downsize
+      Avg_CPU_12m  < 10%    → critical systems candidate for cautious downsize
       Avg_CPU_12m  > 80%    → candidate for upsize flag
       Peak_CPU_12m > 95%    → lifecycle / blocking flag
     """
@@ -409,8 +412,10 @@ def find_criticality_cpu_optimizations(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _criticality_cpu_eligible(df: pd.DataFrame) -> pd.DataFrame:
+    # FIX 2: Expanded mask from < 10 to < 20 to capture normal systems
+    # (normal systems downsize at Avg_CPU < 20%; critical systems at < 10%).
     mask = (
-        (df["Avg_CPU_12m"].fillna(0)  < 10) |
+        (df["Avg_CPU_12m"].fillna(0)  < 20) |   # covers both normal (< 20%) and critical (< 10%)
         (df["Avg_CPU_12m"].fillna(0)  > 80) |
         (df["Peak_CPU_12m"].fillna(0) > 95)
     )
@@ -420,9 +425,10 @@ def _criticality_cpu_eligible(df: pd.DataFrame) -> pd.DataFrame:
 def _criticality_cpu_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.3 recommendations:
-      Peak_CPU > 95%   → Downsize BLOCKED; lifecycle flag triggered
-      Avg_CPU < 10%    → Cautious downsize by ~25%, never below 4 vCPU
-      Avg_CPU > 80%    → Upsize by ~25% (flag only)
+      Peak_CPU > 95%                      → Downsize BLOCKED; lifecycle flag triggered
+      Critical/Mfg systems, Avg_CPU < 10% → Cautious downsize by ~25%, never below 4 vCPU
+      Normal systems, Avg_CPU < 20%       → Downsize by ~25%, never below 4 vCPU
+      Avg_CPU > 80%                       → Upsize by ~25% (flag only)
     """
     df = eligible_df.copy()
     if df.empty:
@@ -439,6 +445,8 @@ def _criticality_cpu_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
         criticality = str(row.get(COL_CRITICALITY, "")) if has_criticality else ""
         is_mfg     = criticality in MFG_CRITICAL_VALS
         is_bc_mc   = criticality in CRITICAL_VALS
+        # FIX 3: Distinguish critical vs normal systems for downsize threshold.
+        is_critical_system = is_bc_mc or is_mfg
 
         if pd.isna(avg) or pd.isna(vcpu):
             return "Insufficient data", np.nan, ""
@@ -454,14 +462,21 @@ def _criticality_cpu_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
                 lifecycle,
             )
 
-        if avg < 10:
-            new = max(4, round(vcpu * 0.75))
-            note = "Critical System – Cautious Downsizing by ~25%"
-            if is_mfg:
-                note += " (Manufacturing Critical – Extra Conservatism; Human Review Required)"
-            elif is_bc_mc:
-                note += " (Human Intervention Required)"
-            return f"{note} → {int(new)} vCPU", int(new), lifecycle
+        if is_critical_system:
+            # Critical / Manufacturing-Critical: only downsize when Avg_CPU < 10%
+            if avg < 10:
+                new = max(4, round(vcpu * 0.75))
+                note = "Critical System – Cautious Downsizing by ~25%"
+                if is_mfg:
+                    note += " (Manufacturing Critical – Extra Conservatism; Human Review Required)"
+                elif is_bc_mc:
+                    note += " (Human Intervention Required)"
+                return f"{note} → {int(new)} vCPU", int(new), lifecycle
+        else:
+            # Normal systems: downsize when Avg_CPU < 20%
+            if avg < 20:
+                new = max(4, round(vcpu * 0.75))
+                return f"Normal System – Downsize by ~25% → {int(new)} vCPU", int(new), lifecycle
 
         if avg > 80:
             new = round(vcpu * 1.25)
@@ -487,8 +502,10 @@ def find_criticality_ram_optimizations(df: pd.DataFrame) -> pd.DataFrame:
     Applies to ALL rows (all environments, all criticality levels).
 
     Eligible rows = any of:
-      Avg_FreeMem_12m > 80%   → candidate for downsize (critical threshold)
-      Avg_FreeMem_12m < 20%   → candidate for upsize flag
+      Avg_FreeMem_12m > 60%   → normal systems candidate for downsize
+      Avg_FreeMem_12m > 80%   → critical systems candidate for downsize
+      Avg_FreeMem_12m < 30%   → normal systems candidate for upsize flag
+      Avg_FreeMem_12m < 20%   → critical systems candidate for upsize flag
       Min_FreeMem_12m < 5%    → lifecycle risk flag
     """
     eligible = _criticality_ram_eligible(df)
@@ -500,9 +517,12 @@ def find_criticality_ram_optimizations(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _criticality_ram_eligible(df: pd.DataFrame) -> pd.DataFrame:
+    # FIX 4: Expanded mask to capture normal system thresholds:
+    #   Normal downsize: Avg_FreeMem > 60% (critical uses > 80%, covered by > 60%)
+    #   Normal upsize:   Avg_FreeMem < 30% (critical uses < 20%, covered by < 30%)
     mask = (
-        (df["Avg_FreeMem_12m"].fillna(0) > 80) |
-        (df["Avg_FreeMem_12m"].fillna(0) < 20) |
+        (df["Avg_FreeMem_12m"].fillna(0) > 60) |   # covers normal (>60%) and critical (>80%)
+        (df["Avg_FreeMem_12m"].fillna(0) < 30) |   # covers normal (<30%) and critical (<20%)
         (df["Min_FreeMem_12m"].fillna(0) < 5)
     )
     return df[mask].copy()
@@ -511,9 +531,13 @@ def _criticality_ram_eligible(df: pd.DataFrame) -> pd.DataFrame:
 def _criticality_ram_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.4 recommendations:
-      Avg_FreeMem > 80%   → Downsize by ~25%, rounded to practical size, min 8 GiB
-      Avg_FreeMem < 20%   → Upsize flag only (no automated action)
-      Min_FreeMem < 5%    → Lifecycle risk flag (can co-exist)
+      Critical systems:
+        Avg_FreeMem > 80%   → Downsize by ~25%, rounded to practical size, min 8 GiB
+        Avg_FreeMem < 20%   → Upsize flag only (no automated action)
+      Normal systems:
+        Avg_FreeMem > 60% AND Min_FreeMem > 5%  → Downsize by ~25%, rounded, min 8 GiB
+        Avg_FreeMem < 30%   → Upsize flag only (no automated action)
+      Min_FreeMem < 5%    → Lifecycle risk flag (can co-exist with other recommendations)
     """
     df = eligible_df.copy()
     if df.empty:
@@ -530,6 +554,8 @@ def _criticality_ram_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
         criticality = str(row.get(COL_CRITICALITY, "")) if has_criticality else ""
         is_mfg     = criticality in MFG_CRITICAL_VALS
         is_bc_mc   = criticality in CRITICAL_VALS
+        # FIX 5: Branch on critical vs normal for downsize/upsize thresholds.
+        is_critical_system = is_bc_mc or is_mfg
 
         if pd.isna(avg_mem) or pd.isna(ram):
             return "Insufficient data", np.nan, ""
@@ -544,17 +570,32 @@ def _criticality_ram_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
         elif is_mfg:
             human_note = " (Manufacturing Critical – Extra Conservatism; Human Review Required)"
 
-        if avg_mem > 80:
-            target = _round_ram(ram * 0.75, 8)
-            return (
-                f"Critical System – Downsize RAM by ~25%{human_note} → {target} GiB",
-                target,
-                lifecycle,
-            )
-
-        if avg_mem < 20:
-            upsize_note = f"Upsize RAM – Flag Only (Avg Free Mem < 20%){human_note}"
-            return upsize_note, int(ram), lifecycle or "Upsize Flag"
+        if is_critical_system:
+            # Critical systems: downsize only when Avg_FreeMem > 80%
+            if avg_mem > 80:
+                target = _round_ram(ram * 0.75, 8)
+                return (
+                    f"Critical System – Downsize RAM by ~25%{human_note} → {target} GiB",
+                    target,
+                    lifecycle,
+                )
+            # Critical systems: upsize flag when Avg_FreeMem < 20%
+            if avg_mem < 20:
+                upsize_note = f"Upsize RAM – Flag Only (Avg Free Mem < 20%){human_note}"
+                return upsize_note, int(ram), lifecycle or "Upsize Flag"
+        else:
+            # Normal systems: downsize when Avg_FreeMem > 60% AND Min_FreeMem > 5%
+            if avg_mem > 60 and (pd.isna(min_mem) or min_mem > 5):
+                target = _round_ram(ram * 0.75, 8)
+                return (
+                    f"Normal System – Downsize RAM by ~25% → {target} GiB",
+                    target,
+                    lifecycle,
+                )
+            # Normal systems: upsize flag when Avg_FreeMem < 30%
+            if avg_mem < 30:
+                upsize_note = "Upsize RAM – Flag Only (Avg Free Mem < 30%)"
+                return upsize_note, int(ram), lifecycle or "Upsize Flag"
 
         return "No specific recommendation", int(ram), lifecycle
 
