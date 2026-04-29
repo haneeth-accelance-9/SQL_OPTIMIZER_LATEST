@@ -286,6 +286,8 @@ def _build_installations_df() -> pd.DataFrame:
             ),
             # Both rules: == 0 means license IS required → include in candidates
             "no_license_required": nlr_num,
+            # Alias expected by rules.base.yaml column_map (no_license_required_product)
+            "no_license_required_product": nlr_num,
             # ── pass-through columns shown in result table ────────────────────
             "server_name":     r["server__server_name"] or "",
             "product_name":    r["product_description"] or "",
@@ -1511,4 +1513,11 @@ def compute_live_db_metrics() -> dict:
     }
     context.update(_calculate_savings(rule_results, license_metrics, rightsizing=rightsizing_for_savings))
     context["rightsizing"] = rightsizing
+
+    # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
+    rws = context.get("rule_wise_savings") or {}
+    context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
+    context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
+    context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
+
     return context

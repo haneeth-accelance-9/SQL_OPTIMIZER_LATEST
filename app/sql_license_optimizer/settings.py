@@ -152,7 +152,11 @@ CSRF_TRUSTED_ORIGINS = [
 
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
 AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
-AZURE_OPENAI_DEPLOYMENT = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4").strip() or "gpt-4"
+AZURE_OPENAI_DEPLOYMENT = (
+    os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "").strip()
+    or os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
+    or "gpt-4"
+)
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview").strip() or "2024-02-15-preview"
 AZURE_OPENAI_TIMEOUT = int(os.environ.get("AZURE_OPENAI_TIMEOUT", "60"))
 
