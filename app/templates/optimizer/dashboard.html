@@ -377,6 +377,9 @@
                     </div>
                     {% endif %}
                 </div>
+                <div class="flex justify-end px-4 py-2">
+                    <p class="text-[11px] text-slate-400 italic">*This is a dummy trigger, email integration will be functional in the later versions</p>
+                </div>
             </div>
             </div>
         </div>
@@ -536,6 +539,9 @@
                         <p class="text-sm mt-1 text-slate-400">Great job maintaining CMDB data quality!</p>
                     </div>
                     {% endif %}
+                </div>
+                <div class="flex justify-end px-4 py-2">
+                    <p class="text-[11px] text-slate-400 italic">*This is a dummy trigger, email integration will be functional in the later versions</p>
                 </div>
             </div>
         </div>
@@ -1138,6 +1144,9 @@
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
                                 Columns
                             </button>
+                            <button id="rs3-cpu-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
+                                Send Email
+                            </button>
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
@@ -1179,6 +1188,9 @@
                             <p class="text-sm mt-1">All VMs meet the CPU utilisation thresholds.</p>
                         </div>
                         {% endif %}
+                    </div>
+                    <div class="flex justify-end px-4 py-2">
+                        <p class="text-[11px] text-slate-400 italic">*This is a dummy trigger, email integration will be functional in the later versions</p>
                     </div>
                 </div>
             </div>
@@ -1297,6 +1309,9 @@
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
                                 Columns
                             </button>
+                            <button id="rs3-ram-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
+                                Send Email
+                            </button>
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
@@ -1338,6 +1353,9 @@
                             <p class="text-sm mt-1">All VMs meet the free memory thresholds.</p>
                         </div>
                         {% endif %}
+                    </div>
+                    <div class="flex justify-end px-4 py-2">
+                        <p class="text-[11px] text-slate-400 italic">*This is a dummy trigger, email integration will be functional in the later versions</p>
                     </div>
                 </div>
             </div>
@@ -2591,6 +2609,11 @@
         var ruleSelections = {
             rule1: new Set(),
             rule2: new Set(),
+            rule3cpu: new Set(),
+            rule3ram: new Set(),
+            critcpu: new Set(),
+            critram: new Set(),
+            physical: new Set(),
         };
 
         // ── Rule 1: sort & column-visibility state ────────────────────────────
@@ -2979,6 +3002,39 @@
             updateSendEmailButtonState(ruleKey);
         }
 
+        function updateRs3SelectAllState(type) {
+            var selectAll = document.getElementById('rs3-' + type + '-select-all');
+            var ruleKey = 'rule3' + type;
+            var state = rs3State[type];
+            if (!selectAll || !state) return;
+            var records = state.cachedRows || [];
+            var start = (state.page - 1) * RS3_PER_PAGE;
+            var end = Math.min(start + RS3_PER_PAGE, records.length);
+            var totalOnPage = Math.max(0, end - start);
+            var checkedOnPage = 0;
+            for (var i = start; i < end; i++) {
+                if (ruleSelections[ruleKey].has(i)) checkedOnPage++;
+            }
+            selectAll.checked = totalOnPage > 0 && checkedOnPage === totalOnPage;
+            selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < totalOnPage;
+            var btn = document.getElementById('rs3-' + type + '-send-email-btn');
+            if (btn) btn.disabled = ruleSelections[ruleKey].size === 0;
+        }
+
+        function toggleRs3PageSelection(type, checked) {
+            var ruleKey = 'rule3' + type;
+            var state = rs3State[type];
+            if (!state) return;
+            var records = state.cachedRows || [];
+            var start = (state.page - 1) * RS3_PER_PAGE;
+            var end = Math.min(start + RS3_PER_PAGE, records.length);
+            for (var i = start; i < end; i++) {
+                if (checked) ruleSelections[ruleKey].add(i);
+                else ruleSelections[ruleKey].delete(i);
+            }
+            renderRs3TableBody(type, records, state.cachedCols || [], state.page);
+        }
+
         function togglePageSelection(ruleKey, checked) {
             var page = ruleKey === 'rule1' ? rule1Page : rule2Page;
             var data = ruleKey === 'rule1' ? rule1SortedData : rule2SortedData;
@@ -3026,9 +3082,11 @@
         var activeEmailRule = null;
 
         function getRuleConfig(ruleKey) {
-            return ruleKey === 'rule1'
-                ? { title: 'Rule 1 Selected Candidates', data: rule1SortedData, keys: rule1Keys }
-                : { title: 'Rule 2 Selected Candidates', data: rule2SortedData, keys: rule2Keys };
+            if (ruleKey === 'rule1') return { title: 'Rule 1 Selected Candidates', data: rule1SortedData, keys: rule1Keys, isObjects: false };
+            if (ruleKey === 'rule2') return { title: 'Rule 2 Selected Candidates', data: rule2SortedData, keys: rule2Keys, isObjects: false };
+            var rs3Type = ruleKey === 'rule3cpu' ? 'cpu' : 'ram';
+            var rs3Title = rs3Type === 'cpu' ? 'CPU Right-Sizing Candidates' : 'RAM Right-Sizing Candidates';
+            return { title: rs3Title, data: rs3State[rs3Type].cachedRows || [], keys: rs3State[rs3Type].cachedCols || [], isObjects: true };
         }
 
         function renderRuleEmailModal(ruleKey) {
@@ -3046,11 +3104,12 @@
             var bodyHtml = '';
             for (var j = 0; j < selectedIndexes.length; j++) {
                 var rowIndex = selectedIndexes[j];
-                var row = config.data[rowIndex] || [];
+                var row = config.data[rowIndex] || (config.isObjects ? {} : []);
                 bodyHtml += '<tr>';
                 bodyHtml += '<td class="px-4 py-3 text-center"><button type="button" class="rule-email-remove inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-base font-bold text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600" data-rule="' + ruleKey + '" data-index="' + rowIndex + '">-</button></td>';
                 for (var k = 0; k < config.keys.length; k++) {
-                    bodyHtml += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[k])) + '</td>';
+                    var cellVal = config.isObjects ? row[config.keys[k]] : row[k];
+                    bodyHtml += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(cellVal)) + '</td>';
                 }
                 bodyHtml += '</tr>';
             }
@@ -3081,10 +3140,11 @@
             lines.push(config.title);
             lines.push('');
             for (var i = 0; i < selectedIndexes.length; i++) {
-                var row = config.data[selectedIndexes[i]] || [];
+                var row = config.data[selectedIndexes[i]] || (config.isObjects ? {} : []);
                 lines.push('Row ' + (i + 1));
                 for (var j = 0; j < config.keys.length; j++) {
-                    lines.push(formatCandidateHeader(config.keys[j]) + ': ' + safeText(row[j]));
+                    var cellVal = config.isObjects ? row[config.keys[j]] : row[j];
+                    lines.push(formatCandidateHeader(config.keys[j]) + ': ' + safeText(cellVal));
                 }
                 lines.push('');
             }
@@ -3384,7 +3444,7 @@
             var headRow = document.getElementById('rs3-' + type + '-head-row');
             if (!headRow) return;
             var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
-            var html = '';
+            var html = '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]"><input id="rs3-' + type + '-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle"></th>';
             for (var i = 0; i < columns.length; i++) {
                 if (hiddenCols.has(i)) continue;
                 var label = formatRs3Display(columns[i]);
@@ -3395,7 +3455,12 @@
                     html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">' + escapeHtml(label) + '</th>';
                 }
             }
+            html += '<th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">Actions</th>';
             headRow.innerHTML = html;
+            var selectAll = document.getElementById('rs3-' + type + '-select-all');
+            if (selectAll) {
+                selectAll.addEventListener('change', function(e) { toggleRs3PageSelection(type, e.target.checked); });
+            }
         }
 
         function renderRs3RecommendationCell(columnName, value) {
@@ -3478,18 +3543,24 @@
             var tbody = document.getElementById('rs3-' + type + '-tbody');
             if (!tbody) return;
             var hiddenCols = type === 'cpu' ? rs3CpuHiddenCols : rs3RamHiddenCols;
+            var ruleKey = 'rule3' + type;
             var start = (page - 1) * RS3_PER_PAGE;
             var slice = records.slice(start, start + RS3_PER_PAGE);
             var html = '';
             for (var i = 0; i < slice.length; i++) {
+                var globalIdx = start + i;
+                var isChecked = ruleSelections[ruleKey] && ruleSelections[ruleKey].has(globalIdx);
                 html += '<tr class="hover:bg-slate-50 transition-colors">';
+                html += '<td class="px-4 py-3 text-center whitespace-nowrap"><input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 rs3-row-checkbox" data-rs3-type="' + type + '" data-index="' + globalIdx + '"' + (isChecked ? ' checked' : '') + '></td>';
                 for (var j = 0; j < columns.length; j++) {
                     if (hiddenCols.has(j)) continue;
                     html += renderRs3RecommendationCell(columns[j], slice[i][columns[j]]);
                 }
+                html += '<td class="px-4 py-3 whitespace-nowrap"><button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">Send Trigger</button></td>';
                 html += '</tr>';
             }
             tbody.innerHTML = html;
+            updateRs3SelectAllState(type);
         }
 
         function requestRs3TableData(type, columns, fallbackRecords) {
@@ -4054,12 +4125,28 @@
         if (ruleEmailModalSend) {
             ruleEmailModalSend.addEventListener('click', function() {
                 if (!activeEmailRule || !ruleSelections[activeEmailRule].size) return;
-                var subject = encodeURIComponent((activeEmailRule === 'rule1' ? 'Rule 1' : 'Rule 2') + ' Selected Candidates');
+                var config = getRuleConfig(activeEmailRule);
+                var subject = encodeURIComponent(config.title);
                 var body = encodeURIComponent(buildMailtoBody(activeEmailRule));
                 window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
                 closeRuleEmailModal();
             });
         }
+        var rs3CpuSendEmailBtn = document.getElementById('rs3-cpu-send-email-btn');
+        var rs3RamSendEmailBtn = document.getElementById('rs3-ram-send-email-btn');
+        if (rs3CpuSendEmailBtn) rs3CpuSendEmailBtn.addEventListener('click', function() { openRuleEmailModal('rule3cpu'); });
+        if (rs3RamSendEmailBtn) rs3RamSendEmailBtn.addEventListener('click', function() { openRuleEmailModal('rule3ram'); });
+        document.addEventListener('change', function(e) {
+            var cb = e.target.closest('.rs3-row-checkbox');
+            if (!cb) return;
+            var rs3Type = cb.getAttribute('data-rs3-type');
+            var rowIndex = parseInt(cb.getAttribute('data-index'), 10);
+            if (!rs3Type || isNaN(rowIndex)) return;
+            var ruleKey = 'rule3' + rs3Type;
+            if (cb.checked) ruleSelections[ruleKey].add(rowIndex);
+            else ruleSelections[ruleKey].delete(rowIndex);
+            updateRs3SelectAllState(rs3Type);
+        });
         [rule1Tbody, rule2Tbody].forEach(function(tbody) {
             if (!tbody) return;
             tbody.addEventListener('change', function(e) {
@@ -4711,17 +4798,17 @@
         var usuApiUrl = window.usuDataApiUrl || '';
 
         var usuColDefs = [
-            { key: 'server_name',         label: 'Server',         sortable: true },
-            { key: 'product_description', label: 'Product',        sortable: true },
-            { key: 'product_edition',     label: 'Edition',        sortable: true },
-            { key: 'product_family',      label: 'Family',         sortable: true },
-            { key: 'install_status',      label: 'Device Status',  sortable: true },
-            { key: 'inv_status_std_name', label: 'Inv. Status',    sortable: true },
-            { key: 'cpu_core_count',      label: 'CPU Cores',      sortable: true },
-            { key: 'hosting_zone',        label: 'Hosting Zone',   sortable: true },
-            { key: 'environment',         label: 'Environment',    sortable: true },
-            { key: 'manufacturer',        label: 'Manufacturer',   sortable: true },
-            { key: 'inventory_date',      label: 'Inv. Date',      sortable: true },
+            { key: 'server_name',         label: 'Server Name',        sortable: true },
+            { key: 'product_family',      label: 'Product Family',     sortable: true },
+            { key: 'product_description', label: 'Product Description', sortable: true },
+            { key: 'product_edition',     label: 'Product Edition',    sortable: true },
+            { key: 'manufacturer',        label: 'Manufacturer',       sortable: true },
+            { key: 'install_status',      label: 'Device Status',      sortable: true },
+            { key: 'inv_status_std_name', label: 'Inventory Status',   sortable: true },
+            { key: 'cpu_core_count',      label: 'CPU Cores',          sortable: true },
+            { key: 'hosting_zone',        label: 'Hosting Zone',       sortable: true },
+            { key: 'environment',         label: 'Environment',        sortable: true },
+            { key: 'inventory_date',      label: 'Inventory Date',     sortable: true },
         ];
 
         var usuState = {

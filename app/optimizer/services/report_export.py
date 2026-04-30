@@ -84,6 +84,10 @@ def normalize_report_currency_text(text: str) -> str:
     return MONETARY_CONTEXT_PATTERN.sub(_replace_amount, normalized)
 
 
+def _title_case_rule_id(match: re.Match) -> str:
+    return f"| {match.group(1).replace('_', ' ').title()} |"
+
+
 def normalize_report_content_text(text: str) -> str:
     normalized = normalize_report_currency_text(_normalize_report_text(text))
     for legacy_title in LEGACY_REPORT_TITLES:
@@ -97,6 +101,21 @@ def normalize_report_content_text(text: str) -> str:
             DEFAULT_REPORT_TITLE,
             normalized,
         )
+    # Convert backtick-wrapped rule IDs in table cells to title case.
+    # Matches cells like | `uc_1_1_azure_byol_to_payg` | regardless of report source.
+    normalized = re.sub(
+        r'\|\s*`(uc_[a-z0-9_]+)`\s*\|',
+        _title_case_rule_id,
+        normalized,
+    )
+    # Convert backtick-wrapped rule IDs in section headings to title case.
+    # Matches headings like ### `uc_1_1_azure_byol_to_payg`
+    normalized = re.sub(
+        r'^(#{1,6})\s*`(uc_[a-z0-9_]+)`\s*$',
+        lambda m: f"{m.group(1)} {m.group(2).replace('_', ' ').title()}",
+        normalized,
+        flags=re.MULTILINE,
+    )
     return normalized
 
 

@@ -292,22 +292,6 @@ def _build_installations_df() -> pd.DataFrame:
                 r["server__installed_status_usu"],
                 r["server__installed_status_boones"],
             ),
-<<<<<<< HEAD
-            # Both rules: == 0 means license IS required → include in candidates
-            "no_license_required": nlr_num,
-            # Alias expected by rules.base.yaml column_map (no_license_required_product)
-            "no_license_required_product": nlr_num,
-            # ── pass-through columns shown in result table ────────────────────
-            "server_name":     r["server__server_name"] or "",
-            "product_name":    r["product_description"] or "",
-            "product_description": r["product_description"] or "",
-            "product_edition": r["product_edition"] or "",
-            "product_family":  r["product_family"] or "",
-            "cpu_core_count":  float(r["cpu_core_count"] or 0),
-            "cpu_socket_count": r["cpu_socket_count"] or 0,
-            "topology_type":   r["topology_type"] or "",
-=======
->>>>>>> eb3b7afda52e4c720045182b301ee24c36982168
             "environment":     r["server__environment"] or "",
             "u_hosting_zone":  _normalize_hosting_zone(r["server__hosting_zone"]),
             "cloud_provider":  r["server__cloud_provider"] or "",

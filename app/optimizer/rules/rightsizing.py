@@ -210,7 +210,7 @@ def _cpu_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.Data
 def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.1 PROD recommendations (ALL eligible rows are returned):
-      Avg < 10%                        -> reduce vCPU by ~50%, never below 4
+      Avg < 10%                      -> reduce vCPU by ~50%, never below 4
       Avg in [10%-15%) AND Peak <= 60% -> reduce vCPU by ~25%, never below 4
       Avg in [10%-15%) AND Peak (60-70%] -> Eligible but no specific reduction band matched
 
@@ -637,6 +637,24 @@ def find_criticality_ram_upsize_optimizations(df: pd.DataFrame) -> pd.DataFrame:
 
     logger.info("UC 3.4b criticality RAM upsize optimizations: %d rows.", len(eligible))
     return eligible
+
+
+def find_criticality_cpu_optimizations(df: pd.DataFrame) -> pd.DataFrame:
+    """Combined UC 3.3a + 3.3b: downsize and upsize criticality CPU results."""
+    down = find_criticality_cpu_downsize_optimizations(df)
+    up   = find_criticality_cpu_upsize_optimizations(df)
+    if down.empty and up.empty:
+        return down
+    return pd.concat([down, up], ignore_index=True)
+
+
+def find_criticality_ram_optimizations(df: pd.DataFrame) -> pd.DataFrame:
+    """Combined UC 3.4a + 3.4b: downsize and upsize criticality RAM results."""
+    down = find_criticality_ram_downsize_optimizations(df)
+    up   = find_criticality_ram_upsize_optimizations(df)
+    if down.empty and up.empty:
+        return down
+    return pd.concat([down, up], ignore_index=True)
 
 
 # -- Lifecycle Risk Flags ------------------------------------------------------

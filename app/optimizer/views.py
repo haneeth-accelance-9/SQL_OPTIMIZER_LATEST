@@ -1081,9 +1081,8 @@ def results(request):
         "cpu_socket_count",
         "manufacturer",
         "product_family",
-        "product_group",
-        "product_description",
         "product_edition",
+        "product_description",
         "license_metric",
         "no_license_required",
         "install_status",
@@ -1100,9 +1099,8 @@ def results(request):
         "cpu_socket_count",
         "manufacturer",
         "product_family",
-        "product_group",
-        "product_description",
         "product_edition",
+        "product_description",
         "license_metric",
         "no_license_required",
         "install_status",
@@ -1112,12 +1110,13 @@ def results(request):
         "is_cloud_device",
         "inventory_status_standard",
     ]
+    _RULE_HIDDEN_COLS = {"product_group"}
     all_rule1_keys = list(azure_full[0].keys()) if azure_full else []
     all_rule2_keys = list(retired_full[0].keys()) if retired_full else []
     rule1_keys = [c for c in RULE1_DISPLAY_COLS if c in all_rule1_keys] + \
-                 [c for c in all_rule1_keys if c not in RULE1_DISPLAY_COLS]
+                 [c for c in all_rule1_keys if c not in RULE1_DISPLAY_COLS and c not in _RULE_HIDDEN_COLS]
     rule2_keys = [c for c in RULE2_DISPLAY_COLS if c in all_rule2_keys] + \
-                 [c for c in all_rule2_keys if c not in RULE2_DISPLAY_COLS]
+                 [c for c in all_rule2_keys if c not in RULE2_DISPLAY_COLS and c not in _RULE_HIDDEN_COLS]
     azure_slice = azure_full[(rule1_page - 1) * per_page : rule1_page * per_page]
     retired_slice = retired_full[(rule2_page - 1) * per_page : rule2_page * per_page]
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
