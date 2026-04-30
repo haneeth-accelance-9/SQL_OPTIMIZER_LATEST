@@ -825,8 +825,10 @@ def compute_rightsizing_metrics() -> dict:
     from optimizer.rules.rightsizing import (
         find_cpu_rightsizing_optimizations,
         find_ram_rightsizing_optimizations,
-        find_criticality_cpu_optimizations,
-        find_criticality_ram_optimizations,
+        find_criticality_cpu_downsize_optimizations,
+        find_criticality_cpu_upsize_optimizations,
+        find_criticality_ram_downsize_optimizations,
+        find_criticality_ram_upsize_optimizations,
         find_lifecycle_risk_flags,
         find_physical_systems_flags,
     )
@@ -911,12 +913,20 @@ def compute_rightsizing_metrics() -> dict:
         logger.exception("UC 3.2 RAM right-sizing rule failed: %s", exc)
 
     try:
-        crit_cpu_df = find_criticality_cpu_optimizations(df)
+        crit_cpu_df = pd.concat(
+            [find_criticality_cpu_downsize_optimizations(df),
+             find_criticality_cpu_upsize_optimizations(df)],
+            ignore_index=True,
+        )
     except Exception as exc:
         logger.exception("UC 3.3 criticality CPU rule failed: %s", exc)
 
     try:
-        crit_ram_df = find_criticality_ram_optimizations(df)
+        crit_ram_df = pd.concat(
+            [find_criticality_ram_downsize_optimizations(df),
+             find_criticality_ram_upsize_optimizations(df)],
+            ignore_index=True,
+        )
     except Exception as exc:
         logger.exception("UC 3.4 criticality RAM rule failed: %s", exc)
 
