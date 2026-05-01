@@ -1,20 +1,20 @@
 # LiscenceOptimizer Configuration
 # SDK 1.2.0+
-
+ 
 # ============================================================================
 # LOGGING CONFIGURATION
 # ============================================================================
-
+ 
 logging:
   level: "${LOG_LEVEL:INFO}"
   # Suppress noisy SDK adapter logs that can flood Loki
   loggers:
     agenticai.tools.adapters.microsoft: "WARNING"
-
+ 
 # ============================================================================
 # GATEWAY CONFIGURATIONS
 # ============================================================================
-
+ 
 # LLM Gateway Configuration - Azure OpenAI
 # Note: only the config: dict is accepted in SDK 1.2.0+.
 # The provider:, caching:, rate_limiting:, logging:, max_retries: fields
@@ -27,11 +27,11 @@ llm:
     use_managed_identity: false
     api_key: "${AZURE_OPENAI_API_KEY}"
     timeout: 600
-
+ 
 # Memory Gateway Configuration - Cosmos DB
 memory:
   provider: "cosmosdb"
-  
+ 
   config:
     endpoint: "${COSMOSDB_ENDPOINT}"
     database_name: "${COSMOSDB_DATABASE_NAME:agenticai}"
@@ -39,10 +39,10 @@ memory:
     key: "${COSMOSDB_KEY}"
     session_ttl_seconds: 2592000
     message_ttl_seconds: 2592000
-  
+ 
   enable_history: true
   max_history_messages: 5
-
+ 
 # Observability Configuration - SDK 1.2.0+ (OpenLIT + Grafana OTLP)
 # OpenLIT is initialised automatically from this config before create_server().
 # Set capture_message_content: true only in local dev to trace LLM prompts/responses.
@@ -51,7 +51,7 @@ observability:
   service_name: "${OTEL_SERVICE_NAME:liscence-optimizer}"
   service_version: "0.1.0"
   deployment_environment: "${DEPLOYMENT_ENVIRONMENT:development}"
-
+ 
   # Static labels attached to every span, metric, and log from this agent.
   # Add any team/squad/cell identifiers relevant to your agent here.
   # Values support ${ENV_VAR:default} substitution.
@@ -59,22 +59,22 @@ observability:
   #   cell_identifier: "<your-cell-id>"
   #   beat_id: "${BEAT_ID:unknown}"
   #   app_squad: "<your-squad>"
-
+ 
   grafana:
-    otlp_endpoint: "${RUNTIME_OTLP_ENDPOINT}"
+    otlp_endpoint: "${RUNTIME_OTLP_ENDPOINT:http://localhost:4317}"
     enable_logs: true
-    headers: "${OTEL_EXPORTER_OTLP_HEADERS}"
+    headers: "${OTEL_EXPORTER_OTLP_HEADERS:}"
     timeout: 10
     max_log_message_bytes: 200000
-
+ 
 # ============================================================================
 # EXECUTOR CONFIGURATION
 # ============================================================================
-
+ 
 executor:
   type: "phased_orchestration"
   streaming: true
-  
+ 
   agents:
     - name: "main_agent"
       model:
@@ -82,29 +82,29 @@ executor:
         type: "chat"
         max_tokens: 50000
         temperature: 0.0
-      
+     
       system_prompt: |
         You are an AI agent built with the AgenticAI SDK.
-        
+       
         **Your Purpose:**
         This agent creates executive summary or the results that are obtained by applying usecases on the data
-        
+       
         **Operational Guidelines:**
         - This is a fully autonomous agent that processes tasks independently
         - Make all decisions based on the data and requirements provided
         - Always explain your decisions and reasoning in your responses
         - Complete all phases from start to finish automatically
-        
+       
         **CRITICAL - Reasoning Format:**
         Before calling ANY tool, you MUST output your reasoning using EXACTLY this format:
-        
+       
         [REASONING]: Your explanation here in 1-2 sentences about what you're about to do and why.
-        
+       
         Example:
         [REASONING]: I need to check what files are available in this session before processing.
-        
+       
         Then call the tool. This format is REQUIRED for every single tool call.
-      
+     
       tools:
         # AgenticAI SDK built-in tools
         - "list_available_files"
@@ -125,54 +125,54 @@ executor:
         - "store_phase_result"
         - "get_phase_result"
         - "get_all_phase_results"
-  
+ 
   phases:
     - name: "Analysis Phase"
       agent: "main_agent"
       number: 1
       instructions: |
         **Objective:** Normalize inputs and evaluate business rules from `configs/rules.base.yaml`.
-
+ 
         **Steps:**
         1. If the backend attached a dataset, load it with `upload_dataframe` / `describe_dataframe` as needed.
         2. Build a JSON list of normalized records (snake_case columns) for the VMs/rows you want evaluated.
         3. Call `evaluate_optimization_rules(records_json=...)` and store the returned JSON using `store_phase_result()`.
-    
+   
     - name: "Report Generation Phase"
       agent: "main_agent"
       number: 2
       instructions: |
         **Objective:** Generate an executive summary scaffold from upstream strategy outputs + rule evaluation.
-
+ 
         **Steps:**
         1. Retrieve analysis results using `get_phase_result("Analysis Phase")`.
         2. Build `strategy_results_json` as a JSON object from the backend (counts, top examples, KPIs).
         3. Call `report_generator(usecase_id=..., strategy_results_json=..., rules_evaluation_json=<Analysis Phase JSON>)`.
         4. Optionally call `export_report` to save the markdown to a `.md` file for download.
-
+ 
 # ============================================================================
 # MCP SERVER CONFIGURATION (Optional)
 # ============================================================================
-
+ 
 # Model Context Protocol (MCP) server configuration for extending agents with custom tools
 mcp:
   servers: []
     # ============================================================================
     # MCP SERVER CONFIGURATION - Per-Request Agent Pattern
     # ============================================================================
-    # 
+    #
     # Authentication Behavior (Per-Request):
     # - Agents are created fresh for each request with current authentication
     # - Tokens are acquired at request time (no expiration issues)
     # - Tools are cleaned up after each request completes
-    # 
+    #
     # Authentication Priority (evaluated per request):
     # 1. User token from RequestContext (if use_user_token_passthrough=true AND token provided)
     # 2. Fresh Managed Identity token (if use_managed_identity=true)
     # 3. Static headers from config
-    # 
+    #
     # ============================================================================
-    
+   
     # Example 1: Managed Identity (Service-to-Service)
     # Use when: MCP server doesn't need user-specific permissions
     # - name: "analytics-mcp"
@@ -185,7 +185,7 @@ mcp:
     #   enabled: true
     #   timeout: 30
     #   retry_attempts: 3
-    
+   
     # Example 2: User Token Passthrough (User-Scoped Access)
     # Use when: MCP server needs to act as the authenticated user
     # Requires: User token in RequestContext.authentication['bearer_token']
@@ -197,7 +197,7 @@ mcp:
     #   # Note: Token acquired per-request from RequestContext
     #   # Works with: Azure Container Apps Easy Auth, Azure AD authentication
     #   enabled: true
-    
+   
     # Example 3: Hybrid Authentication (Priority Fallback)
     # Use when: Support both user-initiated requests and service automation
     # - name: "hybrid-mcp"
@@ -211,30 +211,30 @@ mcp:
     #   # - If user token in RequestContext → use user token
     #   # - If no user token → acquire fresh MI token
     #   # - Both tokens are fresh (acquired per request, no expiration)
-
+ 
 # ============================================================================
 # A2A PROTOCOL CONFIGURATION
 # ============================================================================
-
+ 
 a2a:
   agent_card:
     name: "LiscenceOptimizer"
     description: "This agent creates executive summary or the results that are obtained by applying usecases on the data"
-    url: "${AGENT_URL}"
-  
+    url: "${AGENT_URL:http://localhost:8001}"
+ 
   skills:
     - name: "analyze_data"
       description: "Analyze data and generate insights"
       output_type: "report"
-
+ 
 # ============================================================================
 # AUTHENTICATION CONFIGURATION
 # ============================================================================
-
+ 
 authentication:
   enabled: false  # Set to true for production deployment
   require_auth: false
-  
+ 
   # Paths that don't require authentication
   public_paths:
     - "/.well-known/agent-card.json"
@@ -243,27 +243,27 @@ authentication:
     - "/metrics"
     - "/docs"
     - "/openapi.json"
-  
+ 
   # User authentication via Azure Container Apps Easy Auth
   user_auth:
     enabled: false
-  
+ 
   # Service authentication via Bearer tokens (for Web Jobs)
   service_auth:
     enabled: false  # Enable in production for service-to-service calls
     tenant_id: "${AZURE_TENANT_ID:00000000-0000-0000-0000-000000000000}"
     client_id: "${AZURE_CLIENT_ID:00000000-0000-0000-0000-000000000000}"
     audience: "${AZURE_CLIENT_ID:00000000-0000-0000-0000-000000000000}"  # Defaults to client_id
-    
+   
     # Optional: Restrict to specific service principals (leave empty to allow all)
     allowed_service_principals: []
       # - "${WEB_JOB_MANAGED_IDENTITY_OID}"
-
+ 
 # ============================================================================
 # SERVER CONFIGURATION
 # ============================================================================
-
+ 
 server:
   host: "0.0.0.0"
-  port: 8000
+  port: "${PORT:8001}"
   log_level: "${LOG_LEVEL:info}"

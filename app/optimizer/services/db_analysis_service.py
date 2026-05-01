@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # demand/cost metrics that feed savings calculations.
 SHOWCASE_ONLY_PRODUCT_FAMILIES = frozenset({"Java"})
 RIGHTSIZING_CPU_LICENSE_COSTS_EUR = {
-    "enterprise": 1318.98,
-    "standard": 393.98,
+    "enterprise": 2637.96,
+    "standard": 687.96,
 }
 
 RIGHTSIZING_REPORT_METADATA_HEADERS = [
@@ -247,6 +247,7 @@ def _build_installations_df() -> pd.DataFrame:
     ).select_related("server").order_by(
         "server__server_name", "product_description"
     ).values(
+        "server_id",
         "inv_status_std_name",
         "device_status",
         "no_license_required",
@@ -278,6 +279,7 @@ def _build_installations_df() -> pd.DataFrame:
         nlr_num = (1 if nlr else 0) if nlr is not None else float("nan")
 
         records.append({
+            "server_id":       str(r["server_id"]),
             # display order matches RULE1_DISPLAY_COLS / user reference
             "server_name":     r["server__server_name"] or "",
             "topology_type":   r["topology_type"] or "",
@@ -572,6 +574,99 @@ def _prepare_db_prices_for_demand(
     return aligned_prices.drop_duplicates(subset=["product_name"], keep="first").reset_index(drop=True)
 
 
+_RETIRED_EXCLUDED_ZONES = frozenset({"remote site", "functional site"})
+_INSTALLED_STATUSES = frozenset({"install", "installed"})
+
+
+def _compute_device_cost_from_df(df: pd.DataFrame) -> float:
+    """
+    Sum of (Price × eff_quantity) / 2 over unique servers in df.
+    Price comes from product_edition; eff_quantity from usu_demand_detail.
+    """
+    if df.empty or "server_id" not in df.columns:
+        return 0.0
+    server_ids = [s for s in df["server_id"].dropna().unique().tolist() if s]
+    if not server_ids:
+        return 0.0
+    eff_qty_map = _build_server_eff_quantity_map(server_ids)
+    edition_map = _build_server_product_edition_map(server_ids)
+    total = 0.0
+    for server_id in server_ids:
+        eff_qty = float(eff_qty_map.get(server_id, 0) or 0)
+        edition = edition_map.get(server_id, "")
+        price = _get_rightsizing_cpu_license_cost_eur(edition)
+        total += (price * eff_qty) / 2
+    return round(total, 2)
+
+
+def compute_retired_devices_extended_metrics(
+    installations_df: pd.DataFrame,
+    retired_df: pd.DataFrame,
+) -> dict:
+    """
+    Extended UC2 metrics built from Server + cpu_utilisation + usu_demand_detail.
+
+    Step 1 – Total retired devices count
+    Step 2 – Retired devices at Remote Site / Functional Site (excluded zones)
+    Step 3 – Actual Retired = Step1 − Step2
+    Step 4 – Installed devices count  (install_status = 'install' / 'installed')
+    Step 5 – Savings for Actual Retired: sum of (Price × eff_quantity) / 2
+    Step 6 – Cost for Installed Devices: sum of (Price × eff_quantity) / 2
+    """
+    _empty = {
+        "total_retired_count": 0,
+        "remote_functional_site_count": 0,
+        "actual_retired_count": 0,
+        "installed_count": 0,
+        "actual_retired_savings_eur": 0.0,
+        "installed_devices_cost_eur": 0.0,
+    }
+
+    if retired_df is None:
+        retired_df = pd.DataFrame()
+
+    # Step 1
+    total_retired_count = len(retired_df)
+
+    # Step 2 & 3 — exclude Remote/Functional Site devices
+    if not retired_df.empty and "u_hosting_zone" in retired_df.columns:
+        zone_col = retired_df["u_hosting_zone"].astype(str).str.strip().str.lower()
+        zone_mask = zone_col.isin(_RETIRED_EXCLUDED_ZONES)
+        remote_functional_count = int(zone_mask.sum())
+        actual_retired_df = retired_df[~zone_mask].copy()
+    else:
+        remote_functional_count = 0
+        actual_retired_df = retired_df.copy()
+
+    actual_retired_count = len(actual_retired_df)
+
+    # Step 4 — installed devices from full installations DataFrame
+    if not installations_df.empty and "install_status" in installations_df.columns:
+        install_mask = (
+            installations_df["install_status"]
+            .astype(str).str.strip().str.lower()
+            .isin(_INSTALLED_STATUSES)
+        )
+        installed_df = installations_df[install_mask].copy()
+        installed_count = len(installed_df)
+    else:
+        installed_df = pd.DataFrame()
+        installed_count = 0
+
+    # Step 5 & 6 — cost calculations
+    actual_retired_savings = _compute_device_cost_from_df(actual_retired_df)
+    installed_devices_cost = _compute_device_cost_from_df(installed_df)
+
+    return {
+        "total_retired_count": total_retired_count,
+        "remote_functional_site_count": remote_functional_count,
+        "actual_retired_count": actual_retired_count,
+        "installed_count": installed_count,
+        "actual_retired_savings_eur": actual_retired_savings,
+        "installed_devices_cost_eur": installed_devices_cost,
+    }
+
+
 def compute_db_metrics() -> dict:
     """
     Run the full analysis pipeline using DB tables as data source.
@@ -589,12 +684,17 @@ def compute_db_metrics() -> dict:
     total_devices = Server.objects.filter(is_active=True).count()
 
     # ── Run existing rule engine (same as upload path) ────────────────────────
+    retired_df_uc2 = pd.DataFrame()
     if not installations_df.empty:
         rule_results = run_rules(installations_df)
         rule_results["payg_zone_breakdown"] = _build_payg_zone_breakdown(
             installations_df,
             rule_results.get("azure_payg") or [],
         )
+        try:
+            retired_df_uc2 = find_retired_devices_with_installations_from_db(installations_df)
+        except Exception:
+            pass
     else:
         logger.warning("No USUInstallation rows found — returning empty rule results.")
         rule_results = {
@@ -610,6 +710,10 @@ def compute_db_metrics() -> dict:
                 "estimated": [0, 0],
             },
         }
+
+    rule_results.update(
+        compute_retired_devices_extended_metrics(installations_df, retired_df_uc2)
+    )
 
     # ── Run existing license metrics (same as upload path) ────────────────────
     license_metrics = compute_license_metrics(
@@ -704,31 +808,61 @@ def _coerce_non_negative_float(value: Any) -> float:
         return 0.0
 
 
-def _resolve_cpu_rightsizing_reduction(current_vcpu=None, recommended_vcpu=None, reduction=None) -> float:
-    reduction_value = _coerce_non_negative_float(reduction)
-    if reduction_value > 0:
-        return reduction_value
-    current_value = _coerce_non_negative_float(current_vcpu)
-    recommended_value = _coerce_non_negative_float(recommended_vcpu)
-    return max(current_value - recommended_value, 0.0)
+
+def _calculate_cpu_rightsizing_costs_eur(
+    product_edition: Any,
+    *,
+    eff_quantity=None,
+    recommended_vcpu=None,
+    reduction=None,
+) -> tuple:
+    """
+    Returns (actual_line_cost, recommended_line_cost, savings).
+
+    Actual_Line_Cost      = (Price × eff_quantity) / 2
+    Recommended_Line_Cost = (Price × Recommended_vCPU) / 2
+    Savings               = Actual_Line_Cost − Recommended_Line_Cost
+
+    eff_quantity is sourced from usu_demand_detail.eff_quantity via server_id.
+    Null/absent eff_quantity is treated as zero (no fallback).
+    Price is determined by product_edition: Enterprise=2637.96, Standard=687.96.
+    """
+    price = _get_rightsizing_cpu_license_cost_eur(product_edition)
+    effective_qty = _coerce_non_negative_float(eff_quantity)
+
+    if recommended_vcpu is not None:
+        try:
+            recommended = max(float(recommended_vcpu), 0.0)
+        except (TypeError, ValueError):
+            recommended = 0.0
+    elif reduction is not None:
+        recommended = max(effective_qty - _coerce_non_negative_float(reduction), 0.0)
+    else:
+        recommended = effective_qty
+
+    if price <= 0:
+        return 0.0, 0.0, 0.0
+
+    actual = round((price * effective_qty) / 2, 2)
+    recommended_cost = round((price * recommended) / 2, 2)
+    savings = round(max(actual - recommended_cost, 0.0), 2)
+    return actual, recommended_cost, savings
 
 
 def _calculate_cpu_rightsizing_savings_eur(
     product_edition: Any,
     *,
-    current_vcpu=None,
+    eff_quantity=None,
     recommended_vcpu=None,
     reduction=None,
 ) -> float:
-    license_cost = _get_rightsizing_cpu_license_cost_eur(product_edition)
-    reduction_value = _resolve_cpu_rightsizing_reduction(
-        current_vcpu=current_vcpu,
+    _, _, savings = _calculate_cpu_rightsizing_costs_eur(
+        product_edition,
+        eff_quantity=eff_quantity,
         recommended_vcpu=recommended_vcpu,
         reduction=reduction,
     )
-    if license_cost <= 0 or reduction_value <= 0:
-        return 0.0
-    return round(reduction_value * license_cost, 2)
+    return savings
 
 
 def _build_server_product_edition_map(server_ids: list[Any]) -> dict[Any, str]:
@@ -778,6 +912,32 @@ def _build_server_product_edition_map(server_ids: list[Any]) -> dict[Any, str]:
     return edition_map
 
 
+def _build_server_eff_quantity_map(server_ids: list[Any]) -> dict[Any, float]:
+    """
+    Returns {server_id: total eff_quantity} from usu_demand_detail.
+    Sums eff_quantity across all demand rows for the same server.
+    Null/missing values are treated as zero.
+    """
+    from django.db.models import Sum
+    from optimizer.models import USUDemandDetail
+
+    unique_ids = list(dict.fromkeys(server_ids or []))
+    if not unique_ids:
+        return {}
+
+    rows = (
+        USUDemandDetail.objects
+        .filter(server_id__in=unique_ids)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values("server_id")
+        .annotate(total_eff_quantity=Sum("eff_quantity"))
+    )
+    return {
+        row["server_id"]: float(row["total_eff_quantity"] or 0)
+        for row in rows
+    }
+
+
 def _apply_rightsizing_cost_savings(rightsizing: dict, *, avg_cost_per_gib_eur: float = 0.0) -> dict:
     if not isinstance(rightsizing, dict):
         return rightsizing
@@ -795,12 +955,15 @@ def _apply_rightsizing_cost_savings(rightsizing: dict, *, avg_cost_per_gib_eur: 
                     callback(record)
 
     def _apply_cpu_cost(record: dict):
-        record["Cost_Savings_EUR"] = _calculate_cpu_rightsizing_savings_eur(
+        actual, recommended_cost, savings = _calculate_cpu_rightsizing_costs_eur(
             record.get("product_edition"),
-            current_vcpu=record.get("Current_vCPU"),
+            eff_quantity=record.get("eff_quantity"),
             recommended_vcpu=record.get("Recommended_vCPU"),
             reduction=record.get("Potential_vCPU_Reduction"),
         )
+        record["Actual_Line_Cost"] = actual
+        record["Recommended_Line_Cost"] = recommended_cost
+        record["Cost_Savings_EUR"] = savings
 
     def _apply_ram_cost(record: dict):
         reduction_value = _coerce_non_negative_float(record.get("Potential_RAM_Reduction_GiB"))
@@ -850,7 +1013,9 @@ def _build_rightsizing_df() -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    product_edition_by_server_id = _build_server_product_edition_map([util.server_id for util in rows])
+    server_ids_for_rows = [util.server_id for util in rows]
+    product_edition_by_server_id = _build_server_product_edition_map(server_ids_for_rows)
+    eff_quantity_by_server_id = _build_server_eff_quantity_map(server_ids_for_rows)
     server_records: dict = {}
     for util in rows:
         server = util.server
@@ -880,6 +1045,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "hosting_zone": _normalize_hosting_zone(server.hosting_zone or ""),
                 "installed_status_usu": server.installed_status_usu or "",
                 "product_edition": product_edition_by_server_id.get(server.id, ""),
+                "eff_quantity": eff_quantity_by_server_id.get(server.id, 0.0),
             })
             server_records[server.id] = record
 
@@ -1073,6 +1239,9 @@ def compute_rightsizing_metrics() -> dict:
         "Potential_vCPU_Reduction",
         "CPU_Recommendation",
         "product_edition",
+        "eff_quantity",
+        "Actual_Line_Cost",
+        "Recommended_Line_Cost",
         "Cost_Savings_EUR",
         "Optimization_Type",
         "Recommendation_Type",
@@ -1110,6 +1279,9 @@ def compute_rightsizing_metrics() -> dict:
         "Recommended_vCPU",
         "CPU_Recommendation",
         "product_edition",
+        "eff_quantity",
+        "Actual_Line_Cost",
+        "Recommended_Line_Cost",
         "Cost_Savings_EUR",
         "Lifecycle_Flag",
         "Optimization_Type",
@@ -1549,9 +1721,10 @@ def compute_live_db_metrics() -> dict:
             return []
         return df.replace({pd.NA: None}).to_dict("records")
 
+    retired_df = pd.DataFrame()
+
     if not installations_df.empty:
         azure_df = pd.DataFrame()
-        retired_df = pd.DataFrame()
         azure_error = None
         retired_error = None
 
@@ -1594,6 +1767,10 @@ def compute_live_db_metrics() -> dict:
                 "estimated": [0, 0],
             },
         }
+
+    rule_results.update(
+        compute_retired_devices_extended_metrics(installations_df, retired_df)
+    )
 
     license_metrics = compute_license_metrics(
         demand_df if not demand_df.empty else pd.DataFrame(),
