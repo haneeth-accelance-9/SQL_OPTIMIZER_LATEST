@@ -204,8 +204,9 @@ RIGHTSIZING_REPORT_BASE_HEADERS = (
 def _normalize_hosting_zone(zone: Any) -> str:
     """
     Map DB hosting_zone free-text to the exact labels the PAYG rule expects:
-      - "Public Cloud"      (isin target in find_azure_payg_candidates)
-      - "Private Cloud AVS" (isin target in find_azure_payg_candidates)
+      - "Public Cloud"      → hosting_zone contains "public"
+      - "Private Cloud AVS" → hosting_zone contains "avs" (must have AVS suffix)
+    "Private Cloud" (without AVS) is intentionally NOT mapped to Private Cloud AVS.
     Anything else is returned as-is (will not match the PAYG filter).
     """
     z = str(zone or "").strip().lower()
@@ -213,7 +214,7 @@ def _normalize_hosting_zone(zone: Any) -> str:
         return ""
     if "public" in z:
         return "Public Cloud"
-    if "avs" in z or ("private" in z and "cloud" in z):
+    if "avs" in z:
         return "Private Cloud AVS"
     return str(zone or "").strip()
 
@@ -243,7 +244,9 @@ def _build_installations_df() -> pd.DataFrame:
         server__is_active=True
     ).exclude(
         product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
-    ).select_related("server").values(
+    ).select_related("server").order_by(
+        "server__server_name", "product_description"
+    ).values(
         "inv_status_std_name",
         "device_status",
         "no_license_required",
@@ -304,6 +307,118 @@ def _build_installations_df() -> pd.DataFrame:
         })
 
     return pd.DataFrame(records)
+
+
+# def _build_raw_installations_df() -> pd.DataFrame:
+#     """
+#     Raw export of USUInstallation + Server for the Rule 2 input data download.
+#     Returns un-normalized field values matching the CSV format:
+#     server_name, hosting_zone, installed_status_boones, installed_status_usu,
+#     installation_id, product_family, no_license_required.
+#     """
+#     from optimizer.models import USUInstallation
+
+#     rows = USUInstallation.objects.select_related("server").values(
+#         "id",
+#         "product_family",
+#         "no_license_required",
+#         "server__server_name",
+#         "server__hosting_zone",
+#         "server__installed_status_boones",
+#         "server__installed_status_usu",
+#     )
+
+#     if not rows:
+#         return pd.DataFrame()
+
+#     records = [
+#         {
+#             "server_name":             r["server__server_name"],
+#             "hosting_zone":            r["server__hosting_zone"],
+#             "installed_status_boones": r["server__installed_status_boones"],
+#             "installed_status_usu":    r["server__installed_status_usu"],
+#             "installation_id":         str(r["id"]) if r["id"] else None,
+#             "product_family":          r["product_family"],
+#             "no_license_required":     r["no_license_required"],
+#         }
+#         for r in rows
+#     ]
+
+#     return pd.DataFrame(records, columns=[
+#         "server_name",
+#         "hosting_zone",
+#         "installed_status_boones",
+#         "installed_status_usu",
+#         "installation_id",
+#         "product_family",
+#         "no_license_required",
+#     ])
+
+
+# def _build_raw_rule1_df() -> pd.DataFrame:
+#     """
+#     Raw export of USUInstallation + Server for the Rule 1 input data download.
+#     Returns un-normalized field values for all columns Rule 1 filters on:
+#     hosting_zone (raw, before normalization), inv_status_std_name, no_license_required.
+#     """
+#     from optimizer.models import USUInstallation
+
+#     rows = USUInstallation.objects.select_related("server").values(
+#         "id",
+#         "product_family",
+#         "no_license_required",
+#         "inv_status_std_name",
+#         "device_status",
+#         "manufacturer",
+#         "product_description",
+#         "server__server_name",
+#         "server__hosting_zone",
+#         "server__installed_status_boones",
+#         "server__installed_status_usu",
+#         "server__environment",
+#         "server__cloud_provider",
+#         "server__is_cloud_device",
+#     )
+
+#     if not rows:
+#         return pd.DataFrame()
+
+#     records = [
+#         {
+#             "server_name":             r["server__server_name"],
+#             "hosting_zone":            r["server__hosting_zone"],
+#             "inv_status_std_name":     r["inv_status_std_name"],
+#             "installed_status_usu":    r["server__installed_status_usu"],
+#             "installed_status_boones": r["server__installed_status_boones"],
+#             "installation_id":         str(r["id"]) if r["id"] else None,
+#             "product_family":          r["product_family"],
+#             "no_license_required":     r["no_license_required"],
+#             "device_status":           r["device_status"],
+#             "manufacturer":            r["manufacturer"],
+#             "product_description":     r["product_description"],
+#             "environment":             r["server__environment"],
+#             "cloud_provider":          r["server__cloud_provider"],
+#             "is_cloud_device":         r["server__is_cloud_device"],
+#         }
+#         for r in rows
+#     ]
+
+#     return pd.DataFrame(records, columns=[
+#         "server_name",
+#         "hosting_zone",
+#         "inv_status_std_name",
+#         "installed_status_usu",
+#         "installed_status_boones",
+#         "installation_id",
+#         "product_family",
+#         "no_license_required",
+#         "device_status",
+#         "manufacturer",
+#         "product_description",
+#         "environment",
+#         "cloud_provider",
+#         "is_cloud_device",
+#     ])
 
 
 def _build_demand_df() -> pd.DataFrame:

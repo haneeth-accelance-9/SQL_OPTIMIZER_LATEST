@@ -59,12 +59,21 @@ def find_azure_payg_candidates(
     inv_norm = installation_df[COL_INVENTORY_STATUS].astype(str).str.strip().str.lower()
     excluded_lower = excluded_inventory_phrase.strip().lower()
 
+    # UC 1.1 conditions:
+    # 1. u_hosting_zone IN (Public Cloud, Private Cloud AVS)
+    # 2. inv_status_std_name != "License Included" (case-insensitive)
+    # 3. no_license_required = FALSE (== 0)
     mask = (
         (installation_df[COL_HOSTING].astype(str).str.strip().isin(target_zones))
         & (inv_norm != excluded_lower)
         & no_license_required_is_zero(installation_df[no_lic_col])
     )
-    filtered_df = installation_df.loc[mask].copy()
+    sort_cols = [c for c in ("server_name", "product_description") if c in installation_df.columns]
+    filtered_df = (
+        installation_df.loc[mask]
+        .sort_values(sort_cols, ignore_index=True)
+        .copy()
+    ) if sort_cols else installation_df.loc[mask].copy()
 
     logger.info("Total BYOL to PAYG candidates found: %s", len(filtered_df))
     return filtered_df

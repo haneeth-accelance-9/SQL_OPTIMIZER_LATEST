@@ -2631,7 +2631,11 @@ def download_rule_data(request, rule_id):
     """Download Rule 1 or Rule 2 data as Excel. rule_id whitelisted to rule1, rule2."""
     if rule_id not in ALLOWED_RULE_IDS:
         return HttpResponse("Invalid rule.", status=400)
-    from optimizer.services.db_analysis_service import compute_live_db_metrics
+    from optimizer.services.db_analysis_service import (
+        compute_live_db_metrics,
+        _build_raw_installations_df,
+        _build_raw_rule1_df,
+    )
     context = compute_live_db_metrics()
     rr = context.get("rule_results", {})
     if rule_id == "rule1":
@@ -2643,9 +2647,51 @@ def download_rule_data(request, rule_id):
     if not data:
         return HttpResponse("No data to download.", status=404)
     from io import BytesIO
-    df = pd.DataFrame(data)
     buf = BytesIO()
-    df.to_excel(buf, index=False, engine="openpyxl")
+    if rule_id == "rule2":
+        raw_df = _build_raw_installations_df()
+        results_df = pd.DataFrame(data)
+        data_sources_df = pd.DataFrame([
+            {
+                "Source Table": "usu_installation",
+                "Django Model": "USUInstallation",
+                "Key Columns Used": "device_status, no_license_required, manufacturer, product_family, product_group, product_description, product_edition, license_metric, cpu_core_count, cpu_socket_count, topology_type, inv_status_std_name",
+                "Filter Applied (Rule 2)": "device_status = 'retired' AND no_license_required = 0",
+            },
+            {
+                "Source Table": "server",
+                "Django Model": "Server",
+                "Key Columns Used": "server_name, hosting_zone, environment, cloud_provider, is_cloud_device, installed_status_usu, installed_status_boones, is_active",
+                "Filter Applied (Rule 2)": "is_active = True (joined via FK to USUInstallation)",
+            },
+        ])
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            results_df.to_excel(writer, index=False, sheet_name="Rule2 Retired Devices")
+            if not raw_df.empty:
+                raw_df.to_excel(writer, index=False, sheet_name="Raw Input Data")
+            data_sources_df.to_excel(writer, index=False, sheet_name="Data Sources")
+    else:  # rule1
+        raw_df = _build_raw_rule1_df()
+        results_df = pd.DataFrame(data)
+        data_sources_df = pd.DataFrame([
+            {
+                "Source Table": "usu_installation",
+                "Django Model": "USUInstallation",
+                "Key Columns Used": "inv_status_std_name, no_license_required, product_family, manufacturer, product_description, device_status",
+                "Filter Applied (Rule 1)": "hosting_zone normalized to 'Public Cloud'/'Private Cloud AVS' AND inv_status_std_name != 'License Included' AND no_license_required = 0",
+            },
+            {
+                "Source Table": "server",
+                "Django Model": "Server",
+                "Key Columns Used": "server_name, hosting_zone, environment, cloud_provider, is_cloud_device, installed_status_usu, installed_status_boones, is_active",
+                "Filter Applied (Rule 1)": "hosting_zone in Public Cloud / Private Cloud AVS (after normalization); is_active = True",
+            },
+        ])
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            results_df.to_excel(writer, index=False, sheet_name="Rule1 PAYG Candidates")
+            if not raw_df.empty:
+                raw_df.to_excel(writer, index=False, sheet_name="Raw Input Data")
+            data_sources_df.to_excel(writer, index=False, sheet_name="Data Sources")
     buf.seek(0)
     response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = _safe_content_disposition(filename)
