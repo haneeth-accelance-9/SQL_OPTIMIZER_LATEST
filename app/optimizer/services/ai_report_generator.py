@@ -710,13 +710,14 @@ def _render_local_agent_report_markdown(
     lines.append("| Rule id | Matched count |")
     lines.append("|---|---:|")
     for rule_id in ordered_rule_ids:
-        lines.append(f"| `{rule_id}` | {matched_counts.get(rule_id, 0)} |")
+        display_rule_id = rule_id.replace("_", " ").title()
+        lines.append(f"| {display_rule_id} | {matched_counts.get(rule_id, 0)} |")
     lines.append("")
 
     lines.extend(["## Rule Results", ""])
     for rule_id in ordered_rule_ids:
         meta = rules_meta.get(rule_id) or {}
-        lines.append(f"### `{rule_id}`")
+        lines.append(f"### {rule_id.replace('_', ' ').title()}")
         lines.append("")
         if meta.get("description"):
             lines.append(f"- **Purpose**: {meta['description']}")
