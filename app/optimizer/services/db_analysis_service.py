@@ -665,6 +665,7 @@ def compute_db_metrics() -> dict:
     context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
     context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
+    context["rightsizing_cpu_savings"] = float(rws.get("rightsizing_cpu") or 0)
 
     # ── Strategy 3: CPU & RAM right-sizing ────────────────────────────────────
     return context
@@ -1641,5 +1642,6 @@ def compute_live_db_metrics() -> dict:
     context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
     context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
+    context["rightsizing_cpu_savings"] = float(rws.get("rightsizing_cpu") or 0)
 
     return context

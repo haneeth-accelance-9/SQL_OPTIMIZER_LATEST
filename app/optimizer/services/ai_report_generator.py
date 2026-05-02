@@ -579,8 +579,8 @@ def build_agent_strategy_results_payload(
             "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
             "physical_count": _safe_int(rightsizing.get("physical_count")),
             "estimated_savings_eur": _safe_float(
-                native_context.get("rightsizing_savings")
-                or (native_context.get("rule_wise_savings") or {}).get("rightsizing")
+                native_context.get("rightsizing_cpu_savings")
+                or (native_context.get("rule_wise_savings") or {}).get("rightsizing_cpu")
                 or 0
             ),
         },
@@ -608,27 +608,32 @@ def _build_agent_report_summary_context(
 ) -> Dict[str, Any]:
     license_metrics = native_context.get("license_metrics") or {}
     s3 = (strategy_results.get("strategy_3_rightsizing") or {}) if isinstance(strategy_results, dict) else {}
+    # Use CPU-only savings for Strategy 3 to match the dashboard "CPU Estimate Savings" card
     rightsizing_savings = _safe_float(
         s3.get("estimated_savings_eur")
-        or native_context.get("rightsizing_savings")
-        or (native_context.get("rule_wise_savings") or {}).get("rightsizing")
+        or native_context.get("rightsizing_cpu_savings")
+        or (native_context.get("rule_wise_savings") or {}).get("rightsizing_cpu")
         or 0
     )
+    azure_payg_savings = _safe_float(
+        (strategy_results.get("strategy_1_azure_byol_payg") or {}).get("estimated_savings_eur")
+        or native_context.get("azure_payg_savings")
+        or 0
+    )
+    retired_devices_savings = _safe_float(
+        (strategy_results.get("strategy_2_retired_devices") or {}).get("estimated_savings_eur")
+        or native_context.get("retired_devices_savings")
+        or 0
+    )
+    # Use the full combined total from native_context (includes RAM savings) to match the dashboard
+    total_savings = _safe_float(native_context.get("total_savings"))
     return {
         "total_demand_quantity": _safe_int(license_metrics.get("total_demand_quantity")),
         "total_license_cost": _safe_float(license_metrics.get("total_license_cost")),
         "azure_payg_count": _safe_int((strategy_results.get("strategy_1_azure_byol_payg") or {}).get("candidate_count")),
         "retired_count": _safe_int((strategy_results.get("strategy_2_retired_devices") or {}).get("candidate_count")),
-        "azure_payg_savings": _safe_float(
-            (strategy_results.get("strategy_1_azure_byol_payg") or {}).get("estimated_savings_eur")
-            or native_context.get("azure_payg_savings")
-            or 0
-        ),
-        "retired_devices_savings": _safe_float(
-            (strategy_results.get("strategy_2_retired_devices") or {}).get("estimated_savings_eur")
-            or native_context.get("retired_devices_savings")
-            or 0
-        ),
+        "azure_payg_savings": azure_payg_savings,
+        "retired_devices_savings": retired_devices_savings,
         "rightsizing_savings": rightsizing_savings,
         "cpu_count": _safe_int(s3.get("cpu_candidate_count")),
         "ram_count": _safe_int(s3.get("ram_candidate_count")),
@@ -638,7 +643,7 @@ def _build_agent_report_summary_context(
         "physical_count": _safe_int(s3.get("physical_count")),
         "total_vcpu_reduction": _safe_int(s3.get("total_vcpu_reduction")),
         "total_ram_reduction_gib": round(_safe_float(s3.get("total_ram_reduction_gib")), 1),
-        "total_savings": _safe_float(native_context.get("total_savings")),
+        "total_savings": total_savings,
     }
 
 
@@ -859,9 +864,39 @@ def build_live_agent_report_preview(
     merged_rightsizing = dict(rightsizing)
     merged_rightsizing.update(strategy_results.get("strategy_3_rightsizing") or {})
 
+    # Build authoritative count overrides so the Rule Coverage table matches the
+    # filter-funnel / _count fields rather than the length of the candidate lists
+    # (which may differ when lists are truncated or computed via a different path).
+    _mc_overrides: Dict[str, int] = {}
+    _uc1 = _safe_int(rule_results.get("azure_payg_count"))
+    if _uc1:
+        _mc_overrides["uc_1_1_azure_byol_to_payg"] = _uc1
+    _uc2 = _safe_int(rule_results.get("retired_count"))
+    if _uc2:
+        _mc_overrides["uc_1_2_retired_device_installs"] = _uc2
+    _cpu = _safe_int(merged_rightsizing.get("cpu_count") or merged_rightsizing.get("cpu_candidate_count"))
+    if _cpu:
+        _mc_overrides["uc_3_1_cpu_rightsizing"] = _cpu
+    _ram = _safe_int(merged_rightsizing.get("ram_count") or merged_rightsizing.get("ram_candidate_count"))
+    if _ram:
+        _mc_overrides["uc_3_2_ram_rightsizing"] = _ram
+    _crit_cpu = _safe_int(merged_rightsizing.get("crit_cpu_count"))
+    if _crit_cpu:
+        _mc_overrides["uc_3_3_criticality_cpu_optimization"] = _crit_cpu
+    _crit_ram = _safe_int(merged_rightsizing.get("crit_ram_count"))
+    if _crit_ram:
+        _mc_overrides["uc_3_4_criticality_ram_optimization"] = _crit_ram
+    _lc = _safe_int(merged_rightsizing.get("lifecycle_count"))
+    if _lc:
+        _mc_overrides["uc_3_5_lifecycle_risk_flags"] = _lc
+    _phys = _safe_int(merged_rightsizing.get("physical_count"))
+    if _phys:
+        _mc_overrides["uc_3_6_physical_system_review"] = _phys
+
     rules_evaluation = _build_local_rules_evaluation(
         rule_results=rule_results,
         rightsizing=merged_rightsizing,
+        matched_count_overrides=_mc_overrides,
     )
     summary_context = _build_agent_report_summary_context(native_context, strategy_results)
 
@@ -959,13 +994,19 @@ def _build_local_rules_evaluation(
     *,
     rule_results: Dict[str, Any],
     rightsizing: Dict[str, Any],
+    matched_count_overrides: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
     Build a lightweight rules-evaluation payload when the external A2A server is
     unavailable. This keeps AgentRun persistence and candidate creation working.
+
+    matched_count_overrides: map of report_rule_id -> authoritative count. When
+    provided, these replace len(rows) so the Rule Coverage table shows the same
+    counts as the filter funnel / _count fields in rule_results / rightsizing.
     """
     per_rule: dict[str, list[dict[str, Any]]] = {}
     summary_rules: list[dict[str, Any]] = []
+    _overrides = matched_count_overrides or {}
 
     source_rows_by_path = {
         "rule_results.azure_payg": rule_results.get("azure_payg") or [],
@@ -988,9 +1029,15 @@ def _build_local_rules_evaluation(
             recommendation_field=spec["recommendation_field"],
         )
         per_rule[report_rule_id] = rows
+        # Use authoritative count override when available; fall back to list length.
+        if report_rule_id in _overrides:
+            summary["matched_count"] = _overrides[report_rule_id]
         summary_rules.append(summary)
 
-    matched_counts = {rule_id: len(rows) for rule_id, rows in per_rule.items()}
+    matched_counts = {
+        rule_id: (_overrides.get(rule_id) if rule_id in _overrides else len(rows))
+        for rule_id, rows in per_rule.items()
+    }
 
     return {
         "success": True,
@@ -1302,52 +1349,98 @@ def generate_and_store_agentic_report(
 
 def get_fallback_report(context: Dict[str, Any]) -> str:
     """Generate a static fallback report when AI is not available."""
-    azure_count = context.get("azure_payg_count", 0)
-    retired_count = context.get("retired_count", 0)
-    total_demand = context.get("total_demand_quantity", 0)
-    total_cost = context.get("total_license_cost", 0)
+    azure_count    = context.get("azure_payg_count", 0)
+    retired_count  = context.get("retired_count", 0)
+    total_demand   = context.get("total_demand_quantity", 0)
+    total_cost     = context.get("total_license_cost", 0)
     total_cost_display = format_currency(total_cost)
+
+    demand_row_count  = context.get("demand_row_count", 0)
+    cpu_count         = context.get("cpu_count", 0)
+    ram_count         = context.get("ram_count", 0)
+    cpu_prod_count    = context.get("cpu_prod_count", 0)
+    cpu_nonprod_count = context.get("cpu_nonprod_count", 0)
+    ram_prod_count    = context.get("ram_prod_count", 0)
+    ram_nonprod_count = context.get("ram_nonprod_count", 0)
+    crit_cpu_count    = context.get("crit_cpu_count", 0)
+    crit_ram_count    = context.get("crit_ram_count", 0)
+    lifecycle_count   = context.get("lifecycle_count", 0)
+    physical_count    = context.get("physical_count", 0)
+
+    uc3_section = ""
+    if any([cpu_count, ram_count, crit_cpu_count, crit_ram_count, lifecycle_count, physical_count]):
+        uc3_section = f"""
+### 3. VM Rightsizing (Strategy 3)
+
+#### UC3.1 — CPU Rightsizing
+- **Total candidates:** **{cpu_count}** ({cpu_prod_count} PROD, {cpu_nonprod_count} NON-PROD)
+- PROD criteria: Avg CPU < 15%, Peak CPU ≤ 70%, vCPU ≥ 4
+- NON-PROD criteria: Avg CPU < 25%, Peak CPU ≤ 80%, vCPU ≥ 4
+
+#### UC3.2 — RAM Rightsizing
+- **Total candidates:** **{ram_count}** ({ram_prod_count} PROD, {ram_nonprod_count} NON-PROD)
+- PROD criteria: Avg FreeMem ≥ 35%, Min FreeMem ≥ 20%, RAM > 8 GiB
+- NON-PROD criteria: Avg FreeMem ≥ 30%, Min FreeMem ≥ 15%, RAM > 4 GiB
+
+#### UC3.3 — Critically-Aware CPU Optimisation
+- **Total flags:** **{crit_cpu_count}** (human review required before any change)
+- Downsize candidates: All Critical systems with Avg CPU < 10%
+- Upsize candidates: Bus/Mission Critical systems with Avg CPU > 80%
+
+#### UC3.4 — Critically-Aware RAM Optimisation
+- **Total flags:** **{crit_ram_count}** (human review required before any change)
+- Downsize candidates: All Critical systems with Avg FreeMem > 80%
+- Upsize candidates: Bus/Mission Critical systems with Avg FreeMem < 20%
+
+#### UC3.5 — Lifecycle Risk Flags
+- **Systems flagged:** **{lifecycle_count}** — Bus/Mission Critical AND Peak CPU > 95% AND Min FreeMem < 5%
+- All flagged systems require **human review** before automated changes proceed.
+
+#### Physical Systems
+- **Physical servers identified:** **{physical_count}** — rightsizing requires human approval before execution.
+"""
 
     return normalize_report_content_text(f"""# SQL Server License Optimization Report
 
 ## Executive Summary
 
-This report presents a **detailed analysis** of your SQL Server license posture based on the uploaded dataset. The analysis identifies **{total_demand}** units of license demand and evaluates two critical optimization areas: *Azure BYOL to PAYG migration* and *software installations on retired devices*. Key findings include **{azure_count}** devices eligible for PAYG migration and **{retired_count}** devices with potential data quality or decommissioning issues.
+This report presents a **detailed analysis** of your SQL Server license posture based on live database data. The analysis identifies **{total_demand}** units of license demand and evaluates three optimization strategies: *Azure BYOL to PAYG migration*, *retired device cleanup*, and *VM rightsizing*. Key findings: **{azure_count}** PAYG candidates, **{retired_count}** retired-but-active devices, **{cpu_count}** CPU rightsizing candidates, **{ram_count}** RAM rightsizing candidates, and **{lifecycle_count + physical_count}** systems requiring human review.
 
 ## Current State
 
 - **Total license demand (quantity):** {total_demand}
 - **Total estimated license cost:** {total_cost_display}
-- **Demand records processed:** {context.get('demand_row_count', 0)}
+- **Demand records processed:** {demand_row_count}
 
-Understanding your *current state* is essential before making optimization decisions. The figures above reflect the aggregated demand and cost from the processed inventory.
+Understanding your *current state* is essential before making optimization decisions. The figures above reflect the aggregated demand and cost from the live inventory.
 
 ## Optimization Opportunities
 
-### 1. Azure BYOL â†’ PAYG
+### 1. Azure BYOL → PAYG (UC1)
 
 - **Eligible devices:** **{azure_count}**
-- These devices are running SQL Server in *Azure* (Public Cloud, Private Cloud AVS, or Private Cloud) and are not on *"License included"*. They represent candidates for switching to **Pay-As-You-Go** licensing, which can simplify billing and reduce upfront commitment.
-- **Recommendation:** Review each candidate for *cost* and *compliance*, then plan migration where beneficial. Consider workload patterns and reserved capacity options.
+- These devices are running SQL Server in Azure (Public Cloud, Private Cloud AVS, or Private Cloud) and are candidates for switching to **Pay-As-You-Go** licensing.
+- **Recommendation:** Review each candidate for cost and compliance, then plan migration where beneficial.
 
-### 2. Software Installations on Retired Devices
+### 2. Software Installations on Retired Devices (UC2)
 
 - **Affected devices:** **{retired_count}**
-- These devices are marked as **retired** in the CMDB but still report software installations through discovery tools. This indicates one or more of: *stale CMDB data*, *incomplete decommissioning*, or *outdated discovery results*. Each scenario carries different implications for accuracy and compliance.
-- **Recommendation:** Reconcile CMDB status, complete decommissioning procedures where needed, or refresh discovery data to align with reality.
-
+- These devices are marked as **retired** in the CMDB but still report active software installations, indicating stale CMDB data or incomplete decommissioning.
+- **Recommendation:** Reconcile CMDB status and complete decommissioning procedures.
+{uc3_section}
 ## Risks
 
-- **Data quality:** Retired devices with active installations suggest possible *CMDB or discovery inaccuracies*, which can affect reporting and audit readiness.
-- **Compliance:** Unclear license posture on retired or cloud devices may create **compliance risk** and should be clarified.
+- **Data quality:** Retired devices with active installations suggest CMDB or discovery inaccuracies.
+- **Compliance:** Unclear license posture on retired or cloud devices may create compliance risk.
+- **Rightsizing guardrails:** Critical and physical systems must not be changed automatically without owner validation.
 
 ## Recommendations
 
-1. **Prioritize** review of Azure PAYG candidates and model cost impact before migrating.
-2. **Clean up** retired device records and discovery data to improve accuracy.
-3. **Establish** periodic re-runs of this analysis to track improvement over time.
-4. **Consider** a tagging and approval workflow for BYOL â†’ PAYG changes.
-5. **Document** the license assignment and retirement process for audit and governance.
+1. **Prioritize** review of Azure PAYG candidates ({azure_count} devices) and model cost impact before migrating.
+2. **Clean up** retired device records ({retired_count} devices) and refresh discovery data.
+3. **Schedule** CPU and RAM rightsizing ({cpu_count + ram_count} combined candidates) through change windows with application owners.
+4. **Route** all {lifecycle_count} lifecycle-risk and {physical_count} physical system flags through human review before any automated action.
+5. **Establish** periodic re-runs of this analysis to track improvement over time.
 
 ---
 *Report generated by SQL License Optimizer. For a more tailored narrative, configure Azure OpenAI.*
