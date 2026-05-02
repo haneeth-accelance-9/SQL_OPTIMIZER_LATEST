@@ -1,0 +1,37 @@
+
+==============================================
+  USU Weekly Data Sync
+==============================================
+  Tenant : default
+-- Fetching Installations ------------------------------
+  Page 1 | got 100 | total 100 | 49.9s
+  Page 2 | got 100 | total 200 | 1.6s
+  Page 3 | got 100 | total 300 | 1.4s
+  Page 4 | got 100 | total 400 | 1.1s
+  Page 5 | got 100 | total 500 | 1.0s
+  Page 6 | got 100 | total 600 | 1.0s
+  Page 7 | got 100 | total 700 | 1.0s
+  Page 8 | got 100 | total 800 | 0.9s
+  Page 9 | got 100 | total 900 | 0.9s
+  Page 10 | got 100 | total 1,000 | 1.1s
+  Page 11 | got 100 | total 1,100 | 0.9s
+  Page 12 | got 100 | total 1,200 | 1.1s
+  Page 13 | got 100 | total 1,300 | 0.9s
+  Page 14 | got 100 | total 1,400 | 0.9s
+  Page 15 | got 100 | total 1,500 | 1.2s
+  Page 16 | got 100 | total 1,600 | 1.0s
+  Page 17 | got 100 | total 1,700 | 0.9s
+  Page 18 | got 100 | total 1,800 | 0.9s
+  Page 19 | got 100 | total 1,900 | 1.0s
+  Page 20 | got 100 | total 2,000 | 0.9s
+  Page 21 | got 100 | total 2,100 | 0.9s
+  Page 22 | got 100 | total 2,200 | 1.0s
+  Page 23 | got 1 | total 2,201 | 0.6s
+  Installations total: 2,201
+  Writing 2,201 installations -> usu_installation ...
+  Deleted 2,500 stale rows from usu_installation
+  OK: usu_installation: 2,201 rows saved in 610.9s
+  Installations done in 694.2s
+  Skipping demand details (--skip-demand)
+
+== Sync complete in 11m 36s ==

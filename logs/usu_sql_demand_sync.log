@@ -1,0 +1,15 @@
+
+==============================================
+  USU Weekly Data Sync
+==============================================
+  Tenant : default
+  Skipping installations (--skip-install)
+-- Fetching Demand Details (sequential) ----------------
+  Page 1 | got 1,493 | total 1,493 | 278 rec/s | ETA 462m 7s | 5.4s
+  Demand total: 1,493 records in 0m 5s
+  Writing 1,493 demand details -> usu_demand_detail ...
+  Deleted 0 stale rows from usu_demand_detail
+  OK: usu_demand_detail: 1,493 rows saved in 6m 14s
+  Demand details done in 6m 19s
+
+== Sync complete in 6m 26s ==

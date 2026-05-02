@@ -277,11 +277,13 @@ def _friendly_rule_heading(rule_id: str, meta: dict[str, Any] | None) -> str:
 def _fmt_eur(value: Any) -> str:
     try:
         if value is None:
-            return "€0.00"
+            return "0,00 €"
         x = float(value)
     except Exception:
-        return "€0.00"
-    return f"€{x:,.2f}"
+        return "0,00 €"
+    # European format: dot as thousands separator, comma as decimal, € symbol at end
+    formatted = f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{formatted} €"
 
 
 def _strategy_overview(strategy_results: dict[str, Any]) -> list[dict[str, Any]]:
