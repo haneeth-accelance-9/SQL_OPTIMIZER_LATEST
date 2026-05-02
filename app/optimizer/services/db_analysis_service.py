@@ -574,8 +574,40 @@ def _prepare_db_prices_for_demand(
     return aligned_prices.drop_duplicates(subset=["product_name"], keep="first").reset_index(drop=True)
 
 
-_RETIRED_EXCLUDED_ZONES = frozenset({"remote site", "functional site"})
 _INSTALLED_STATUSES = frozenset({"install", "installed"})
+
+_UC1_VALID_LICENSE_TYPES = frozenset({"standard", "enterprise"})
+
+
+def _filter_to_standard_enterprise_servers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    UC1 initial filter: keep only rows whose server has a product_edition of
+    Standard or Enterprise (case-insensitive). Servers with any other license
+    type (or no edition at all) are excluded before UC1 rules are applied.
+    """
+    if df.empty or "server_id" not in df.columns:
+        return df
+
+    all_server_ids = [s for s in df["server_id"].dropna().unique().tolist() if s]
+    if not all_server_ids:
+        return df
+
+    edition_map = _build_server_product_edition_map(all_server_ids)
+
+    valid_server_ids = {
+        sid for sid in all_server_ids
+        if edition_map.get(sid, "").strip().lower() in _UC1_VALID_LICENSE_TYPES
+    }
+
+    excluded = len(all_server_ids) - len(valid_server_ids)
+    logger.info(
+        "[UC1 PAYG] License-type pre-filter — total servers: %d | Standard/Enterprise: %d | other/none (excluded): %d",
+        len(all_server_ids),
+        len(valid_server_ids),
+        excluded,
+    )
+
+    return df[df["server_id"].isin(valid_server_ids)].copy()
 
 
 def _compute_device_cost_from_df(df: pd.DataFrame) -> float:
@@ -604,43 +636,20 @@ def compute_retired_devices_extended_metrics(
     retired_df: pd.DataFrame,
 ) -> dict:
     """
-    Extended UC2 metrics built from Server + cpu_utilisation + usu_demand_detail.
+    Extended UC2 metrics built from Server + usu_demand_detail.
 
     Step 1 – Total retired devices count
-    Step 2 – Retired devices at Remote Site / Functional Site (excluded zones)
-    Step 3 – Actual Retired = Step1 − Step2
-    Step 4 – Installed devices count  (install_status = 'install' / 'installed')
-    Step 5 – Savings for Actual Retired: sum of (Price × eff_quantity) / 2
-    Step 6 – Cost for Installed Devices: sum of (Price × eff_quantity) / 2
+    Step 2 – Installed devices count  (install_status = 'install' / 'installed')
+    Step 3 – Savings for Retired Devices: sum of (Price × eff_quantity) / 2
+    Step 4 – Cost for Installed Devices: sum of (Price × eff_quantity) / 2
     """
-    _empty = {
-        "total_retired_count": 0,
-        "remote_functional_site_count": 0,
-        "actual_retired_count": 0,
-        "installed_count": 0,
-        "actual_retired_savings_eur": 0.0,
-        "installed_devices_cost_eur": 0.0,
-    }
-
     if retired_df is None:
         retired_df = pd.DataFrame()
 
-    # Step 1
+    # Step 1 — total retired count
     total_retired_count = len(retired_df)
 
-    # Step 2 & 3 — exclude Remote/Functional Site devices
-    if not retired_df.empty and "u_hosting_zone" in retired_df.columns:
-        zone_col = retired_df["u_hosting_zone"].astype(str).str.strip().str.lower()
-        zone_mask = zone_col.isin(_RETIRED_EXCLUDED_ZONES)
-        remote_functional_count = int(zone_mask.sum())
-        actual_retired_df = retired_df[~zone_mask].copy()
-    else:
-        remote_functional_count = 0
-        actual_retired_df = retired_df.copy()
-
-    actual_retired_count = len(actual_retired_df)
-
-    # Step 4 — installed devices from full installations DataFrame
+    # Step 2 — installed devices from full installations DataFrame
     if not installations_df.empty and "install_status" in installations_df.columns:
         install_mask = (
             installations_df["install_status"]
@@ -653,17 +662,77 @@ def compute_retired_devices_extended_metrics(
         installed_df = pd.DataFrame()
         installed_count = 0
 
-    # Step 5 & 6 — cost calculations
-    actual_retired_savings = _compute_device_cost_from_df(actual_retired_df)
+    # Step 3 & 4 — cost calculations
+    retired_savings = _compute_device_cost_from_df(retired_df)
     installed_devices_cost = _compute_device_cost_from_df(installed_df)
 
     return {
         "total_retired_count": total_retired_count,
-        "remote_functional_site_count": remote_functional_count,
-        "actual_retired_count": actual_retired_count,
         "installed_count": installed_count,
-        "actual_retired_savings_eur": actual_retired_savings,
+        "retired_devices_savings_eur": retired_savings,
         "installed_devices_cost_eur": installed_devices_cost,
+    }
+
+
+def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
+    """
+    UC1 PAYG cost metrics.
+
+    Cost calculation — only servers that have Standard/Enterprise in usu_demand_detail
+    (eff_quantity is sourced from demand_detail; servers without it have eff_quantity=0
+    and are excluded to avoid misleading zero-cost rows).
+
+    PROD candidates count — unique servers with environment='Production' across the
+    full pre-filtered PAYG set (1281 rows), returned as a separate response field.
+
+      Actual_Line_Cost per server = (Price × eff_quantity) / 2
+      Total_PAYG_Cost             = SUM(Actual_Line_Cost)
+      Total_PAYG_Savings          = 80% of Total_PAYG_Cost
+    """
+    if azure_payg_df.empty:
+        return {
+            "azure_payg_total_cost_eur": 0.0,
+            "azure_payg_savings_eur": 0.0,
+            "azure_payg_prod_candidates_count": 0,
+        }
+
+    from optimizer.models import USUDemandDetail
+
+    all_server_ids = [s for s in azure_payg_df["server_id"].dropna().unique().tolist() if s]
+
+    # Restrict cost calculation to servers with eff_quantity data (demand_detail only)
+    demand_server_ids = set(
+        str(sid)
+        for sid in USUDemandDetail.objects
+        .filter(server_id__in=all_server_ids)
+        .filter(product_edition__iregex=r"^(standard|enterprise)$")
+        .values_list("server_id", flat=True)
+        .distinct()
+    )
+    cost_df = azure_payg_df[azure_payg_df["server_id"].isin(demand_server_ids)]
+    total_cost = _compute_device_cost_from_df(cost_df)
+    payg_savings = round(total_cost * 0.80, 2)
+
+    # PROD candidates: unique servers with environment = 'Production'
+    prod_candidates_count = 0
+    if "environment" in azure_payg_df.columns:
+        prod_mask = (
+            azure_payg_df["environment"].astype(str).str.strip().str.lower() == "production"
+        )
+        prod_candidates_count = int(
+            azure_payg_df.loc[prod_mask, "server_id"].dropna().nunique()
+        )
+
+    logger.info(
+        "[UC1 PAYG] Cost servers (demand_detail Standard/Enterprise): %d | PROD candidates: %d",
+        len(demand_server_ids),
+        prod_candidates_count,
+    )
+
+    return {
+        "azure_payg_total_cost_eur": total_cost,
+        "azure_payg_savings_eur": payg_savings,
+        "azure_payg_prod_candidates_count": prod_candidates_count,
     }
 
 
@@ -684,6 +753,7 @@ def compute_db_metrics() -> dict:
     total_devices = Server.objects.filter(is_active=True).count()
 
     # ── Run existing rule engine (same as upload path) ────────────────────────
+    azure_df_uc1 = pd.DataFrame()
     retired_df_uc2 = pd.DataFrame()
     if not installations_df.empty:
         rule_results = run_rules(installations_df)
@@ -691,6 +761,11 @@ def compute_db_metrics() -> dict:
             installations_df,
             rule_results.get("azure_payg") or [],
         )
+        try:
+            uc1_installations_df = _filter_to_standard_enterprise_servers(installations_df)
+            azure_df_uc1 = find_azure_payg_candidates_from_db(uc1_installations_df)
+        except Exception:
+            pass
         try:
             retired_df_uc2 = find_retired_devices_with_installations_from_db(installations_df)
         except Exception:
@@ -711,6 +786,7 @@ def compute_db_metrics() -> dict:
             },
         }
 
+    rule_results.update(compute_azure_payg_cost_metrics(azure_df_uc1))
     rule_results.update(
         compute_retired_devices_extended_metrics(installations_df, retired_df_uc2)
     )
@@ -766,9 +842,9 @@ def compute_db_metrics() -> dict:
     }
     context.update(_calculate_savings(rule_results, license_metrics, rightsizing=rightsizing_for_savings))
 
-    # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
+    # Flatten per-strategy savings — UC1 uses new formula (80% of total line cost)
     rws = context.get("rule_wise_savings") or {}
-    context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
+    context["azure_payg_savings"] = float(rule_results.get("azure_payg_savings_eur") or 0)
     context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
 
@@ -876,7 +952,7 @@ def _build_server_product_edition_map(server_ids: list[Any]) -> dict[Any, str]:
         preferred: dict[Any, str] = {}
         fallback: dict[Any, str] = {}
         for row in rows:
-            server_id = row["server_id"]
+            server_id = str(row["server_id"])
             edition = str(row.get("product_edition") or "").strip()
             if not edition:
                 continue
@@ -933,7 +1009,7 @@ def _build_server_eff_quantity_map(server_ids: list[Any]) -> dict[Any, float]:
         .annotate(total_eff_quantity=Sum("eff_quantity"))
     )
     return {
-        row["server_id"]: float(row["total_eff_quantity"] or 0)
+        str(row["server_id"]): float(row["total_eff_quantity"] or 0)
         for row in rows
     }
 
@@ -1721,15 +1797,16 @@ def compute_live_db_metrics() -> dict:
             return []
         return df.replace({pd.NA: None}).to_dict("records")
 
+    azure_df = pd.DataFrame()
     retired_df = pd.DataFrame()
 
     if not installations_df.empty:
-        azure_df = pd.DataFrame()
         azure_error = None
         retired_error = None
 
         try:
-            azure_df = find_azure_payg_candidates_from_db(installations_df)
+            uc1_installations_df = _filter_to_standard_enterprise_servers(installations_df)
+            azure_df = find_azure_payg_candidates_from_db(uc1_installations_df)
         except Exception as exc:
             logger.exception("Rule 1 (Azure PAYG) failed against DB-backed installation data.")
             azure_error = str(exc)
@@ -1771,6 +1848,7 @@ def compute_live_db_metrics() -> dict:
     rule_results.update(
         compute_retired_devices_extended_metrics(installations_df, retired_df)
     )
+    rule_results.update(compute_azure_payg_cost_metrics(azure_df))
 
     license_metrics = compute_license_metrics(
         demand_df if not demand_df.empty else pd.DataFrame(),
@@ -1827,7 +1905,7 @@ def compute_live_db_metrics() -> dict:
 
     # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
     rws = context.get("rule_wise_savings") or {}
-    context["azure_payg_savings"] = float(rws.get("azure_payg") or 0)
+    context["azure_payg_savings"] = float(rule_results.get("azure_payg_savings_eur") or 0)
     context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
 

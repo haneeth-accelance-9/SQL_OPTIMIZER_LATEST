@@ -76,6 +76,17 @@ def find_azure_payg_candidates(
     ) if sort_cols else installation_df.loc[mask].copy()
 
     logger.info("Total BYOL to PAYG candidates found: %s", len(filtered_df))
+
+    if not filtered_df.empty and "product_description" in filtered_df.columns:
+        unique_products = sorted(
+            p for p in filtered_df["product_description"].dropna().unique().tolist() if p
+        )
+        logger.info(
+            "UC1 PAYG — distinct products (%d):\n%s",
+            len(unique_products),
+            "\n".join(f"  - {p}" for p in unique_products),
+        )
+
     return filtered_df
 
 
