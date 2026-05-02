@@ -945,7 +945,7 @@ def _calculate_cpu_rightsizing_savings_eur(
 def _build_server_product_edition_map(server_ids: list[Any]) -> dict[Any, str]:
     from optimizer.models import USUDemandDetail, USUInstallation
 
-    unique_server_ids = list(dict.fromkeys(server_ids or []))
+    unique_server_ids = list(dict.fromkeys(str(s) for s in (server_ids or []) if s))
     if not unique_server_ids:
         return {}
 
@@ -998,7 +998,7 @@ def _build_server_eff_quantity_map(server_ids: list[Any]) -> dict[Any, float]:
     from django.db.models import Sum
     from optimizer.models import USUDemandDetail
 
-    unique_ids = list(dict.fromkeys(server_ids or []))
+    unique_ids = list(dict.fromkeys(str(s) for s in (server_ids or []) if s))
     if not unique_ids:
         return {}
 
@@ -1091,6 +1091,30 @@ def _build_rightsizing_df() -> pd.DataFrame:
         return pd.DataFrame()
 
     server_ids_for_rows = [util.server_id for util in rows]
+
+    # UC3 license-type pre-filter: keep only servers with Standard or Enterprise
+    # product_edition in usu_demand_detail (same rule as UC1).
+    from optimizer.models import USUDemandDetail as _UDD
+    _valid_server_ids = set(
+        str(sid)
+        for sid in _UDD.objects
+        .filter(server_id__in=server_ids_for_rows)
+        .filter(product_edition__iregex=r"^(standard|enterprise)$")
+        .values_list("server_id", flat=True)
+        .distinct()
+    )
+    total_before = len(set(str(sid) for sid in server_ids_for_rows))
+    rows = [util for util in rows if str(util.server_id) in _valid_server_ids]
+    logger.info(
+        "[UC3 Rightsizing] License-type pre-filter — total servers: %d | Standard/Enterprise: %d | excluded: %d",
+        total_before,
+        len(_valid_server_ids),
+        total_before - len(_valid_server_ids),
+    )
+    if not rows:
+        return pd.DataFrame()
+    server_ids_for_rows = [util.server_id for util in rows]
+
     product_edition_by_server_id = _build_server_product_edition_map(server_ids_for_rows)
     eff_quantity_by_server_id = _build_server_eff_quantity_map(server_ids_for_rows)
     server_records: dict = {}
@@ -1121,8 +1145,8 @@ def _build_rightsizing_df() -> pd.DataFrame:
                 "server_name": server.server_name or "",
                 "hosting_zone": _normalize_hosting_zone(server.hosting_zone or ""),
                 "installed_status_usu": server.installed_status_usu or "",
-                "product_edition": product_edition_by_server_id.get(server.id, ""),
-                "eff_quantity": eff_quantity_by_server_id.get(server.id, 0.0),
+                "product_edition": product_edition_by_server_id.get(str(server.id), ""),
+                "eff_quantity": eff_quantity_by_server_id.get(str(server.id), 0.0),
             })
             server_records[server.id] = record
 
@@ -1187,8 +1211,6 @@ def compute_rightsizing_metrics() -> dict:
         find_criticality_cpu_upsize_optimizations,
         find_criticality_ram_downsize_optimizations,
         find_criticality_ram_upsize_optimizations,
-        find_lifecycle_risk_flags,
-        find_physical_systems_flags,
     )
 
     workload_options = ["CPU", "RAM"]
@@ -1223,8 +1245,6 @@ def compute_rightsizing_metrics() -> dict:
         "ram_prod_optimization_count": 0, "ram_nonprod_optimization_count": 0,
         "crit_cpu_optimizations": [], "crit_cpu_count": 0,
         "crit_ram_optimizations": [], "crit_ram_count": 0,
-        "lifecycle_risk_flags": [], "lifecycle_count": 0,
-        "physical_system_flags": [], "physical_count": 0,
         "workload_options": workload_options,
         "default_workload": default_workload,
         "default_filter_by_workload": default_filter_by_workload,
@@ -1257,16 +1277,45 @@ def compute_rightsizing_metrics() -> dict:
     ram_df = pd.DataFrame()
     crit_cpu_df = pd.DataFrame()
     crit_ram_df = pd.DataFrame()
-    lifecycle_df = pd.DataFrame()
-    physical_df = pd.DataFrame()
-
     try:
         cpu_df = find_cpu_rightsizing_optimizations(df)
+        if not cpu_df.empty:
+            before = len(cpu_df)
+            # Filter 1: no-op rows where recommendation equals current
+            cpu_df = cpu_df[
+                cpu_df["Recommended_vCPU"].notna() &
+                (cpu_df["Recommended_vCPU"] != cpu_df["Current_vCPU"])
+            ]
+            # Filter 2: neither current nor recommended can be below 4
+            cpu_df = cpu_df[
+                (cpu_df["Current_vCPU"] >= 4) &
+                (cpu_df["Recommended_vCPU"] >= 4)
+            ]
+            logger.info(
+                "[UC3 CPU] Post-rule filter: %d → %d rows (removed %d)",
+                before, len(cpu_df), before - len(cpu_df),
+            )
     except Exception as exc:
         logger.exception("UC 3.1 CPU right-sizing rule failed: %s", exc)
 
     try:
         ram_df = find_ram_rightsizing_optimizations(df)
+        if not ram_df.empty:
+            before = len(ram_df)
+            # Filter 1: no-op rows where recommendation equals current
+            ram_df = ram_df[
+                ram_df["Recommended_RAM_GiB"].notna() &
+                (ram_df["Recommended_RAM_GiB"] != ram_df["Current_RAM_GiB"])
+            ]
+            # Filter 2: neither current nor recommended can be below 8
+            ram_df = ram_df[
+                (ram_df["Current_RAM_GiB"] >= 8) &
+                (ram_df["Recommended_RAM_GiB"] >= 8)
+            ]
+            logger.info(
+                "[UC3 RAM] Post-rule filter: %d → %d rows (removed %d)",
+                before, len(ram_df), before - len(ram_df),
+            )
     except Exception as exc:
         logger.exception("UC 3.2 RAM right-sizing rule failed: %s", exc)
 
@@ -1276,6 +1325,20 @@ def compute_rightsizing_metrics() -> dict:
              find_criticality_cpu_upsize_optimizations(df)],
             ignore_index=True,
         )
+        if not crit_cpu_df.empty:
+            before = len(crit_cpu_df)
+            crit_cpu_df = crit_cpu_df[
+                crit_cpu_df["Recommended_vCPU"].notna() &
+                (crit_cpu_df["Recommended_vCPU"] != crit_cpu_df["Current_vCPU"])
+            ]
+            crit_cpu_df = crit_cpu_df[
+                (crit_cpu_df["Current_vCPU"] >= 4) &
+                (crit_cpu_df["Recommended_vCPU"] >= 4)
+            ]
+            logger.info(
+                "[UC3 Crit-CPU] Post-rule filter: %d → %d rows (removed %d)",
+                before, len(crit_cpu_df), before - len(crit_cpu_df),
+            )
     except Exception as exc:
         logger.exception("UC 3.3 criticality CPU rule failed: %s", exc)
 
@@ -1285,18 +1348,22 @@ def compute_rightsizing_metrics() -> dict:
              find_criticality_ram_upsize_optimizations(df)],
             ignore_index=True,
         )
+        if not crit_ram_df.empty:
+            before = len(crit_ram_df)
+            crit_ram_df = crit_ram_df[
+                crit_ram_df["Recommended_RAM_GiB"].notna() &
+                (crit_ram_df["Recommended_RAM_GiB"] != crit_ram_df["Current_RAM_GiB"])
+            ]
+            crit_ram_df = crit_ram_df[
+                (crit_ram_df["Current_RAM_GiB"] >= 8) &
+                (crit_ram_df["Recommended_RAM_GiB"] >= 8)
+            ]
+            logger.info(
+                "[UC3 Crit-RAM] Post-rule filter: %d → %d rows (removed %d)",
+                before, len(crit_ram_df), before - len(crit_ram_df),
+            )
     except Exception as exc:
         logger.exception("UC 3.4 criticality RAM rule failed: %s", exc)
-
-    try:
-        lifecycle_df = find_lifecycle_risk_flags(df)
-    except Exception as exc:
-        logger.exception("Lifecycle risk flags failed: %s", exc)
-
-    try:
-        physical_df = find_physical_systems_flags(df)
-    except Exception as exc:
-        logger.exception("Physical systems flags failed: %s", exc)
 
     # ── Column subsets for display ─────────────────────────────────────────────
     _CPU_COLS = [
@@ -1379,28 +1446,6 @@ def compute_rightsizing_metrics() -> dict:
         "Lifecycle_Flag",
         "Optimization_Type",
     ]
-    _LIFECYCLE_COLS = [
-        "server_name",
-        "is_virtual",
-        "Criticality",
-        "Environment",
-        "Peak_CPU_12m",
-        "Min_FreeMem_12m",
-        "Lifecycle_Risk_Reasons",
-        "Human_Review_Required",
-    ]
-    _PHYSICAL_COLS = [
-        "server_name",
-        "product_family",
-        "product_description",
-        "is_virtual",
-        "Environment",
-        "Criticality",
-        "IsVirtual_Status",
-        "Human_Review_Required",
-        "Review_Reason",
-    ]
-
     def _to_records(
         src: pd.DataFrame,
         cols: list,
@@ -1453,20 +1498,6 @@ def compute_rightsizing_metrics() -> dict:
         recommended_col="Recommended_RAM_GiB",
         reduction_col="Potential_RAM_Reduction_GiB",
     )
-
-    def _simple_records(src: pd.DataFrame, cols: list) -> list:
-        if src.empty:
-            return []
-        keep = [c for c in cols if c in src.columns]
-        return (
-            src[keep]
-            .round(2)
-            .replace({float("nan"): None})
-            .to_dict("records")
-        )
-
-    lifecycle_records = _simple_records(lifecycle_df, _LIFECYCLE_COLS)
-    physical_records  = _simple_records(physical_df,  _PHYSICAL_COLS)
 
     # ── PROD / NON-PROD breakdown ──────────────────────────────────────────────
     def _filter_records(records: list, filter_value: str) -> list:
@@ -1593,10 +1624,6 @@ def compute_rightsizing_metrics() -> dict:
         "crit_cpu_count": len(crit_cpu_records),
         "crit_ram_optimizations": crit_ram_records,
         "crit_ram_count": len(crit_ram_records),
-        "lifecycle_risk_flags": lifecycle_records,
-        "lifecycle_count": len(lifecycle_records),
-        "physical_system_flags": physical_records,
-        "physical_count": len(physical_records),
         "workload_options": workload_options,
         "default_workload": default_workload,
         "default_filter_by_workload": default_filter_by_workload,
@@ -1618,14 +1645,23 @@ def compute_rightsizing_metrics() -> dict:
     return result
 
 
+# Download sheet keys use "Rightsizing" suffix; the rule stamps "Optimization" suffix.
+# This map translates sheet keys back to the actual Optimization_Type column values.
+_SHEET_KEY_TO_OPT_TYPE = {
+    "PROD_CPU_Rightsizing":    "PROD_CPU_Optimization",
+    "NONPROD_CPU_Rightsizing": "NONPROD_CPU_Optimization",
+    "PROD_RAM_Rightsizing":    "PROD_RAM_Optimization",
+    "NONPROD_RAM_Rightsizing": "NONPROD_RAM_Optimization",
+}
+
+
 def _get_rightsizing_sheet_export_headers(sheet_key: str) -> list[str]:
     headers = list(RIGHTSIZING_REPORT_BASE_HEADERS)
     normalized_sheet_key = str(sheet_key or "").strip().upper()
-    if normalized_sheet_key.endswith("_RECOMMENDATION"):
-        if "_RAM_" in normalized_sheet_key:
-            headers.extend(["RAM_Recommendation", "Recommended_RAM_GiB"])
-        else:
-            headers.extend(["CPU_Recommendation", "Recommended_vCPU"])
+    if "_RAM_" in normalized_sheet_key:
+        headers.extend(["RAM_Recommendation", "Recommended_RAM_GiB"])
+    else:
+        headers.extend(["CPU_Recommendation", "Recommended_vCPU"])
     return headers
 
 
@@ -1650,12 +1686,27 @@ def build_rightsizing_sheet_export(sheet_key: str) -> pd.DataFrame:
     else:
         result_df = find_cpu_rightsizing_optimizations(source_df)
 
-    filter_field = (
-        "Recommendation_Type"
-        if normalized_sheet_key.endswith("_Recommendation")
-        else "Optimization_Type"
-    )
-    filtered_df = result_df[result_df[filter_field] == normalized_sheet_key].copy()
+    # Translate the "Rightsizing" sheet key to the actual column value stamped by the rule
+    actual_filter_value = _SHEET_KEY_TO_OPT_TYPE.get(normalized_sheet_key, normalized_sheet_key)
+    filtered_df = result_df[result_df["Optimization_Type"] == actual_filter_value].copy()
+
+    # Apply the same post-rule filters used on the dashboard so export matches screen data
+    if "_RAM_" in normalized_sheet_key.upper():
+        if not filtered_df.empty and "Recommended_RAM_GiB" in filtered_df.columns:
+            filtered_df = filtered_df[
+                filtered_df["Recommended_RAM_GiB"].notna()
+                & (filtered_df["Recommended_RAM_GiB"] != filtered_df["Current_RAM_GiB"])
+                & (filtered_df["Current_RAM_GiB"] >= 8)
+                & (filtered_df["Recommended_RAM_GiB"] >= 8)
+            ]
+    else:
+        if not filtered_df.empty and "Recommended_vCPU" in filtered_df.columns:
+            filtered_df = filtered_df[
+                filtered_df["Recommended_vCPU"].notna()
+                & (filtered_df["Recommended_vCPU"] != filtered_df["Current_vCPU"])
+                & (filtered_df["Current_vCPU"] >= 4)
+                & (filtered_df["Recommended_vCPU"] >= 4)
+            ]
 
     filtered_df = filtered_df.reindex(columns=headers).copy()
     numeric_columns = filtered_df.select_dtypes(include="number").columns

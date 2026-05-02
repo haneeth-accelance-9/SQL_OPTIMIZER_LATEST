@@ -2185,12 +2185,12 @@ def api_savings_summary(request):
 @login_required
 def api_oracle_data(request):
     """
-    API: USU Installations and Demand Details — MySQL and/or Oracle (Java) product families.
+    API: USU Installations and Demand Details — MSSQL and/or Oracle (Java) product families.
 
     GET /api/usu-data/
 
     Query params (all optional):
-      family    — "mysql" | "oracle" | "all"  (default: "all")
+      family    — "mssql" | "oracle" | "all"  (default: "all")
       type      — "installations" | "demand" | "all"  (default: "all")
       page      — 1-based page number  (default: 1)
       page_size — rows per page, max 500  (default: 100)
@@ -2206,21 +2206,16 @@ def api_oracle_data(request):
         "request_id": str,
         "status": "completed",
         "family": "all",
-        "result": {
-          "mysql":  { "product_family": "MySQL",  "label": "MySQL Server Data",
-                      "installations": {...}, "demand_details": {...} },
-          "oracle": { "product_family": "Java",   "label": "Oracle Server Data",
-                      "installations": {...}, "demand_details": {...} }
-        }
+        "result": { "installations": {...}, "demand_details": {...} }
       }
 
-    Response shape (family=mysql or family=oracle):
+    Response shape (family=mssql or family=oracle):
       {
         "request_id": str,
         "status": "completed",
-        "family": "mysql",          # or "oracle"
-        "product_family": "MySQL",  # or "Java"
-        "label": "MySQL Server Data",
+        "family": "mssql",               # or "oracle"
+        "product_family": "SQL Server",  # or "Java"
+        "label": "MSSQL Server Data",
         "result": { "installations": {...}, "demand_details": {...} }
       }
     """
@@ -2229,15 +2224,15 @@ def api_oracle_data(request):
 
     # family key → (DB product_family value, human label)
     FAMILY_MAP = {
-        "mysql":  ("MySQL", "MySQL Server Data"),
-        "oracle": ("Java",  "Oracle Server Data"),
+        "mssql":  ("SQL Server", "MSSQL Server Data"),
+        "oracle": ("Java",       "Oracle Server Data"),
     }
 
     # ── Parse query params ────────────────────────────────────────────────────
     family_param = request.GET.get("family", "all").lower().strip()
-    if family_param not in ("mysql", "oracle", "all"):
+    if family_param not in ("mssql", "oracle", "all"):
         return JsonResponse(
-            {"error": "Invalid family. Use 'mysql', 'oracle', or 'all'."},
+            {"error": "Invalid family. Use 'mssql', 'oracle', or 'all'."},
             status=400,
         )
 
@@ -2281,12 +2276,9 @@ def api_oracle_data(request):
         if data_type not in ("all", "installations"):
             return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
 
-        qs = (
-            USUInstallation.objects
-            .filter(product_family=db_pf, server__is_active=True)
-            .select_related("server")
-            .order_by("server__server_name")
-        )
+        qs = USUInstallation.objects.filter(server__is_active=True).select_related("server").order_by("server__server_name")
+        if db_pf is not None:
+            qs = qs.filter(product_family=db_pf)
         if status_filter:
             qs = qs.filter(device_status__iexact=status_filter)
 
@@ -2354,12 +2346,9 @@ def api_oracle_data(request):
         if data_type not in ("all", "demand"):
             return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
 
-        qs = (
-            USUDemandDetail.objects
-            .filter(product_family=db_pf, server__is_active=True)
-            .select_related("server")
-            .order_by("server__server_name")
-        )
+        qs = USUDemandDetail.objects.filter(server__is_active=True).select_related("server").order_by("server__server_name")
+        if db_pf is not None:
+            qs = qs.filter(product_family=db_pf)
 
         rows = list(qs.values(
             "server__server_name", "server__hosting_zone", "server__environment",
@@ -2406,19 +2395,14 @@ def api_oracle_data(request):
 
     # ── Build response ────────────────────────────────────────────────────────
     if family_param == "all":
-        result = {}
-        for key, (db_pf, label) in FAMILY_MAP.items():
-            result[key] = {
-                "product_family": db_pf,
-                "label":          label,
-                "installations":  _fetch_installations(db_pf),
-                "demand_details": _fetch_demand(db_pf),
-            }
         return JsonResponse({
             "request_id": str(uuid.uuid4()),
             "status":     "completed",
             "family":     "all",
-            "result":     result,
+            "result": {
+                "installations":  _fetch_installations(None),
+                "demand_details": _fetch_demand(None),
+            },
         })
 
     # Single family

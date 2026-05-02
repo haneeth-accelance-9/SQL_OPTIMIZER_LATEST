@@ -1657,7 +1657,7 @@
                             <label for="usu-family-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Filter</label>
                             <select id="usu-family-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
                                 <option value="all">All</option>
-                                <option value="mysql">MySQL</option>
+                                <option value="mssql">MSSQL</option>
                                 <option value="oracle">Oracle</option>
                             </select>
                             <span id="dq-usu-total-badge" class="px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-semibold">Total: 0</span>
@@ -5281,19 +5281,12 @@
                 usuState.loaded = true;
                 if (loadEl) loadEl.classList.add('hidden');
 
-                if (usuState.family === 'all') {
-                    var mysqlInst  = (((payload.result || {}).mysql  || {}).installations) || {};
-                    var oracleInst = (((payload.result || {}).oracle || {}).installations) || {};
-                    usuState._allCachedItems = (mysqlInst.items || []).concat(oracleInst.items || []);
-                    usuApplyClientPage();
-                } else {
-                    var instData = ((payload.result || {}).installations) || {};
-                    usuState._allCachedItems = [];
-                    usuState.total      = Number(instData.total || 0);
-                    usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
-                    usuState.page       = Number(instData.page || usuState.page);
-                    usuState._cachedItems = instData.items || [];
-                }
+                var instData = ((payload.result || {}).installations) || {};
+                usuState._allCachedItems = [];
+                usuState.total      = Number(instData.total || 0);
+                usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
+                usuState.page       = Number(instData.page || usuState.page);
+                usuState._cachedItems = instData.items || [];
 
                 renderUsuHead();
                 renderUsuBody(usuState._cachedItems);
