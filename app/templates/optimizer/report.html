@@ -185,6 +185,8 @@
             Agentic Analysis
             {% if has_agentic_data %}<span class="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-xs font-bold">{{ agentic.candidates_total }}</span>{% endif %}
         </button>
+        <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
+                data-tab="tab-live-metrics">Live Metrics</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
@@ -349,6 +351,238 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB 3: Live Metrics — detailed filter-funnel matching Excel summary
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <style>
+        .funnel-table { width:100%; border-collapse:collapse; font-size:0.72rem; }
+        .funnel-table th { background:#f8fafc; color:#64748b; font-weight:600; padding:0.4rem 0.75rem; text-align:left; border-bottom:1px solid #e2e8f0; white-space:nowrap; }
+        .funnel-table td { padding:0.35rem 0.75rem; border-bottom:1px solid #f1f5f9; color:#475569; }
+        .funnel-table td.count { font-weight:700; color:#0f172a; text-align:right; white-space:nowrap; width:70px; }
+        .funnel-table tr.section-hdr td { background:#f1f5f9; font-weight:600; color:#475569; padding-top:0.55rem; }
+        .funnel-table tr.final-row td { background:#ecfdf5; font-weight:700; color:#065f46; }
+        .funnel-table tr.final-warn td { background:#fef2f2; font-weight:700; color:#991b1b; }
+        .funnel-table tr.final-slate td { background:#f8fafc; font-weight:700; color:#1e293b; }
+    </style>
+    <div id="tab-live-metrics" class="tab-panel flex-1 min-h-0 overflow-y-auto space-y-5">
+
+        <!-- ── Rule 1 ──────────────────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-purple-600 text-white text-[10px] font-bold flex-shrink-0">1</span>
+                <h2 class="text-sm font-bold text-slate-900">Rule 1 — Azure PAYG License Optimisation (UC1)</h2>
+                <span class="ml-auto px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold">{{ rule_results.azure_payg_count|default:0 }} candidates</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total active server installations (UC1 input)</td><td class="count">—</td><td>Active servers with SQL Server installations</td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC1 filter criteria ---</td></tr>
+                        <tr><td>Filter 1: Install Status = Installed (active only)</td><td class="count">—</td><td>Retired/unknown excluded</td></tr>
+                        <tr><td>Filter 2: Java product family excluded</td><td class="count">—</td><td>Non-Java SQL Server only</td></tr>
+                        <tr><td>Filter 3: Hosting Zone = Azure / Public Cloud</td><td class="count">—</td><td>Cloud-hosted servers</td></tr>
+                        <tr class="final-row"><td>UC1 FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ rule_results.azure_payg_count|default:0 }}</td><td>Eligible for PAYG license swap</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Rule 2 ──────────────────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-white text-[10px] font-bold flex-shrink-0">2</span>
+                <h2 class="text-sm font-bold text-slate-900">Rule 2 — Retired Device Detection (UC2)</h2>
+                <span class="ml-auto px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-bold">{{ rule_results.retired_count|default:0 }} candidates</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total server installations (UC2 input)</td><td class="count">—</td><td>All installations in inventory</td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC2 filter criteria ---</td></tr>
+                        <tr><td>Filter 1: Install Status = Retired</td><td class="count">—</td><td>Retired devices</td></tr>
+                        <tr><td>Filter 2: Active software installation still reported</td><td class="count">—</td><td>Discovery tool still reporting</td></tr>
+                        <tr class="final-row"><td>UC2 FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ rule_results.retired_count|default:0 }}</td><td>Retired devices with active licenses — flag for cleanup</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Rule 3 header ──────────────────────────────────────────────── -->
+        <div class="px-1 flex items-center gap-3">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-teal-600 text-white text-[10px] font-bold flex-shrink-0">3</span>
+            <h2 class="text-sm font-bold text-slate-900">Rule 3 — VM Rightsizing (UC3.1 – UC3.5 + Physical)</h2>
+            <span class="text-[10px] text-slate-400 ml-1">Input: {{ filter_funnel.total_input|default:0 }} active servers with utilisation data</span>
+        </div>
+
+        <!-- ── UC3.1 CPU ───────────────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">UC3.1 — CPU Rightsizing</h3>
+                <span class="ml-auto px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full text-[10px] font-bold">{{ filter_funnel.cpu_final|default:0 }} candidates</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (UC3.1 CPU input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td>--- PROD filters (Environment not in NON-PROD list) ---</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 1: Avg_CPU_12m &lt; 15%</td><td class="count">{{ filter_funnel.cpu_prod_f1|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 2: Peak_CPU_12m &lt;= 70%</td><td class="count">{{ filter_funnel.cpu_prod_f2|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 3: Current_vCPU &gt;= 4</td><td class="count">{{ filter_funnel.cpu_prod_f3|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_prod_final|default:0 }}</td><td></td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td>--- NON-PROD filters (Development, Test, QA, UAT, DR) ---</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 1: Avg_CPU_12m &lt; 25%</td><td class="count">{{ filter_funnel.cpu_nonprod_f1|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 2: Peak_CPU_12m &lt;= 80%</td><td class="count">{{ filter_funnel.cpu_nonprod_f2|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 3: Current_vCPU &gt;= 4</td><td class="count">{{ filter_funnel.cpu_nonprod_f3|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_nonprod_final|default:0 }}</td><td></td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-row"><td>UC3.1 CPU FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.cpu_final|default:0 }}</td><td>{{ filter_funnel.cpu_prod_final|default:0 }} PROD, {{ filter_funnel.cpu_nonprod_final|default:0 }} NON-PROD — Rows the rule will action</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── UC3.2 RAM ───────────────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">UC3.2 — RAM Rightsizing</h3>
+                <span class="ml-auto px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-bold">{{ filter_funnel.ram_final|default:0 }} candidates</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (UC3.2 RAM input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td>── PROD path ──────────────────────────────</td><td class="count"></td><td></td></tr>
+                        <tr><td>PROD rows (Environment not in NON-PROD list)</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;PROD Filter 1: Avg_FreeMem_12m &gt;= 35%</td><td class="count">{{ filter_funnel.ram_prod_f1|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;PROD Filter 2: Min_FreeMem_12m &gt;= 20%</td><td class="count">{{ filter_funnel.ram_prod_f2|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;PROD Filter 3: Current_RAM_GiB &gt; 8</td><td class="count">{{ filter_funnel.ram_prod_eligible|default:0 }}</td><td>Eligible after 3 filters</td></tr>
+                        <tr><td>&nbsp;&nbsp;PROD Final (after recommendation-band filter)</td><td class="count">{{ filter_funnel.ram_prod_final|default:0 }}</td><td>PROD candidates actioned</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td>── NON-PROD path ───────────────────────────</td><td class="count"></td><td></td></tr>
+                        <tr><td>NON-PROD rows (Development, Test, QA, UAT, DR)</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 1: Avg_FreeMem_12m &gt;= 30%</td><td class="count">{{ filter_funnel.ram_nonprod_f1|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 2: Min_FreeMem_12m &gt;= 15%</td><td class="count">{{ filter_funnel.ram_nonprod_f2|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 3: Current_RAM_GiB &gt; 4</td><td class="count">{{ filter_funnel.ram_nonprod_eligible|default:0 }}</td><td>Eligible after 3 filters</td></tr>
+                        <tr><td>&nbsp;&nbsp;NON-PROD Final (after recommendation-band filter)</td><td class="count">{{ filter_funnel.ram_nonprod_final|default:0 }}</td><td>NON-PROD candidates actioned</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-row"><td>UC3.2 RAM FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.ram_final|default:0 }}</td><td>{{ filter_funnel.ram_prod_final|default:0 }} PROD, {{ filter_funnel.ram_nonprod_final|default:0 }} NON-PROD — Rows the rule will action</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── UC3.3 Critical CPU ─────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">UC3.3 — Critically-Aware CPU Optimisation</h3>
+                <span class="ml-auto px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">{{ filter_funnel.crit_cpu_final|default:0 }} flags</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (UC3.3 Crit CPU input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC3.3a Downsize filters ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 1: Criticality = Business/Mission/Manufacturing Critical</td><td class="count">{{ filter_funnel.crit_all_count|default:0 }}</td><td>Values: Business Critical, Mission Critical, Manufacturing Critical</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 2: Avg_CPU_12m &lt; 10%</td><td class="count">{{ filter_funnel.crit_cpu_dn_f2|default:0 }}</td><td></td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3a DOWNSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_cpu_dn_final|default:0 }}</td><td>Human Intervention Required</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC3.3b Upsize filters ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 2: Avg_CPU_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_cpu_up_f2|default:0 }}</td><td></td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_cpu_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-warn"><td>UC3.3 Crit CPU FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>{{ filter_funnel.crit_cpu_dn_final|default:0 }} Downsize, {{ filter_funnel.crit_cpu_up_final|default:0 }} Upsize — Rows the rule will action</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── UC3.4 Critical RAM ─────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">UC3.4 — Critically-Aware RAM Optimisation</h3>
+                <span class="ml-auto px-2.5 py-1 bg-rose-100 text-rose-700 rounded-full text-[10px] font-bold">{{ filter_funnel.crit_ram_final|default:0 }} flags</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (UC3.4 Crit RAM input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC3.4a Downsize filters ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 1: Criticality = Business/Mission/Manufacturing Critical</td><td class="count">{{ filter_funnel.crit_all_count|default:0 }}</td><td>Values: Business Critical, Mission Critical, Manufacturing Critical</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 2: Avg_FreeMem_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_ram_dn_f2|default:0 }}</td><td></td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4a DOWNSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_dn_final|default:0 }}</td><td>Downsize RAM by ~25% — Human Intervention Required</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC3.4b Upsize filters ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 2: Avg_FreeMem_12m &lt; 20%</td><td class="count">{{ filter_funnel.crit_ram_up_f2|default:0 }}</td><td></td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-warn"><td>UC3.4 Crit RAM FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>{{ filter_funnel.crit_ram_dn_final|default:0 }} Downsize, {{ filter_funnel.crit_ram_up_final|default:0 }} Upsize — Rows the rule will action</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── UC3.5 Lifecycle ────────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">UC3.5 — Lifecycle Risk Flags</h3>
+                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 ml-1">Human Review</span>
+                <span class="ml-auto px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">{{ filter_funnel.lc_final|default:0 }} flagged</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (UC3.5 Lifecycle input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- UC3.5 Lifecycle Risk Flag filters (sequential AND) ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.5 Filter 1: Criticality = Business Critical OR Mission Critical</td><td class="count">{{ filter_funnel.lc_f1|default:0 }}</td><td>of {{ filter_funnel.total_input|default:0 }} input rows</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.5 Filter 2: Peak_CPU_12m &gt; 95%</td><td class="count">{{ filter_funnel.lc_f2|default:0 }}</td><td>of {{ filter_funnel.lc_f1|default:0 }} after Filter 1</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.5 Filter 3: Min_FreeMem_12m &lt; 5%</td><td class="count">{{ filter_funnel.lc_f3|default:0 }}</td><td>of {{ filter_funnel.lc_f2|default:0 }} after Filter 2</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-warn"><td>UC3.5 Lifecycle Risk FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.lc_final|default:0 }}</td><td>Human review required — all 3 filters passed</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Physical Systems ───────────────────────────────────────────── -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+                <h3 class="text-xs font-bold text-slate-700">Physical Systems</h3>
+                <span class="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700 ml-1">Physical</span>
+                <span class="ml-auto px-2.5 py-1 bg-slate-200 text-slate-700 rounded-full text-[10px] font-bold">{{ filter_funnel.physical_count|default:0 }} systems</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="funnel-table">
+                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <tbody>
+                        <tr><td>Total rows in DB (Physical Systems input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="3">--- Physical Systems filter ---</td></tr>
+                        <tr><td>&nbsp;&nbsp;Physical Systems Filter 1: is_virtual = False</td><td class="count">{{ filter_funnel.physical_count|default:0 }}</td><td>Physical servers only</td></tr>
+                        <tr><td>&nbsp;&nbsp;Virtual servers (excluded)</td><td class="count">{{ filter_funnel.virtual_count|default:0 }}</td><td>is_virtual = True or blank</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="final-slate"><td>Physical Systems FINAL FLAGS</td><td class="count">{{ filter_funnel.physical_count|default:0 }}</td><td>Human review required before any rightsizing action</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /tab-live-metrics -->
 
 </div><!-- /max-w-6xl -->
 

@@ -348,7 +348,10 @@ def _format_count(value) -> str:
 
 
 def format_currency(value) -> str:
-    return f"{EURO_SYMBOL}{_to_float(value):,.2f}"
+    # European format: dot as thousands separator, comma as decimal, € symbol at end
+    # e.g. 2617398.97 → "2.617.398,97 €"
+    formatted = f"{_to_float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{formatted} {EURO_SYMBOL}"
 
 
 def _format_currency(value) -> str:

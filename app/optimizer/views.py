@@ -204,6 +204,159 @@ def _build_report_render_context(context):
     }
 
 
+def _build_rightsizing_filter_funnel() -> dict:
+    """
+    Compute detailed filter-funnel counts for all UC3 rules (UC3.1–3.5 + Physical).
+    Called once per report page load to power the Live Metrics tab.
+    Returns a flat dict of intermediate and final counts.
+    """
+    try:
+        from optimizer.services.db_analysis_service import _build_rightsizing_df
+        from optimizer.rules.rightsizing import (
+            NON_PROD_ENVS, COL_CRITICALITY,
+            ALL_CRITICAL_VALS, CRITICAL_VALS, LC_CRITICAL_VALS,
+            find_cpu_rightsizing_optimizations, find_ram_rightsizing_optimizations,
+            find_criticality_cpu_downsize_optimizations, find_criticality_cpu_upsize_optimizations,
+            find_criticality_ram_downsize_optimizations, find_criticality_ram_upsize_optimizations,
+            find_lifecycle_risk_flags,
+        )
+        df = _build_rightsizing_df()
+    except Exception:
+        return {}
+
+    if df.empty:
+        return {}
+
+    total_input = len(df)
+
+    prod_mask  = ~df["Environment"].isin(NON_PROD_ENVS) if "Environment" in df.columns else pd.Series([True] * len(df), index=df.index)
+    prod_df    = df[prod_mask]
+    nonprod_df = df[~prod_mask]
+    prod_total    = len(prod_df)
+    nonprod_total = len(nonprod_df)
+
+    # ── UC3.1 CPU ──────────────────────────────────────────────────────────────
+    cpu_prod_f1   = prod_df[prod_df["Avg_CPU_12m"].fillna(100) < 15]
+    cpu_prod_f2   = cpu_prod_f1[cpu_prod_f1["Peak_CPU_12m"].fillna(100) <= 70]
+    cpu_prod_f3   = cpu_prod_f2[cpu_prod_f2["Current_vCPU"].fillna(0) >= 4]
+    cpu_nonprod_f1 = nonprod_df[nonprod_df["Avg_CPU_12m"].fillna(100) < 25]
+    cpu_nonprod_f2 = cpu_nonprod_f1[cpu_nonprod_f1["Peak_CPU_12m"].fillna(100) <= 80]
+    cpu_nonprod_f3 = cpu_nonprod_f2[cpu_nonprod_f2["Current_vCPU"].fillna(0) >= 4]
+
+    cpu_final_df = find_cpu_rightsizing_optimizations(df)
+    if not cpu_final_df.empty and "Env_Type" in cpu_final_df.columns:
+        cpu_prod_final    = int((cpu_final_df["Env_Type"] == "PROD").sum())
+        cpu_nonprod_final = int((cpu_final_df["Env_Type"] == "NON-PROD").sum())
+    else:
+        cpu_prod_final    = len(cpu_prod_f3)
+        cpu_nonprod_final = len(cpu_nonprod_f3)
+
+    # ── UC3.2 RAM ──────────────────────────────────────────────────────────────
+    ram_prod_f1   = prod_df[prod_df["Avg_FreeMem_12m"].fillna(0) >= 35]
+    ram_prod_f2   = ram_prod_f1[ram_prod_f1["Min_FreeMem_12m"].fillna(0) >= 20]
+    ram_prod_f3   = ram_prod_f2[ram_prod_f2["Current_RAM_GiB"].fillna(0) > 8]
+    ram_nonprod_f1 = nonprod_df[nonprod_df["Avg_FreeMem_12m"].fillna(0) >= 30]
+    ram_nonprod_f2 = ram_nonprod_f1[ram_nonprod_f1["Min_FreeMem_12m"].fillna(0) >= 15]
+    ram_nonprod_f3 = ram_nonprod_f2[ram_nonprod_f2["Current_RAM_GiB"].fillna(0) > 4]
+
+    ram_final_df = find_ram_rightsizing_optimizations(df)
+    if not ram_final_df.empty and "Env_Type" in ram_final_df.columns:
+        ram_prod_final    = int((ram_final_df["Env_Type"] == "PROD").sum())
+        ram_nonprod_final = int((ram_final_df["Env_Type"] == "NON-PROD").sum())
+    else:
+        ram_prod_final    = len(ram_prod_f3)
+        ram_nonprod_final = len(ram_nonprod_f3)
+
+    # ── UC3.3 / UC3.4 Criticality ─────────────────────────────────────────────
+    has_criticality = COL_CRITICALITY in df.columns
+    if has_criticality:
+        crit_all_mask  = df[COL_CRITICALITY].isin(ALL_CRITICAL_VALS)
+        crit_bus_mask  = df[COL_CRITICALITY].isin(CRITICAL_VALS)
+        crit_all_count = int(crit_all_mask.sum())
+        crit_bus_count = int(crit_bus_mask.sum())
+        crit_cpu_dn_f2    = int(df[crit_all_mask]["Avg_CPU_12m"].fillna(100).lt(10).sum())
+        crit_cpu_up_f2    = int(df[crit_bus_mask]["Avg_CPU_12m"].fillna(0).gt(80).sum())
+        crit_ram_dn_f2    = int(df[crit_all_mask]["Avg_FreeMem_12m"].fillna(0).gt(80).sum())
+        crit_ram_up_f2    = int(df[crit_bus_mask]["Avg_FreeMem_12m"].fillna(100).lt(20).sum())
+        crit_cpu_dn_final = len(find_criticality_cpu_downsize_optimizations(df))
+        crit_cpu_up_final = len(find_criticality_cpu_upsize_optimizations(df))
+        crit_ram_dn_final = len(find_criticality_ram_downsize_optimizations(df))
+        crit_ram_up_final = len(find_criticality_ram_upsize_optimizations(df))
+    else:
+        crit_all_count = crit_bus_count = 0
+        crit_cpu_dn_f2 = crit_cpu_up_f2 = crit_ram_dn_f2 = crit_ram_up_f2 = 0
+        crit_cpu_dn_final = crit_cpu_up_final = crit_ram_dn_final = crit_ram_up_final = 0
+
+    # ── UC3.5 Lifecycle ────────────────────────────────────────────────────────
+    if has_criticality:
+        lc_f1_df    = df[df[COL_CRITICALITY].isin(LC_CRITICAL_VALS)]
+        lc_f2_df    = lc_f1_df[lc_f1_df["Peak_CPU_12m"].fillna(0) > 95]
+        lc_f3_df    = lc_f2_df[lc_f2_df["Min_FreeMem_12m"].fillna(100) < 5]
+        lc_f1_count = len(lc_f1_df)
+        lc_f2_count = len(lc_f2_df)
+        lc_f3_count = len(lc_f3_df)
+        lc_final    = len(find_lifecycle_risk_flags(df))
+    else:
+        lc_f1_count = lc_f2_count = lc_f3_count = lc_final = 0
+
+    # ── Physical ───────────────────────────────────────────────────────────────
+    virt_col = next((c for c in ("Is Virtual?", "is_virtual", "IsVirtual") if c in df.columns), None)
+    if virt_col:
+        phys_mask      = df[virt_col].astype(str).str.strip().str.lower() == "false"
+        physical_count = int(phys_mask.sum())
+        virtual_count  = total_input - physical_count
+    else:
+        physical_count = virtual_count = 0
+
+    return {
+        "total_input":    total_input,
+        "prod_total":     prod_total,
+        "nonprod_total":  nonprod_total,
+        # UC3.1 CPU
+        "cpu_prod_f1":    len(cpu_prod_f1),
+        "cpu_prod_f2":    len(cpu_prod_f2),
+        "cpu_prod_f3":    len(cpu_prod_f3),
+        "cpu_prod_final": cpu_prod_final,
+        "cpu_nonprod_f1":    len(cpu_nonprod_f1),
+        "cpu_nonprod_f2":    len(cpu_nonprod_f2),
+        "cpu_nonprod_f3":    len(cpu_nonprod_f3),
+        "cpu_nonprod_final": cpu_nonprod_final,
+        "cpu_final": cpu_prod_final + cpu_nonprod_final,
+        # UC3.2 RAM
+        "ram_prod_f1":       len(ram_prod_f1),
+        "ram_prod_f2":       len(ram_prod_f2),
+        "ram_prod_eligible": len(ram_prod_f3),
+        "ram_prod_final":    ram_prod_final,
+        "ram_nonprod_f1":       len(ram_nonprod_f1),
+        "ram_nonprod_f2":       len(ram_nonprod_f2),
+        "ram_nonprod_eligible": len(ram_nonprod_f3),
+        "ram_nonprod_final":    ram_nonprod_final,
+        "ram_final": ram_prod_final + ram_nonprod_final,
+        # UC3.3 Crit CPU
+        "crit_all_count":     crit_all_count,
+        "crit_bus_count":     crit_bus_count,
+        "crit_cpu_dn_f2":     crit_cpu_dn_f2,
+        "crit_cpu_up_f2":     crit_cpu_up_f2,
+        "crit_cpu_dn_final":  crit_cpu_dn_final,
+        "crit_cpu_up_final":  crit_cpu_up_final,
+        "crit_cpu_final":     crit_cpu_dn_final + crit_cpu_up_final,
+        # UC3.4 Crit RAM
+        "crit_ram_dn_f2":    crit_ram_dn_f2,
+        "crit_ram_up_f2":    crit_ram_up_f2,
+        "crit_ram_dn_final": crit_ram_dn_final,
+        "crit_ram_up_final": crit_ram_up_final,
+        "crit_ram_final":    crit_ram_dn_final + crit_ram_up_final,
+        # UC3.5 Lifecycle
+        "lc_f1":    lc_f1_count,
+        "lc_f2":    lc_f2_count,
+        "lc_f3":    lc_f3_count,
+        "lc_final": lc_final,
+        # Physical
+        "physical_count": physical_count,
+        "virtual_count":  virtual_count,
+    }
+
+
 def _get_db_context_for_report():
     """
     Build a fully-populated report context from live DB data.
@@ -223,6 +376,7 @@ def _get_db_context_for_report():
 
     rr = context.get("rule_results", {})
     lm = context.get("license_metrics", {})
+    rs = context.get("rightsizing", {})
     report_context = {
         "azure_payg_count": rr.get("azure_payg_count", 0),
         "retired_count": rr.get("retired_count", 0),
@@ -230,6 +384,18 @@ def _get_db_context_for_report():
         "total_license_cost": lm.get("total_license_cost", 0),
         "by_product": lm.get("by_product", []),
         "demand_row_count": lm.get("demand_row_count", 0),
+        # UC3 counts for report narrative
+        "cpu_count":          rs.get("cpu_count", 0),
+        "ram_count":          rs.get("ram_count", 0),
+        "cpu_prod_count":     rs.get("cpu_prod_count", 0),
+        "cpu_nonprod_count":  rs.get("cpu_nonprod_count", 0),
+        "ram_prod_count":     rs.get("ram_prod_count", 0),
+        "ram_nonprod_count":  rs.get("ram_nonprod_count", 0),
+        "crit_cpu_count":     rs.get("crit_cpu_count", 0),
+        "crit_ram_count":     rs.get("crit_ram_count", 0),
+        "lifecycle_count":    rs.get("lifecycle_count", 0),
+        "physical_count":     rs.get("physical_count", 0),
+        "rightsizing_savings": context.get("rightsizing_savings", 0),
     }
 
     report_text = None
@@ -242,6 +408,9 @@ def _get_db_context_for_report():
     used_fallback = not bool(report_text)
     if not report_text:
         report_text = get_fallback_report(report_context)
+
+    # Filter funnel for Live Metrics tab
+    context["filter_funnel"] = _build_rightsizing_filter_funnel()
 
     context["report_text"] = report_text or ""
     context["report_used_fallback"] = used_fallback
@@ -1248,6 +1417,7 @@ def results(request):
         "rightsizing_ram_data_json": ram_full,
         "crit_cpu_data_json": rs.get("crit_cpu_optimizations") or [],
         "crit_ram_data_json": rs.get("crit_ram_optimizations") or [],
+        "lifecycle_data_json": rs.get("lifecycle_risk_flags") or [],
         "download_sheet_options": _build_rs3_download_sheet_options(rs),
     })
     # ── Data Quality: USU, Grafana, Flat Files ────────────────────────────────
@@ -1619,25 +1789,18 @@ def _build_legacy_report_markdown(context):
 def _resolve_report_markdown(context, agentic=None):
     """
     Resolve the best available report markdown in priority order:
-      1. Stored AgentRun.report_markdown (set after clicking "Run Agent")
-      2. Live agent preview from build_live_agent_report_preview()
+      1. Live agent preview from build_live_agent_report_preview()
          — internally tries agent/liscence-optimizer/src/tools/report_generator.py first,
            then falls back to Django-native renderer
-      3. Legacy fallback (Azure OpenAI text or static template) — only if step 2 completely fails
+      2. Legacy fallback (Azure OpenAI text or static template) — only if step 1 completely fails
 
-    Step 2 is logged in detail; exceptions are never silently swallowed.
+    Always uses live DB data so the Executive Summary matches the dashboard values.
+    Stored AgentRun.report_markdown (from prior agent runs) is intentionally skipped here
+    because it may contain stale counts and savings that diverge from the current data.
     """
     agentic = agentic or {}
-    latest_agent_report = (
-        (agentic.get("agent_run") or {}).get("report_markdown")
-        if isinstance(agentic, dict)
-        else ""
-    )
-    if latest_agent_report:
-        logger.info("Using stored AgentRun.report_markdown for /report/.")
-        return normalize_report_content_text(latest_agent_report)
 
-    # Priority 2: live agent preview (uses agent/liscence-optimizer tool or Django fallback)
+    # Priority 1: live agent preview (uses agent/liscence-optimizer tool or Django fallback)
     preview_markdown = ""
     try:
         from optimizer.services.ai_report_generator import build_live_agent_report_preview
@@ -1666,7 +1829,7 @@ def _resolve_report_markdown(context, agentic=None):
             exc,
         )
 
-    # Priority 3: build agent-format report directly from the already-computed context
+    # Priority 2: build agent-format report directly from the already-computed context
     # (the context was built by _get_db_context_for_report which calls compute_live_db_metrics,
     #  so the rule_results and rightsizing data are already available without extra DB queries)
     logger.warning(
@@ -2727,4 +2890,705 @@ def download_rightsizing_sheet(request, sheet_key):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = _safe_content_disposition(workbook_name)
+    return response
+
+
+@require_GET
+@login_required
+def download_uc1_input_data(request):
+    """
+    Export the full UC1 input dataset (all rows, all columns) plus a filter-funnel
+    summary sheet matching the UC1 analysis breakdown.
+
+    Sheet 1 – "UC1 Input Data": every row fed into the UC1 (Azure PAYG) rule,
+              before any filter is applied (active servers, Java excluded).
+    Sheet 2 – "UC1 Summary": row-count funnel for each UC1 filter step and a
+              hosting_zone breakdown of the full input.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_installations_df
+
+    installations_df = _build_installations_df()
+    if installations_df.empty:
+        return HttpResponse("No UC1 input data found in the database.", status=404)
+
+    # ── Compute filter-funnel counts ──────────────────────────────────────────
+    total_input = len(installations_df)
+
+    # Filter 1: hosting_zone in Public Cloud / Private Cloud AVS
+    mask_f1 = installations_df["u_hosting_zone"].astype(str).str.strip().isin(
+        ["Public Cloud", "Private Cloud AVS"]
+    )
+    count_f1 = int(mask_f1.sum())
+
+    # Filter 2: inv_status_std_name != "License Included" (case-insensitive), on F1 survivors
+    inv_norm = installations_df.loc[mask_f1, "inventory_status_standard"].astype(str).str.strip().str.lower()
+    mask_f2_local = inv_norm != "license included"
+    count_f2 = int(mask_f2_local.sum())
+
+    # Filter 3: no_license_required == 0, on F1+F2 survivors
+    f2_idx = installations_df.loc[mask_f1].index[mask_f2_local]
+    from optimizer.rules.column_utils import find_no_license_required_column, no_license_required_is_zero
+    no_lic_col = find_no_license_required_column(installations_df)
+    if no_lic_col:
+        mask_f3_local = no_license_required_is_zero(installations_df.loc[f2_idx, no_lic_col])
+        count_f3 = int(mask_f3_local.sum())
+    else:
+        count_f3 = 0
+
+    # ── Hosting zone breakdown (all input rows) ───────────────────────────────
+    zone_counts = (
+        installations_df["u_hosting_zone"]
+        .astype(str)
+        .value_counts()
+        .reset_index()
+    )
+    zone_counts.columns = ["hosting_zone", "count"]
+
+    # ── Build Summary DataFrame ───────────────────────────────────────────────
+    summary_rows = [
+        {"Description": "Total rows in DB (UC1 input)", "Count": total_input, "Note": "Active servers, Java excluded"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC1 Filter 1: hosting_zone = Public Cloud / AVS", "Count": count_f1, "Note": ""},
+        {"Description": "UC1 Filter 2: inv_status_std_name != Lic. Included", "Count": count_f2, "Note": ""},
+        {"Description": "UC1 Filter 3: no_license_required = False", "Count": count_f3, "Note": ""},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC1 FINAL CANDIDATES", "Count": count_f3, "Note": "Rows the rule will action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- hosting_zone breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, zone_row in zone_counts.iterrows():
+        summary_rows.append({
+            "Description": f" {zone_row['hosting_zone']}",
+            "Count": int(zone_row["count"]),
+            "Note": "",
+        })
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    # ── Write workbook ────────────────────────────────────────────────────────
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        installations_df.to_excel(writer, index=False, sheet_name="UC1 Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="UC1 Summary")
+
+        # Style the Summary sheet to match the screenshot
+        try:
+            from openpyxl.styles import Font, PatternFill, Alignment
+            ws = writer.sheets["UC1 Summary"]
+
+            # Header row
+            header_fill = PatternFill("solid", fgColor="1F3864")
+            header_font = Font(bold=True, color="FFFFFF")
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+
+            # Highlight "UC1 FINAL CANDIDATES" row
+            for row in ws.iter_rows(min_row=2):
+                desc = str(row[0].value or "")
+                if "FINAL CANDIDATES" in desc:
+                    cand_fill = PatternFill("solid", fgColor="BDD7EE")
+                    cand_font = Font(bold=True)
+                    for cell in row:
+                        cell.fill = cand_fill
+                        cell.font = cand_font
+
+            # Auto-width columns
+            for col in ws.columns:
+                max_len = max((len(str(c.value or "")) for c in col), default=10)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+        except Exception:
+            pass  # styling is best-effort
+
+    buf.seek(0)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = _safe_content_disposition("uc1_input_data.xlsx")
+    return response
+
+
+@require_GET
+@login_required
+def download_uc3_ram_input_data(request):
+    """
+    Export the full UC3.2 RAM Rightsizing input dataset (all rows, all columns) plus
+    a filter-funnel summary sheet matching the UC3.2 analysis breakdown.
+
+    Sheet 1 – "UC3 RAM Input Data": every server row fed into the RAM rightsizing rule
+              (active servers with utilisation data, before any filter).
+    Sheet 2 – "UC3 RAM Summary": PROD and NON-PROD filter funnels, final candidate
+              counts, and an Environment breakdown of all input rows.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import NON_PROD_ENVS, find_ram_rightsizing_optimizations
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No UC3 RAM rightsizing input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    # ── PROD filter funnel (cumulative intermediate counts) ───────────────────
+    prod_df = df[~df["Environment"].isin(NON_PROD_ENVS)].copy()
+    prod_total = len(prod_df)
+
+    avg_free = pd.to_numeric(prod_df.get("Avg_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
+    min_free = pd.to_numeric(prod_df.get("Min_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
+    ram_col  = pd.to_numeric(prod_df.get("Current_RAM_GiB",  pd.Series(dtype=float)), errors="coerce")
+
+    mask_prod_f1 = avg_free >= 35
+    prod_after_f1 = int(mask_prod_f1.sum())
+
+    mask_prod_f2 = mask_prod_f1 & (min_free >= 20)
+    prod_after_f2 = int(mask_prod_f2.sum())
+
+    mask_prod_f3 = mask_prod_f2 & (ram_col > 8)
+    prod_eligible = int(mask_prod_f3.sum())
+
+    # ── NON-PROD filter funnel (cumulative intermediate counts) ───────────────
+    nonprod_df = df[df["Environment"].isin(NON_PROD_ENVS)].copy()
+    nonprod_total = len(nonprod_df)
+
+    avg_free_np = pd.to_numeric(nonprod_df.get("Avg_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
+    min_free_np = pd.to_numeric(nonprod_df.get("Min_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
+    ram_col_np  = pd.to_numeric(nonprod_df.get("Current_RAM_GiB",  pd.Series(dtype=float)), errors="coerce")
+
+    mask_np_f1 = avg_free_np >= 30
+    nonprod_after_f1 = int(mask_np_f1.sum())
+
+    mask_np_f2 = mask_np_f1 & (min_free_np >= 15)
+    nonprod_after_f2 = int(mask_np_f2.sum())
+
+    mask_np_f3 = mask_np_f2 & (ram_col_np > 4)
+    nonprod_eligible = int(mask_np_f3.sum())
+
+    # ── Actual final candidates: run the full rule (includes recommendation-band filter)
+    final_df = find_ram_rightsizing_optimizations(df)
+    prod_candidates   = int((final_df["Env_Type"] == "PROD").sum())
+    nonprod_candidates = int((final_df["Env_Type"] == "NON-PROD").sum())
+    total_candidates  = prod_candidates + nonprod_candidates
+
+    # ── Environment breakdown (all input rows) ────────────────────────────────
+    env_counts = (
+        df["Environment"]
+        .astype(str)
+        .value_counts()
+        .reset_index()
+    )
+    env_counts.columns = ["environment", "count"]
+
+    # ── Build Summary DataFrame ───────────────────────────────────────────────
+    summary_rows = [
+        {"Description": "Total rows in DB (UC3.2 RAM input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- PROD filters (Environment not in NON-PROD list) ---", "Count": prod_total, "Note": ""},
+        {"Description": "UC3.2 PROD Filter 1: Avg_FreeMem_12m >= 35%", "Count": prod_after_f1, "Note": ""},
+        {"Description": "UC3.2 PROD Filter 2: Min_FreeMem_12m >= 20%", "Count": prod_after_f2, "Note": ""},
+        {"Description": "UC3.2 PROD Filter 3: Current_RAM_GiB > 8", "Count": prod_eligible, "Note": ""},
+        {"Description": "UC3.2 PROD Filter 4: Recommendation band applied", "Count": prod_candidates, "Note": ""},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- NON-PROD filters (Development, Test, QA, UAT, DR) ---", "Count": nonprod_total, "Note": ""},
+        {"Description": "UC3.2 NON-PROD Filter 1: Avg_FreeMem_12m >= 30%", "Count": nonprod_after_f1, "Note": ""},
+        {"Description": "UC3.2 NON-PROD Filter 2: Min_FreeMem_12m >= 15%", "Count": nonprod_after_f2, "Note": ""},
+        {"Description": "UC3.2 NON-PROD Filter 3: Current_RAM_GiB > 4", "Count": nonprod_eligible, "Note": ""},
+        {"Description": "UC3.2 NON-PROD Filter 4: Recommendation band applied", "Count": nonprod_candidates, "Note": ""},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC3.2 RAM FINAL CANDIDATES", "Count": total_candidates, "Note": f"{prod_candidates} PROD, {nonprod_candidates} NON-PROD — Rows the rule will action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Environment breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, env_row in env_counts.iterrows():
+        summary_rows.append({
+            "Description": f" {env_row['environment']}",
+            "Count": int(env_row["count"]),
+            "Note": "NON-PROD" if env_row["environment"] in NON_PROD_ENVS else "PROD",
+        })
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    # ── Write workbook ────────────────────────────────────────────────────────
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="UC3 RAM Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="UC3 RAM Summary")
+
+        try:
+            from openpyxl.styles import Font, PatternFill, Alignment
+            ws = writer.sheets["UC3 RAM Summary"]
+
+            header_fill = PatternFill("solid", fgColor="1F3864")
+            header_font = Font(bold=True, color="FFFFFF")
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+
+            for row in ws.iter_rows(min_row=2):
+                desc = str(row[0].value or "")
+                if "FINAL CANDIDATES" in desc:
+                    cand_fill = PatternFill("solid", fgColor="BDD7EE")
+                    cand_font = Font(bold=True)
+                    for cell in row:
+                        cell.fill = cand_fill
+                        cell.font = cand_font
+                elif desc.startswith("---"):
+                    section_fill = PatternFill("solid", fgColor="D9E1F2")
+                    for cell in row:
+                        cell.fill = section_fill
+                        cell.font = Font(bold=True)
+
+            for col in ws.columns:
+                max_len = max((len(str(c.value or "")) for c in col), default=10)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+        except Exception:
+            pass
+
+    buf.seek(0)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = _safe_content_disposition("uc3_ram_input_data.xlsx")
+    return response
+
+
+def _apply_summary_styles(ws):
+    """Apply consistent header/highlight styles to a UC summary worksheet."""
+    try:
+        from openpyxl.styles import Font, PatternFill, Alignment
+        header_fill = PatternFill("solid", fgColor="1F3864")
+        header_font = Font(bold=True, color="FFFFFF")
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+        for row in ws.iter_rows(min_row=2):
+            desc = str(row[0].value or "")
+            if "FINAL CANDIDATES" in desc or "FINAL FLAGS" in desc:
+                for cell in row:
+                    cell.fill = PatternFill("solid", fgColor="BDD7EE")
+                    cell.font = Font(bold=True)
+            elif desc.startswith("---"):
+                for cell in row:
+                    cell.fill = PatternFill("solid", fgColor="D9E1F2")
+                    cell.font = Font(bold=True)
+        for col in ws.columns:
+            max_len = max((len(str(c.value or "")) for c in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+    except Exception:
+        pass
+
+
+@require_GET
+@login_required
+def download_uc3_cpu_input_data(request):
+    """
+    Export the full UC3.1 CPU Rightsizing input dataset plus a filter-funnel summary.
+
+    Sheet 1 – "UC3 CPU Input Data": all rows from _build_rightsizing_df().
+    Sheet 2 – "UC3 CPU Summary": PROD / NON-PROD filter funnels + Environment breakdown.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import NON_PROD_ENVS, find_cpu_rightsizing_optimizations
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No UC3 CPU rightsizing input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    # ── PROD filter funnel ────────────────────────────────────────────────────
+    prod_df = df[~df["Environment"].isin(NON_PROD_ENVS)].copy()
+    prod_total = len(prod_df)
+
+    avg_cpu  = pd.to_numeric(prod_df.get("Avg_CPU_12m",  pd.Series(dtype=float)), errors="coerce")
+    peak_cpu = pd.to_numeric(prod_df.get("Peak_CPU_12m", pd.Series(dtype=float)), errors="coerce")
+    vcpu     = pd.to_numeric(prod_df.get("Current_vCPU", pd.Series(dtype=float)), errors="coerce")
+
+    mask_p1 = avg_cpu < 15
+    prod_after_f1 = int(mask_p1.sum())
+    mask_p2 = mask_p1 & (peak_cpu <= 70)
+    prod_after_f2 = int(mask_p2.sum())
+    mask_p3 = mask_p2 & (vcpu >= 4)
+    prod_eligible = int(mask_p3.sum())
+
+    # ── NON-PROD filter funnel ────────────────────────────────────────────────
+    nonprod_df = df[df["Environment"].isin(NON_PROD_ENVS)].copy()
+    nonprod_total = len(nonprod_df)
+
+    avg_cpu_np  = pd.to_numeric(nonprod_df.get("Avg_CPU_12m",  pd.Series(dtype=float)), errors="coerce")
+    peak_cpu_np = pd.to_numeric(nonprod_df.get("Peak_CPU_12m", pd.Series(dtype=float)), errors="coerce")
+    vcpu_np     = pd.to_numeric(nonprod_df.get("Current_vCPU", pd.Series(dtype=float)), errors="coerce")
+
+    mask_np1 = avg_cpu_np < 25
+    nonprod_after_f1 = int(mask_np1.sum())
+    mask_np2 = mask_np1 & (peak_cpu_np <= 80)
+    nonprod_after_f2 = int(mask_np2.sum())
+    mask_np3 = mask_np2 & (vcpu_np >= 4)
+    nonprod_eligible = int(mask_np3.sum())
+
+    # ── Actual final candidates via full rule ─────────────────────────────────
+    final_df = find_cpu_rightsizing_optimizations(df)
+    prod_candidates   = int((final_df["Env_Type"] == "PROD").sum())
+    nonprod_candidates = int((final_df["Env_Type"] == "NON-PROD").sum())
+    total_candidates  = prod_candidates + nonprod_candidates
+
+    # ── Environment breakdown ─────────────────────────────────────────────────
+    env_counts = df["Environment"].astype(str).value_counts().reset_index()
+    env_counts.columns = ["environment", "count"]
+
+    summary_rows = [
+        {"Description": "Total rows in DB (UC3.1 CPU input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- PROD filters (Environment not in NON-PROD list) ---", "Count": prod_total, "Note": ""},
+        {"Description": "UC3.1 PROD Filter 1: Avg_CPU_12m < 15%", "Count": prod_after_f1, "Note": ""},
+        {"Description": "UC3.1 PROD Filter 2: Peak_CPU_12m <= 70%", "Count": prod_after_f2, "Note": ""},
+        {"Description": "UC3.1 PROD Filter 3: Current_vCPU >= 4", "Count": prod_eligible, "Note": ""},
+        {"Description": "UC3.1 PROD Filter 4: Recommendation band applied", "Count": prod_candidates, "Note": ""},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- NON-PROD filters (Development, Test, QA, UAT, DR) ---", "Count": nonprod_total, "Note": ""},
+        {"Description": "UC3.1 NON-PROD Filter 1: Avg_CPU_12m < 25%", "Count": nonprod_after_f1, "Note": ""},
+        {"Description": "UC3.1 NON-PROD Filter 2: Peak_CPU_12m <= 80%", "Count": nonprod_after_f2, "Note": ""},
+        {"Description": "UC3.1 NON-PROD Filter 3: Current_vCPU >= 4", "Count": nonprod_eligible, "Note": ""},
+        {"Description": "UC3.1 NON-PROD Filter 4: Recommendation band applied", "Count": nonprod_candidates, "Note": ""},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC3.1 CPU FINAL CANDIDATES", "Count": total_candidates, "Note": f"{prod_candidates} PROD, {nonprod_candidates} NON-PROD — Rows the rule will action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Environment breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, row in env_counts.iterrows():
+        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "NON-PROD" if row["environment"] in NON_PROD_ENVS else "PROD"})
+
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="UC3 CPU Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="UC3 CPU Summary")
+        _apply_summary_styles(writer.sheets["UC3 CPU Summary"])
+
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = _safe_content_disposition("uc3_cpu_input_data.xlsx")
+    return response
+
+
+@require_GET
+@login_required
+def download_uc3_crit_cpu_input_data(request):
+    """
+    Export the full UC3.3 Criticality-Aware CPU input dataset plus a filter-funnel summary.
+
+    UC3.3a Downsize: Criticality in ALL_CRITICAL_VALS AND Avg_CPU_12m < 10%
+    UC3.3b Upsize:   Criticality in CRITICAL_VALS AND Avg_CPU_12m > 80%
+
+    Sheet 1 – "UC3 Crit CPU Input Data": all rows from _build_rightsizing_df().
+    Sheet 2 – "UC3 Crit CPU Summary": downsize / upsize filter funnels + Criticality breakdown.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import (
+        ALL_CRITICAL_VALS, CRITICAL_VALS,
+        find_criticality_cpu_optimizations,
+        find_criticality_cpu_downsize_optimizations,
+        find_criticality_cpu_upsize_optimizations,
+    )
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No UC3 Criticality CPU input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    # ── UC3.3a Downsize filter funnel ─────────────────────────────────────────
+    crit_col = "Criticality" if "Criticality" in df.columns else None
+    if crit_col:
+        mask_all_crit = df[crit_col].isin(ALL_CRITICAL_VALS)
+        total_critical = int(mask_all_crit.sum())
+        avg_cpu = pd.to_numeric(df.get("Avg_CPU_12m", pd.Series(dtype=float)), errors="coerce")
+        mask_down = mask_all_crit & (avg_cpu.fillna(100) < 10)
+        downsize_eligible = int(mask_down.sum())
+
+        # ── UC3.3b Upsize filter funnel ───────────────────────────────────────
+        mask_bc_mc = df[crit_col].isin(CRITICAL_VALS)
+        total_bc_mc = int(mask_bc_mc.sum())
+        mask_up = mask_bc_mc & (avg_cpu.fillna(0) > 80)
+        upsize_eligible = int(mask_up.sum())
+    else:
+        total_critical = downsize_eligible = total_bc_mc = upsize_eligible = 0
+
+    # ── Actual final candidates via full rule ─────────────────────────────────
+    final_df   = find_criticality_cpu_optimizations(df)
+    downsize_df = find_criticality_cpu_downsize_optimizations(df)
+    upsize_df   = find_criticality_cpu_upsize_optimizations(df)
+    downsize_final = len(downsize_df)
+    upsize_final   = len(upsize_df)
+    total_candidates = len(final_df)
+
+    # ── Criticality breakdown ─────────────────────────────────────────────────
+    crit_counts = df["Criticality"].astype(str).value_counts().reset_index() if crit_col else pd.DataFrame(columns=["criticality", "count"])
+    crit_counts.columns = ["criticality", "count"]
+
+    summary_rows = [
+        {"Description": "Total rows in DB (UC3.3 Crit CPU input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- UC3.3a Downsize filters ---", "Count": None, "Note": ""},
+        {"Description": "UC3.3a Filter 1: Criticality = Business/Mission/Manufacturing Critical", "Count": total_critical, "Note": f"Values: {', '.join(ALL_CRITICAL_VALS)}"},
+        {"Description": "UC3.3a Filter 2: Avg_CPU_12m < 10%", "Count": downsize_eligible, "Note": ""},
+        {"Description": "UC3.3a DOWNSIZE CANDIDATES", "Count": downsize_final, "Note": "Human Intervention Required"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- UC3.3b Upsize filters ---", "Count": None, "Note": ""},
+        {"Description": "UC3.3b Filter 1: Criticality = Business Critical / Mission Critical", "Count": total_bc_mc, "Note": f"Values: {', '.join(CRITICAL_VALS)}"},
+        {"Description": "UC3.3b Filter 2: Avg_CPU_12m > 80%", "Count": upsize_eligible, "Note": ""},
+        {"Description": "UC3.3b UPSIZE CANDIDATES", "Count": upsize_final, "Note": "Flag Only — Human Intervention Required"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC3.3 Crit CPU FINAL FLAGS", "Count": total_candidates, "Note": f"{downsize_final} Downsize, {upsize_final} Upsize — Rows the rule will action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Criticality breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, row in crit_counts.iterrows():
+        summary_rows.append({"Description": f" {row['criticality']}", "Count": int(row["count"]), "Note": ""})
+
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="UC3 Crit CPU Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="UC3 Crit CPU Summary")
+        _apply_summary_styles(writer.sheets["UC3 Crit CPU Summary"])
+
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = _safe_content_disposition("uc3_crit_cpu_input_data.xlsx")
+    return response
+
+
+@require_GET
+@login_required
+def download_uc3_crit_ram_input_data(request):
+    """
+    Export the full UC3.4 Criticality-Aware RAM input dataset plus a filter-funnel summary.
+
+    UC3.4a Downsize: Criticality in ALL_CRITICAL_VALS AND Avg_FreeMem_12m > 80%
+    UC3.4b Upsize:   Criticality in CRITICAL_VALS AND Avg_FreeMem_12m < 20%
+
+    Sheet 1 – "UC3 Crit RAM Input Data": all rows from _build_rightsizing_df().
+    Sheet 2 – "UC3 Crit RAM Summary": downsize / upsize filter funnels + Criticality breakdown.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import (
+        ALL_CRITICAL_VALS, CRITICAL_VALS,
+        find_criticality_ram_optimizations,
+        find_criticality_ram_downsize_optimizations,
+        find_criticality_ram_upsize_optimizations,
+    )
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No UC3 Criticality RAM input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    crit_col = "Criticality" if "Criticality" in df.columns else None
+    avg_free = pd.to_numeric(df.get("Avg_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
+
+    if crit_col:
+        mask_all_crit = df[crit_col].isin(ALL_CRITICAL_VALS)
+        total_critical = int(mask_all_crit.sum())
+        mask_down = mask_all_crit & (avg_free.fillna(0) > 80)
+        downsize_eligible = int(mask_down.sum())
+
+        mask_bc_mc = df[crit_col].isin(CRITICAL_VALS)
+        total_bc_mc = int(mask_bc_mc.sum())
+        mask_up = mask_bc_mc & (avg_free.fillna(100) < 20)
+        upsize_eligible = int(mask_up.sum())
+    else:
+        total_critical = downsize_eligible = total_bc_mc = upsize_eligible = 0
+
+    final_df    = find_criticality_ram_optimizations(df)
+    downsize_df = find_criticality_ram_downsize_optimizations(df)
+    upsize_df   = find_criticality_ram_upsize_optimizations(df)
+    downsize_final   = len(downsize_df)
+    upsize_final     = len(upsize_df)
+    total_candidates = len(final_df)
+
+    crit_counts = df["Criticality"].astype(str).value_counts().reset_index() if crit_col else pd.DataFrame(columns=["criticality", "count"])
+    crit_counts.columns = ["criticality", "count"]
+
+    summary_rows = [
+        {"Description": "Total rows in DB (UC3.4 Crit RAM input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- UC3.4a Downsize filters ---", "Count": None, "Note": ""},
+        {"Description": "UC3.4a Filter 1: Criticality = Business/Mission/Manufacturing Critical", "Count": total_critical, "Note": f"Values: {', '.join(ALL_CRITICAL_VALS)}"},
+        {"Description": "UC3.4a Filter 2: Avg_FreeMem_12m > 80%", "Count": downsize_eligible, "Note": ""},
+        {"Description": "UC3.4a DOWNSIZE CANDIDATES", "Count": downsize_final, "Note": "Downsize RAM by ~25% — Human Intervention Required"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- UC3.4b Upsize filters ---", "Count": None, "Note": ""},
+        {"Description": "UC3.4b Filter 1: Criticality = Business Critical / Mission Critical", "Count": total_bc_mc, "Note": f"Values: {', '.join(CRITICAL_VALS)}"},
+        {"Description": "UC3.4b Filter 2: Avg_FreeMem_12m < 20%", "Count": upsize_eligible, "Note": ""},
+        {"Description": "UC3.4b UPSIZE CANDIDATES", "Count": upsize_final, "Note": "Flag Only — Human Intervention Required"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC3.4 Crit RAM FINAL FLAGS", "Count": total_candidates, "Note": f"{downsize_final} Downsize, {upsize_final} Upsize — Rows the rule will action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Criticality breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, row in crit_counts.iterrows():
+        summary_rows.append({"Description": f" {row['criticality']}", "Count": int(row["count"]), "Note": ""})
+
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="UC3 Crit RAM Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="UC3 Crit RAM Summary")
+        _apply_summary_styles(writer.sheets["UC3 Crit RAM Summary"])
+
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = _safe_content_disposition("uc3_crit_ram_input_data.xlsx")
+    return response
+
+
+@require_GET
+@login_required
+def download_uc3_physical_input_data(request):
+    """
+    Export the full Physical Systems input dataset plus a filter-funnel summary.
+
+    Filter: is_virtual == False (case-insensitive) → Physical → flagged for human review.
+
+    Sheet 1 – "Physical Input Data": all rows from _build_rightsizing_df().
+    Sheet 2 – "Physical Summary": virtual/physical split + Environment breakdown.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import find_physical_systems_flags
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No Physical Systems input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    # ── Detect is_virtual column ──────────────────────────────────────────────
+    virt_col = next((c for c in ("Is Virtual?", "is_virtual", "IsVirtual") if c in df.columns), None)
+    if virt_col:
+        is_physical_mask = df[virt_col].astype(str).str.strip().str.lower() == "false"
+        total_physical = int(is_physical_mask.sum())
+        total_virtual  = total_input - total_physical
+    else:
+        total_physical = total_virtual = 0
+
+    final_df         = find_physical_systems_flags(df)
+    total_candidates = len(final_df)
+
+    # ── Environment breakdown ─────────────────────────────────────────────────
+    env_counts = df["Environment"].astype(str).value_counts().reset_index()
+    env_counts.columns = ["environment", "count"]
+
+    from optimizer.rules.rightsizing import NON_PROD_ENVS
+
+    summary_rows = [
+        {"Description": "Total rows in DB (Physical Systems input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Physical Systems filter ---", "Count": None, "Note": ""},
+        {"Description": "Physical Systems Filter 1: is_virtual = False", "Count": total_physical, "Note": "Physical servers only"},
+        {"Description": "Virtual servers (excluded)", "Count": total_virtual, "Note": "is_virtual = True or blank"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "Physical Systems FINAL FLAGS", "Count": total_candidates, "Note": "Human review required before any rightsizing action"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Environment breakdown (all input rows) ---", "Count": None, "Note": ""},
+    ]
+    for _, row in env_counts.iterrows():
+        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "NON-PROD" if row["environment"] in NON_PROD_ENVS else "PROD"})
+
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Physical Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="Physical Summary")
+        _apply_summary_styles(writer.sheets["Physical Summary"])
+
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = _safe_content_disposition("uc3_physical_input_data.xlsx")
+    return response
+
+
+def download_uc3_lifecycle_input_data(request):
+    """
+    Export the full UC3.5 Lifecycle Risk Flags input dataset plus a filter-funnel summary.
+
+    Filters (sequential AND):
+      Filter 1: Criticality in [Business Critical, Mission Critical]
+      Filter 2: Peak_CPU_12m > 95%
+      Filter 3: Min_FreeMem_12m < 5%
+
+    Sheet 1 – "Lifecycle Input Data": all rows from _build_rightsizing_df().
+    Sheet 2 – "Lifecycle Summary": sequential filter funnel + Criticality breakdown.
+    """
+    from io import BytesIO
+    from optimizer.services.db_analysis_service import _build_rightsizing_df
+    from optimizer.rules.rightsizing import find_lifecycle_risk_flags, LC_CRITICAL_VALS, COL_CRITICALITY
+
+    df = _build_rightsizing_df()
+    if df.empty:
+        return HttpResponse("No Lifecycle Risk Flags input data found in the database.", status=404)
+
+    total_input = len(df)
+
+    # ── Sequential filter counts ──────────────────────────────────────────────
+    has_criticality = COL_CRITICALITY in df.columns
+    if has_criticality:
+        step1 = df[df[COL_CRITICALITY].isin(LC_CRITICAL_VALS)]
+        after_f1 = len(step1)
+        step2 = step1[step1["Peak_CPU_12m"].fillna(0) > 95]
+        after_f2 = len(step2)
+        step3 = step2[step2["Min_FreeMem_12m"].fillna(100) < 5]
+        after_f3 = len(step3)
+    else:
+        after_f1 = after_f2 = after_f3 = 0
+
+    final_df         = find_lifecycle_risk_flags(df)
+    total_candidates = len(final_df)
+
+    # ── Criticality breakdown on final candidates ─────────────────────────────
+    if not final_df.empty and has_criticality:
+        crit_counts = final_df[COL_CRITICALITY].astype(str).value_counts().reset_index()
+        crit_counts.columns = ["criticality", "count"]
+    else:
+        crit_counts = pd.DataFrame(columns=["criticality", "count"])
+
+    summary_rows = [
+        {"Description": "Total rows in DB (UC3.5 Lifecycle input)", "Count": total_input, "Note": "Active servers with utilisation data"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- UC3.5 Lifecycle Risk Flag filters (sequential AND) ---", "Count": None, "Note": ""},
+        {"Description": "UC3.5 Filter 1: Criticality = Business Critical OR Mission Critical", "Count": after_f1, "Note": f"of {total_input} input rows"},
+        {"Description": "UC3.5 Filter 2: Peak_CPU_12m > 95%", "Count": after_f2, "Note": f"of {after_f1} after Filter 1"},
+        {"Description": "UC3.5 Filter 3: Min_FreeMem_12m < 5%", "Count": after_f3, "Note": f"of {after_f2} after Filter 2"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "UC3.5 Lifecycle Risk FINAL FLAGS", "Count": total_candidates, "Note": "Human review required — all 3 filters passed"},
+        {"Description": "", "Count": None, "Note": ""},
+        {"Description": "--- Criticality breakdown (final flagged systems) ---", "Count": None, "Note": ""},
+    ]
+    for _, row in crit_counts.iterrows():
+        summary_rows.append({"Description": f" {row['criticality']}", "Count": int(row["count"]), "Note": ""})
+
+    summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Lifecycle Input Data")
+        summary_df.to_excel(writer, index=False, sheet_name="Lifecycle Summary")
+        _apply_summary_styles(writer.sheets["Lifecycle Summary"])
+
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = _safe_content_disposition("uc3_lifecycle_input_data.xlsx")
     return response
