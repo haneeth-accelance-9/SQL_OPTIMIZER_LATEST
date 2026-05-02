@@ -1288,6 +1288,16 @@ def results(request):
                  [c for c in all_rule2_keys if c not in RULE2_DISPLAY_COLS and c not in _RULE_HIDDEN_COLS]
     azure_slice = azure_full[(rule1_page - 1) * per_page : rule1_page * per_page]
     retired_slice = retired_full[(rule2_page - 1) * per_page : rule2_page * per_page]
+
+    _NON_PROD_ENVS = {"Development", "Disaster recovery", "Test", "QA", "UAT"}
+    azure_payg_prod_count = sum(
+        1 for r in azure_full
+        if str(r.get("environment") or "").strip() not in _NON_PROD_ENVS
+    )
+    azure_payg_nonprod_count = len(azure_full) - azure_payg_prod_count
+    render_context["azure_payg_prod_candidates_count"] = azure_payg_prod_count
+    render_context["azure_payg_nonprod_candidates_count"] = azure_payg_nonprod_count
+
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
     render_context["retired_devices_page"] = [[r.get(k) for k in rule2_keys] for r in retired_slice]
     render_context["rule1_page"] = rule1_page
@@ -1673,10 +1683,10 @@ def results(request):
                 "Period": str(f.period_month) if f.period_month else "",
                 "Avg CPU%": str(round(float(f.avg_cpu_pct), 2)) if f.avg_cpu_pct is not None else "",
                 "Max CPU%": str(round(float(f.max_cpu_pct), 2)) if f.max_cpu_pct is not None else "",
-                "Min CPU%": str(round(float(f.min_cpu_pct), 2)) if f.min_cpu_pct is not None else "",
                 "Logical CPUs": str(f.logical_cpu_count) if f.logical_cpu_count is not None else "",
                 "RAM (GiB)": str(round(float(f.physical_ram_gib), 2)) if f.physical_ram_gib is not None else "",
                 "Avg Free Mem%": str(round(float(f.avg_free_memory_pct), 2)) if f.avg_free_memory_pct is not None else "",
+                "Min_FreeMem_12m": str(round(float(f.min_free_memory_pct), 2)) if f.min_free_memory_pct is not None else "",
             }
             for f in flatfile_qs
         ]

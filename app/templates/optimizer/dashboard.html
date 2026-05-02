@@ -154,11 +154,19 @@
                     <div class="pt-2">
                         <h2 class="text-[2rem] leading-tight font-extrabold text-slate-900">PAYG Recommendations</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Identify SQL Server environments using Bring-Your-Own-License that can be shifted to Pay-As-You-Go.</p>
-                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
-                            </svg>
-                            <p>Data for this Strategy is sourced from USU.</p>
+                        <div class="mt-3 flex flex-wrap items-center gap-3">
+                            <div class="inline-flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                                </svg>
+                                <p>Data for this Strategy is sourced from USU.</p>
+                            </div>
+                            <div class="inline-flex items-start gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+                                <div class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-orange-500">
+                                    <span class="text-[9px] font-extrabold text-white leading-none">!</span>
+                                </div>
+                                <p><span class="font-semibold">Assumptions:</span> BYOL to PAYG conversions save 80% of current cost.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -189,12 +197,12 @@
                             </div>
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_savings_eu }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Prod</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_prod_candidates_count }}</p>
                                 </div>
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">PAYG Candidates</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Non Prod</p>
+                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_nonprod_candidates_count }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
@@ -293,7 +301,16 @@
                 <!-- Data Table -->
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col mt-4 overflow-hidden flex-shrink-0 w-full">
                 <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
-                    <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
+                        <div class="flex-shrink-0"
+                             onmouseenter="showFixedTooltip(this,'The data inconsistency between demand details and installations have not been considered in cost calculations.')"
+                             onmouseleave="hideFixedTooltip()">
+                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 cursor-pointer select-none">
+                                <span class="text-[9px] font-extrabold text-white leading-none">!</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="flex items-center gap-2">
                         <label for="rule1-hosting-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting Zone</label>
                         <select id="rule1-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
@@ -1018,11 +1035,19 @@
                     <div class="pt-2">
                         <h2 id="rs3-cpu-title" class="text-[2rem] leading-tight font-extrabold text-slate-900">CPU Right-Sizing</h2>
                         <p class="mt-2 max-w-3xl text-sm text-slate-500">Identifying underutilized CPUs within MS SQL databases for downsizing and performance optimization.</p>
-                        <div class="mt-3 inline-flex max-w-3xl items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
-                            </svg>
-                            <p>Data for this Strategy is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
+                        <div class="mt-3 flex flex-wrap items-center gap-3">
+                            <div class="inline-flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
+                                </svg>
+                                <p>Data for this Strategy is sourced from flat files. Future state: Data will be sourced from Grafana.</p>
+                            </div>
+                            <div class="inline-flex items-start gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+                                <div class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-orange-500">
+                                    <span class="text-[9px] font-extrabold text-white leading-none">!</span>
+                                </div>
+                                <p><span class="font-semibold">Assumption:</span> Recommended vCPU = Effective quantity.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5545,6 +5570,44 @@
                 }
             };
         })();
+    })();
+
+    /* ── Fixed-position orange tooltip (escapes overflow:hidden parents) ── */
+    (function () {
+        var tip = document.createElement('div');
+        tip.id = 'fixed-orange-tip';
+        tip.style.cssText = [
+            'position:fixed',
+            'z-index:9999',
+            'max-width:288px',
+            'background:#f97316',
+            'color:#fff',
+            'font-size:12px',
+            'line-height:1.5',
+            'padding:10px 14px',
+            'border-radius:10px',
+            'box-shadow:0 8px 24px rgba(0,0,0,0.18)',
+            'pointer-events:none',
+            'display:none',
+            'word-wrap:break-word',
+        ].join(';');
+        document.body.appendChild(tip);
+
+        window.showFixedTooltip = function (el, text) {
+            tip.textContent = text;
+            tip.style.display = 'block';
+            var rect = el.getBoundingClientRect();
+            var tipW = tip.offsetWidth;
+            var left = rect.left + rect.width / 2 - tipW / 2;
+            if (left < 8) left = 8;
+            if (left + tipW > window.innerWidth - 8) left = window.innerWidth - tipW - 8;
+            tip.style.left = left + 'px';
+            tip.style.top  = (rect.top - tip.offsetHeight - 8) + 'px';
+        };
+
+        window.hideFixedTooltip = function () {
+            tip.style.display = 'none';
+        };
     })();
 </script>
 {% endblock %}
