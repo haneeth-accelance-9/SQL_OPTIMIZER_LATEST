@@ -1670,9 +1670,9 @@ def _get_rightsizing_sheet_export_headers(sheet_key: str) -> list[str]:
     headers = list(RIGHTSIZING_REPORT_BASE_HEADERS)
     normalized_sheet_key = str(sheet_key or "").strip().upper()
     if "_RAM_" in normalized_sheet_key:
-        headers.extend(["RAM_Recommendation", "Recommended_RAM_GiB"])
+        headers.extend(["RAM_Recommendation", "Recommended_RAM_GiB", "product_edition"])
     else:
-        headers.extend(["CPU_Recommendation", "Recommended_vCPU"])
+        headers.extend(["CPU_Recommendation", "Recommended_vCPU", "product_edition"])
     return headers
 
 
