@@ -742,15 +742,26 @@ def compute_db_metrics() -> dict:
     Reuses run_rules, compute_license_metrics, _calculate_savings, and
     _build_payg_zone_breakdown — identical to the upload path.
     """
-    from optimizer.models import Server
-
     # ── Build DataFrames from DB ──────────────────────────────────────────────
     installations_df = _build_installations_df()
     demand_df = _build_demand_df()
     prices_df = _build_prices_df()
     prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
 
-    total_devices = Server.objects.filter(is_active=True).count()
+    from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
+    _dd_server_ids = set(
+        _UDD.objects
+        .filter(server__is_active=True)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values_list("server_id", flat=True).distinct()
+    )
+    _inst_server_ids = set(
+        _USUInst.objects
+        .filter(server__is_active=True)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values_list("server_id", flat=True).distinct()
+    )
+    total_devices = len(_dd_server_ids | _inst_server_ids)
 
     # ── Run existing rule engine (same as upload path) ────────────────────────
     azure_df_uc1 = pd.DataFrame()
@@ -1835,14 +1846,25 @@ def compute_live_db_metrics() -> dict:
     and USUInstallation, and cost/savings are derived from USUDemandDetail and
     LicenseRule.
     """
-    from optimizer.models import Server
-
     installations_df = _build_installations_df()
     demand_df = _build_demand_df()
     prices_df = _build_prices_df()
     prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
 
-    total_devices = Server.objects.filter(is_active=True).count()
+    from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
+    _dd_server_ids = set(
+        _UDD.objects
+        .filter(server__is_active=True)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values_list("server_id", flat=True).distinct()
+    )
+    _inst_server_ids = set(
+        _USUInst.objects
+        .filter(server__is_active=True)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .values_list("server_id", flat=True).distinct()
+    )
+    total_devices = len(_dd_server_ids | _inst_server_ids)
 
     def _to_records(df: pd.DataFrame) -> list[dict]:
         if df is None or df.empty:
