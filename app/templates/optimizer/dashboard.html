@@ -103,11 +103,11 @@
         <div class="results-kpi-strip px-8 py-5 lg:px-12">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[760px]">
                 <div class="results-kpi-item">
-                    <span class="results-kpi-label">Devices Analyzed</span>
+                    <span class="results-kpi-label">Total servers analyzed</span>
                     <span class="results-kpi-value">{{ total_devices_analyzed|default:0 }}</span>
                 </div>
                 <div class="results-kpi-item">
-                    <span class="results-kpi-label">Total Demand</span>
+                    <span class="results-kpi-label">Total demand licenses</span>
                     <span class="results-kpi-value">{{ total_demand_quantity }}</span>
                 </div>
                 <div class="results-kpi-item">
@@ -181,13 +181,9 @@
                             <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ azure_payg_savings_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4">
-                            <div class="grid grid-cols-3 gap-3 border-b border-slate-200 pb-4">
+                            <div class="grid grid-cols-2 gap-3 border-b border-slate-200 pb-4">
                                 <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost_eu }}</p>
-                                </div>
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Demand</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total demand licenses</p>
                                     <p class="mt-1 text-xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
                                 </div>
                                 <div>
@@ -429,17 +425,11 @@
                             <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ retired_devices_savings_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4 text-[11px]">
-                            <div class="grid grid-cols-2 gap-2 border-b border-slate-200 pb-3">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Current Cost</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_license_cost_eu }}</p>
-                                </div>
+                            <div class="grid grid-cols-3 gap-2">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
                                     <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
                                 </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Retired Devices</p>
                                     <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_count }}</p>
@@ -702,7 +692,7 @@
 
                     <div class="xl:col-span-3 grid gap-3">
                         <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
-                            <span class="dashboard-section-label">Total Demand</span>
+                            <span class="dashboard-section-label">Total demand licenses</span>
                             <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
                             <p class="mt-1 text-sm text-slate-500">New total</p>
                         </div>
