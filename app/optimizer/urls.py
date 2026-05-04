@@ -25,6 +25,7 @@ urlpatterns = [
     path("data/download/uc3-crit-ram-input/", views.download_uc3_crit_ram_input_data, name="download_uc3_crit_ram_input_data"),
     path("data/download/uc3-physical-input/", views.download_uc3_physical_input_data, name="download_uc3_physical_input_data"),
     path("data/download/uc3-lifecycle-input/", views.download_uc3_lifecycle_input_data, name="download_uc3_lifecycle_input_data"),
+    path("data/download/demand/", views.download_demand_data, name="download_demand_data"),
     path("data/download/<str:rule_id>/", views.download_rule_data, name="download_rule_data"),
     path("rightsizing/download/<str:sheet_key>/", views.download_rightsizing_sheet, name="download_rightsizing_sheet"),
     path("api/strategy3-rightsizing/", views.api_strategy3_rightsizing, name="api_strategy3_rightsizing"),

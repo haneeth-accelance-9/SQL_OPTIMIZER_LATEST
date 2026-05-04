@@ -2793,6 +2793,66 @@ def api_rule2_data(request):
 
 @require_GET
 @login_required
+def download_demand_data(request):
+    """Export all Total Demand License rows with Actual_Line_Cost as Excel."""
+    from optimizer.models import USUDemandDetail
+    from optimizer.services.db_analysis_service import (
+        _get_rightsizing_cpu_license_cost_eur,
+        SHOWCASE_ONLY_PRODUCT_FAMILIES,
+        _normalize_hosting_zone,
+    )
+    from io import BytesIO
+
+    rows = USUDemandDetail.objects.filter(
+        server__is_active=True
+    ).exclude(
+        product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
+    ).select_related("server").values(
+        "server__server_name",
+        "server__hosting_zone",
+        "server__environment",
+        "product_description",
+        "product_edition",
+        "product_family",
+        "eff_quantity",
+        "cpu_core_count",
+        "no_license_required",
+    ).order_by("server__server_name", "product_description")
+
+    records = []
+    for r in rows:
+        eff_qty = float(r["eff_quantity"] or 0)
+        price = _get_rightsizing_cpu_license_cost_eur(str(r["product_edition"] or ""))
+        actual_line_cost = round((price * eff_qty) / 2, 2)
+        records.append({
+            "Server Name":              r["server__server_name"] or "",
+            "Hosting Zone":             _normalize_hosting_zone(r["server__hosting_zone"] or ""),
+            "Environment":              r["server__environment"] or "",
+            "Product Description":      r["product_description"] or "",
+            "Product Edition":          r["product_edition"] or "",
+            "Product Family":           r["product_family"] or "",
+            "Eff. Quantity":            eff_qty,
+            "CPU Core Count":           float(r["cpu_core_count"] or 0),
+            "No License Required":      int(r["no_license_required"] or 0),
+            "Price EUR (per core pair)": price,
+            "Actual Line Cost (EUR)":   actual_line_cost,
+        })
+
+    df = pd.DataFrame(records)
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Total Demand Licenses")
+    buf.seek(0)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="total_demand_licenses.xlsx"'
+    return response
+
+
+@require_GET
+@login_required
 def download_rule_data(request, rule_id):
     """Download Rule 1 or Rule 2 data as Excel. rule_id whitelisted to rule1, rule2."""
     if rule_id not in ALLOWED_RULE_IDS:
