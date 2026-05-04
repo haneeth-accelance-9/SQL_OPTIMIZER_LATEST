@@ -644,7 +644,7 @@
                             <!-- <span class="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-4 flex items-end gap-2">
-                            <span class="text-4xl font-extrabold text-slate-900">{{ potential_savings_eu }}</span>
+                            <span id="overview-potential-savings" class="text-4xl font-extrabold text-slate-900">{{ potential_savings_eu }}</span>
                             <span class="pb-1 text-sm font-medium text-emerald-600">estimated</span>
                         </div>
                         <p class="mt-4 text-sm leading-6 text-slate-600">Savings are driven primarily by Azure BYOL to PAYG switches, workload right-sizing, and cleanup of inactive or retired software footprints.</p>
@@ -661,13 +661,13 @@
                             </div>
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">CPU Estimate Savings</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing_cpu_savings_eu }}</p>
-                                <p class="mt-2 text-xs text-slate-400">{{ rightsizing.total_vcpu_reduction|default:0 }} vCPUs potential reduction</p>
+                                <p id="overview-cpu-savings" class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing_cpu_savings_eu }}</p>
+                                <p class="mt-2 text-xs text-slate-400"><span id="overview-cpu-vcpu">{{ rightsizing.total_vcpu_reduction|default:0 }}</span> vCPUs potential reduction</p>
                             </div>
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">RAM Reduction</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }} GiB</p>
-                                <p class="mt-2 text-xs text-slate-400">{{ rightsizing.total_ram_reduction_gib|default:0 }} GiB potential reduction</p>
+                                <p class="mt-2 text-2xl font-bold text-slate-900"><span id="overview-ram-gib">{{ rightsizing.total_ram_reduction_gib|default:0 }}</span> GiB</p>
+                                <p class="mt-2 text-xs text-slate-400"><span id="overview-ram-gib-sub">{{ rightsizing.total_ram_reduction_gib|default:0 }}</span> GiB potential reduction</p>
                             </div>
                         </div>
                     </div>
@@ -3135,6 +3135,9 @@
         var RS3_CPU_NONPROD_TOTAL = {{ rightsizing.cpu_nonprod_count|default:0 }};
         var RS3_RAM_PROD_TOTAL    = {{ rightsizing.ram_prod_count|default:0 }};
         var RS3_RAM_NONPROD_TOTAL = {{ rightsizing.ram_nonprod_count|default:0 }};
+        // Fixed components for Potential Savings total (Potential = PAYG + Retired + CPU)
+        var OVERVIEW_PAYG_SAVINGS_RAW    = {{ azure_payg_savings|default:0 }};
+        var OVERVIEW_RETIRED_SAVINGS_RAW = {{ retired_devices_savings|default:0 }};
         var rs3State = {
             workload: rs3WorkloadFilter ? String(rs3WorkloadFilter.value || 'ALL').toLowerCase() : 'all',
             shared: {
@@ -3626,6 +3629,24 @@
                 var savingsInt = Math.round(Number(summary.savings_eur) || 0);
                 setText('rs3-' + type + '-savings-total', euCurrency(savingsInt));
                 setText('rs3-' + type + '-reduction-value', euCurrency(savingsInt));
+            }
+            // Sync overview "Potential Savings" card
+            if (type === 'cpu') {
+                setText('overview-cpu-vcpu', summary.reduction_total);
+                if (summary.savings_eur != null) {
+                    var cpuSavingsInt = Math.round(Number(summary.savings_eur) || 0);
+                    setText('overview-cpu-savings', euCurrency(cpuSavingsInt));
+                    // Recalculate Potential Savings = PAYG + Retired + CPU
+                    var newPotential = Math.round(
+                        (Number(OVERVIEW_PAYG_SAVINGS_RAW) || 0) +
+                        (Number(OVERVIEW_RETIRED_SAVINGS_RAW) || 0) +
+                        cpuSavingsInt
+                    );
+                    setText('overview-potential-savings', euCurrency(newPotential));
+                }
+            } else if (type === 'ram') {
+                setText('overview-ram-gib', summary.reduction_total);
+                setText('overview-ram-gib-sub', summary.reduction_total);
             }
         }
 

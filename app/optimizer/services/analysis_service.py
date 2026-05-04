@@ -324,7 +324,11 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
     out["rightsizing_cpu_savings"] = float(out["rule_wise_savings"].get("rightsizing_cpu", 0) or 0)
     out["rightsizing_ram_savings"] = float(out["rule_wise_savings"].get("rightsizing_ram", 0) or 0)
     out["total_savings"] = float(context.get("total_savings", savings["total_savings"]) or 0)
-    out["potential_savings"] = out["total_savings"]
+    # Potential Savings = BYOL to PAYG + Retired but reporting + CPU Estimate Savings
+    out["potential_savings"] = round(
+        out["azure_payg_savings"] + out["retired_devices_savings"] + out["rightsizing_cpu_savings"],
+        2,
+    )
     out["price_distribution"] = lm.get("price_distribution") or []
     price_distribution = out["price_distribution"]
     price_total_quantity = sum(int(item.get("quantity", 0) or 0) for item in price_distribution)
