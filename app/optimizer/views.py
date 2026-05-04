@@ -1226,6 +1226,9 @@ def results(request):
     render_context["data_source"] = "database"
     render_context["total_license_cost_eu"] = _eu_currency(render_context.get("total_license_cost", 0))
     render_context["azure_payg_savings_eu"] = _eu_currency(render_context.get("azure_payg_savings", 0))
+    render_context["azure_payg_total_cost_eu"] = _eu_currency(
+        context.get("rule_results", {}).get("azure_payg_total_cost_eur", 0)
+    )
     render_context["retired_devices_savings_eu"] = _eu_currency(render_context.get("retired_devices_savings", 0))
     render_context["rightsizing_cpu_savings_eu"] = _eu_currency(render_context.get("rightsizing_cpu_savings", 0))
     render_context["rightsizing_savings_eu"] = _eu_currency(render_context.get("rightsizing_savings", 0))
@@ -1264,6 +1267,7 @@ def results(request):
         "cloud_provider",
         "is_cloud_device",
         "inventory_status_standard",
+        "Actual_Line_Cost",
     ]
     RULE2_DISPLAY_COLS = [
         "server_name",

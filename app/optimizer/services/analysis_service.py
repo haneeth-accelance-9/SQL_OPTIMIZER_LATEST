@@ -306,7 +306,13 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
     out["rule_wise_savings"] = context.get("rule_wise_savings") or savings["rule_wise_savings"]
     out["scenario_wise_savings"] = context.get("scenario_wise_savings") or savings["scenario_wise_savings"]
     out["rightsizing_meta"] = context.get("rightsizing_meta") or savings.get("rightsizing_meta") or {}
-    out["azure_payg_savings"] = float(out["rule_wise_savings"].get("azure_payg", 0) or 0)
+    # Prefer the per-row savings (80% of SUM Actual_Line_Cost) when available
+    _payg_savings_from_cost = rr.get("azure_payg_savings_eur")
+    out["azure_payg_savings"] = (
+        float(_payg_savings_from_cost or 0)
+        if _payg_savings_from_cost is not None
+        else float(out["rule_wise_savings"].get("azure_payg", 0) or 0)
+    )
     out["retired_devices_savings"] = float(out["rule_wise_savings"].get("retired_devices", 0) or 0)
     out["rightsizing_savings"] = float(out["rule_wise_savings"].get("rightsizing", 0) or 0)
     out["rightsizing_cpu_savings"] = float(out["rule_wise_savings"].get("rightsizing_cpu", 0) or 0)

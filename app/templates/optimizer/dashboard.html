@@ -443,6 +443,7 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            <p class="text-sm font-bold text-slate-400 italic">Note: Effective quantity data is currently unavailable. Savings will be displayed here once the data is active.</p>
                         </div>
                     </div>
 
@@ -1096,16 +1097,6 @@
                                     <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
                                 </div>
                             </div> -->
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700"><span id="rs3-cpu-reduction-value">{{ rightsizing_cpu_savings_eu }}</span></p>
-                                </div>
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Avg Cost / Core Pair</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900"><span id="rs3-cpu-avg-cost-value">—</span></p>
-                                </div>
-                            </div>
                         </div>
                     </div>
                     <!-- CPU chart -->
@@ -2738,6 +2729,7 @@
             if (!tbody) return;
             var start = (rule1Page - 1) * PER_PAGE;
             var slice = rule1SortedData.slice(start, start + PER_PAGE);
+            var costColIdx = rule1Keys.indexOf('Actual_Line_Cost');
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
@@ -2746,7 +2738,14 @@
                 html += getSelectionCellHtml('rule1', rowIndex, ruleSelections.rule1.has(rowIndex));
                 for (var j = 0; j < row.length; j++) {
                     if (rule1HiddenCols.has(j)) continue;
-                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[j])) + '</td>';
+                    var cellContent;
+                    if (j === costColIdx && row[j] !== null && row[j] !== undefined && row[j] !== '') {
+                        var num = parseFloat(row[j]);
+                        cellContent = isNaN(num) ? escapeHtml(safeText(row[j])) : '€' + num.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    } else {
+                        cellContent = escapeHtml(safeText(row[j]));
+                    }
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + cellContent + '</td>';
                 }
                 html += getActionCellHtml();
                 html += '</tr>';
@@ -4770,6 +4769,14 @@
             });
         }
 
+        var dqColLabelMap = {
+            'Min_FreeMem_12m': 'Min Free Mem%',
+        };
+
+        function dqColLabel(key) {
+            return dqColLabelMap[key] || key;
+        }
+
         function dqRenderHead(name) {
             var headRow = document.getElementById('dq-' + name + '-head-row');
             if (!headRow) return;
@@ -4780,7 +4787,7 @@
                 if (hidden.has(i)) continue;
                 html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">'
                       + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 dq-sort-btn" data-dq-name="' + dqEsc(name) + '" data-dq-col="' + i + '">'
-                      + dqEsc(keys[i]) + dqSortIcon(name, i)
+                      + dqEsc(dqColLabel(keys[i])) + dqSortIcon(name, i)
                       + '</button></th>';
             }
             headRow.innerHTML = html;
@@ -5152,11 +5159,20 @@
                 if (loadEl) loadEl.classList.add('hidden');
 
                 var instData = ((payload.result || {}).installations) || {};
-                usuState._allCachedItems = [];
-                usuState.total      = Number(instData.total || 0);
-                usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
-                usuState.page       = Number(instData.page || usuState.page);
-                usuState._cachedItems = instData.items || [];
+                var items = instData.items || [];
+
+                if (usuState.family === 'all') {
+                    usuState._allCachedItems = items;
+                    usuApplyClientPage();
+                    usuState.total = Number(instData.total || items.length);
+                    usuState.totalPages = Math.max(1, Math.ceil(usuState.total / USU_PER_PAGE));
+                } else {
+                    usuState._allCachedItems = [];
+                    usuState.total      = Number(instData.total || 0);
+                    usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
+                    usuState.page       = Number(instData.page || usuState.page);
+                    usuState._cachedItems = items;
+                }
 
                 renderUsuHead();
                 renderUsuBody(usuState._cachedItems);

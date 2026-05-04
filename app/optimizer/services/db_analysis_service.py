@@ -678,16 +678,16 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
     """
     UC1 PAYG cost metrics.
 
-    Cost calculation — only servers that have Standard/Enterprise in usu_demand_detail
-    (eff_quantity is sourced from demand_detail; servers without it have eff_quantity=0
-    and are excluded to avoid misleading zero-cost rows).
+    Cost is calculated per row across all rows in azure_payg_df.
+    Rows whose server_id lacks Standard/Enterprise eff_quantity in demand_detail
+    receive Actual_Line_Cost = 0.
 
     PROD candidates count — unique servers with environment='Production' across the
-    full pre-filtered PAYG set (1281 rows), returned as a separate response field.
+    full pre-filtered PAYG set, returned as a separate response field.
 
-      Actual_Line_Cost per server = (Price × eff_quantity) / 2
-      Total_PAYG_Cost             = SUM(Actual_Line_Cost)
-      Total_PAYG_Savings          = 80% of Total_PAYG_Cost
+      Actual_Line_Cost per row = (Price × eff_quantity) / 2
+      Total_PAYG_Cost          = SUM(Actual_Line_Cost) across all rows
+      Total_PAYG_Savings       = 80% of Total_PAYG_Cost
     """
     if azure_payg_df.empty:
         return {
@@ -700,7 +700,7 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
 
     all_server_ids = [s for s in azure_payg_df["server_id"].dropna().unique().tolist() if s]
 
-    # Restrict cost calculation to servers with eff_quantity data (demand_detail only)
+    # Only count eff_quantity from servers with Standard/Enterprise demand detail
     demand_server_ids = set(
         str(sid)
         for sid in USUDemandDetail.objects
@@ -709,8 +709,27 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
         .values_list("server_id", flat=True)
         .distinct()
     )
-    cost_df = azure_payg_df[azure_payg_df["server_id"].isin(demand_server_ids)]
-    total_cost = _compute_device_cost_from_df(cost_df)
+
+    # Build eff_quantity lookup for qualifying servers
+    eff_qty_map = _build_server_eff_quantity_map(
+        [s for s in all_server_ids if s in demand_server_ids]
+    )
+
+    # Compute Actual_Line_Cost = (Price × eff_quantity) / 2 for EACH row
+    enriched_df = azure_payg_df.copy()
+    enriched_df["Actual_Line_Cost"] = enriched_df.apply(
+        lambda row: round(
+            (
+                _get_rightsizing_cpu_license_cost_eur(str(row.get("product_edition") or ""))
+                * float(eff_qty_map.get(str(row["server_id"]) if row["server_id"] else "", 0) or 0)
+            ) / 2,
+            2,
+        ),
+        axis=1,
+    )
+
+    # Total_PAYG_Cost = SUM(Actual_Line_Cost) across all rows
+    total_cost = round(float(enriched_df["Actual_Line_Cost"].sum()), 2)
     payg_savings = round(total_cost * 0.80, 2)
 
     # PROD candidates: unique servers with environment = 'Production'
@@ -724,8 +743,10 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
         )
 
     logger.info(
-        "[UC1 PAYG] Cost servers (demand_detail Standard/Enterprise): %d | PROD candidates: %d",
-        len(demand_server_ids),
+        "[UC1 PAYG] Per-row cost: %d rows | Total: %.2f EUR | Savings: %.2f EUR | PROD candidates: %d",
+        len(enriched_df),
+        total_cost,
+        payg_savings,
         prod_candidates_count,
     )
 
@@ -733,6 +754,7 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
         "azure_payg_total_cost_eur": total_cost,
         "azure_payg_savings_eur": payg_savings,
         "azure_payg_prod_candidates_count": prod_candidates_count,
+        "_azure_payg_enriched_df": enriched_df,
     }
 
 
@@ -797,7 +819,12 @@ def compute_db_metrics() -> dict:
             },
         }
 
-    rule_results.update(compute_azure_payg_cost_metrics(azure_df_uc1))
+    _payg_metrics_db = compute_azure_payg_cost_metrics(azure_df_uc1)
+    _enriched_payg_df_uc1 = _payg_metrics_db.pop("_azure_payg_enriched_df", None)
+    rule_results.update(_payg_metrics_db)
+    if _enriched_payg_df_uc1 is not None and not _enriched_payg_df_uc1.empty:
+        rule_results["azure_payg"] = _enriched_payg_df_uc1.replace({pd.NA: None}).to_dict("records")
+        rule_results["azure_payg_count"] = len(_enriched_payg_df_uc1)
     rule_results.update(
         compute_retired_devices_extended_metrics(installations_df, retired_df_uc2)
     )
@@ -1922,7 +1949,12 @@ def compute_live_db_metrics() -> dict:
     rule_results.update(
         compute_retired_devices_extended_metrics(installations_df, retired_df)
     )
-    rule_results.update(compute_azure_payg_cost_metrics(azure_df))
+    _payg_metrics = compute_azure_payg_cost_metrics(azure_df)
+    _enriched_payg_df = _payg_metrics.pop("_azure_payg_enriched_df", None)
+    rule_results.update(_payg_metrics)
+    if _enriched_payg_df is not None and not _enriched_payg_df.empty:
+        rule_results["azure_payg"] = _to_records(_enriched_payg_df)
+        rule_results["azure_payg_count"] = len(_enriched_payg_df)
 
     license_metrics = compute_license_metrics(
         demand_df if not demand_df.empty else pd.DataFrame(),
