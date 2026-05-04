@@ -443,7 +443,8 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <p class="text-sm font-bold text-slate-400 italic">Note: Effective quantity data is currently unavailable. Savings will be displayed here once the data is active.</p>
+                                                        <p class="text-sm font-bold text-slate-400 italic">Note: Effective quantity data is currently unavailable. Savings will be displayed here once the data is active.</p>
+
                         </div>
                     </div>
 
@@ -2822,6 +2823,7 @@
             if (!tbody) return;
             var start = (rule2Page - 1) * PER_PAGE;
             var slice = rule2SortedData.slice(start, start + PER_PAGE);
+            var costColIdx = rule2Keys.indexOf('Actual_Line_Cost');
             var html = '';
             for (var i = 0; i < slice.length; i++) {
                 var row = slice[i];
@@ -2830,7 +2832,14 @@
                 html += getSelectionCellHtml('rule2', rowIndex, ruleSelections.rule2.has(rowIndex));
                 for (var j = 0; j < row.length; j++) {
                     if (rule2HiddenCols.has(j)) continue;
-                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + escapeHtml(safeText(row[j])) + '</td>';
+                    var cellContent;
+                    if (j === costColIdx && row[j] !== null && row[j] !== undefined && row[j] !== '') {
+                        var num = parseFloat(row[j]);
+                        cellContent = isNaN(num) ? escapeHtml(safeText(row[j])) : '€' + num.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    } else {
+                        cellContent = escapeHtml(safeText(row[j]));
+                    }
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + cellContent + '</td>';
                 }
                 html += getActionCellHtml();
                 html += '</tr>';

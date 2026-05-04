@@ -313,7 +313,13 @@ def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] =
         if _payg_savings_from_cost is not None
         else float(out["rule_wise_savings"].get("azure_payg", 0) or 0)
     )
-    out["retired_devices_savings"] = float(out["rule_wise_savings"].get("retired_devices", 0) or 0)
+    # Prefer the per-row SUM(Actual_Line_Cost) for retired devices when available
+    _retired_savings_from_cost = rr.get("retired_devices_savings_eur")
+    out["retired_devices_savings"] = (
+        float(_retired_savings_from_cost or 0)
+        if _retired_savings_from_cost is not None
+        else float(out["rule_wise_savings"].get("retired_devices", 0) or 0)
+    )
     out["rightsizing_savings"] = float(out["rule_wise_savings"].get("rightsizing", 0) or 0)
     out["rightsizing_cpu_savings"] = float(out["rule_wise_savings"].get("rightsizing_cpu", 0) or 0)
     out["rightsizing_ram_savings"] = float(out["rule_wise_savings"].get("rightsizing_ram", 0) or 0)

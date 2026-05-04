@@ -640,7 +640,7 @@ def compute_retired_devices_extended_metrics(
 
     Step 1 – Total retired devices count
     Step 2 – Installed devices count  (install_status = 'install' / 'installed')
-    Step 3 – Savings for Retired Devices: sum of (Price × eff_quantity) / 2
+    Step 3 – Savings for Retired Devices: SUM(Actual_Line_Cost) per row
     Step 4 – Cost for Installed Devices: sum of (Price × eff_quantity) / 2
     """
     if retired_df is None:
@@ -662,8 +662,27 @@ def compute_retired_devices_extended_metrics(
         installed_df = pd.DataFrame()
         installed_count = 0
 
-    # Step 3 & 4 — cost calculations
-    retired_savings = _compute_device_cost_from_df(retired_df)
+    # Step 3 — Actual_Line_Cost = (Price × eff_quantity) / 2 per row in retired_df
+    enriched_retired_df = pd.DataFrame()
+    if not retired_df.empty and "server_id" in retired_df.columns:
+        unique_retired_ids = [s for s in retired_df["server_id"].dropna().unique().tolist() if s]
+        retired_eff_qty_map = _build_server_eff_quantity_map(unique_retired_ids)
+        enriched_retired_df = retired_df.copy()
+        enriched_retired_df["Actual_Line_Cost"] = enriched_retired_df.apply(
+            lambda row: round(
+                (
+                    _get_rightsizing_cpu_license_cost_eur(str(row.get("product_edition") or ""))
+                    * float(retired_eff_qty_map.get(str(row["server_id"]) if row["server_id"] else "", 0) or 0)
+                ) / 2,
+                2,
+            ),
+            axis=1,
+        )
+        retired_savings = round(float(enriched_retired_df["Actual_Line_Cost"].sum()), 2)
+    else:
+        retired_savings = 0.0
+
+    # Step 4 — cost for installed devices (per unique server, unchanged)
     installed_devices_cost = _compute_device_cost_from_df(installed_df)
 
     return {
@@ -671,6 +690,7 @@ def compute_retired_devices_extended_metrics(
         "installed_count": installed_count,
         "retired_devices_savings_eur": retired_savings,
         "installed_devices_cost_eur": installed_devices_cost,
+        "_retired_enriched_df": enriched_retired_df,
     }
 
 
@@ -825,9 +845,12 @@ def compute_db_metrics() -> dict:
     if _enriched_payg_df_uc1 is not None and not _enriched_payg_df_uc1.empty:
         rule_results["azure_payg"] = _enriched_payg_df_uc1.replace({pd.NA: None}).to_dict("records")
         rule_results["azure_payg_count"] = len(_enriched_payg_df_uc1)
-    rule_results.update(
-        compute_retired_devices_extended_metrics(installations_df, retired_df_uc2)
-    )
+    _retired_metrics_db = compute_retired_devices_extended_metrics(installations_df, retired_df_uc2)
+    _enriched_retired_df_uc2 = _retired_metrics_db.pop("_retired_enriched_df", None)
+    rule_results.update(_retired_metrics_db)
+    if _enriched_retired_df_uc2 is not None and not _enriched_retired_df_uc2.empty:
+        rule_results["retired_devices"] = _enriched_retired_df_uc2.replace({pd.NA: None}).to_dict("records")
+        rule_results["retired_count"] = len(_enriched_retired_df_uc2)
 
     # ── Run existing license metrics (same as upload path) ────────────────────
     license_metrics = compute_license_metrics(
@@ -1946,9 +1969,13 @@ def compute_live_db_metrics() -> dict:
             },
         }
 
-    rule_results.update(
-        compute_retired_devices_extended_metrics(installations_df, retired_df)
-    )
+    _retired_metrics = compute_retired_devices_extended_metrics(installations_df, retired_df)
+    _enriched_retired_df = _retired_metrics.pop("_retired_enriched_df", None)
+    rule_results.update(_retired_metrics)
+    if _enriched_retired_df is not None and not _enriched_retired_df.empty:
+        rule_results["retired_devices"] = _to_records(_enriched_retired_df)
+        rule_results["retired_count"] = len(_enriched_retired_df)
+
     _payg_metrics = compute_azure_payg_cost_metrics(azure_df)
     _enriched_payg_df = _payg_metrics.pop("_azure_payg_enriched_df", None)
     rule_results.update(_payg_metrics)

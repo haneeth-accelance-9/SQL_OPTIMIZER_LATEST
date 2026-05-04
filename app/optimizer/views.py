@@ -1286,6 +1286,7 @@ def results(request):
         "cloud_provider",
         "is_cloud_device",
         "inventory_status_standard",
+        "Actual_Line_Cost",
     ]
     _RULE_HIDDEN_COLS = {"product_group"}
     all_rule1_keys = list(azure_full[0].keys()) if azure_full else []
