@@ -18,7 +18,7 @@ def test_find_retired_devices_with_installations_from_db_builds_from_live_db_ada
     ])
 
     monkeypatch.setattr(
-        "optimizer.services.db_analysis_service._build_installations_df",
+        "optimizer.services.db_analysis_service._build_retired_installations_df",
         lambda: source_df,
     )
 

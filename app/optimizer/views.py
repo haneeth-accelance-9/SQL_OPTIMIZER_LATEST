@@ -1242,6 +1242,9 @@ def results(request):
     # Pagination for Rule 1 and Rule 2 raw data (6 rows per page, no scrolling)
     per_page = 6
     rr = context.get("rule_results") or {}
+    render_context["rr"] = rr
+    render_context["azure_payg_count"] = int(rr.get("azure_payg_count") or render_context.get("azure_payg_count", 0) or 0)
+    render_context["retired_count"] = int(rr.get("retired_count") or render_context.get("retired_count", 0) or 0)
     azure_full = rr.get("azure_payg") or []
     retired_full = rr.get("retired_devices") or []
     requested_rule1_page = _get_page_number(request, "rule1_page")
@@ -1298,14 +1301,8 @@ def results(request):
     azure_slice = azure_full[(rule1_page - 1) * per_page : rule1_page * per_page]
     retired_slice = retired_full[(rule2_page - 1) * per_page : rule2_page * per_page]
 
-    _NON_PROD_ENVS = {"Development", "Disaster recovery", "Test", "QA", "UAT"}
-    azure_payg_prod_count = sum(
-        1 for r in azure_full
-        if str(r.get("environment") or "").strip() not in _NON_PROD_ENVS
-    )
-    azure_payg_nonprod_count = len(azure_full) - azure_payg_prod_count
-    render_context["azure_payg_prod_candidates_count"] = azure_payg_prod_count
-    render_context["azure_payg_nonprod_candidates_count"] = azure_payg_nonprod_count
+    render_context["azure_payg_prod_candidates_count"] = int(rr.get("azure_payg_prod_candidates_count") or 0)
+    render_context["azure_payg_nonprod_candidates_count"] = int(rr.get("azure_payg_nonprod_candidates_count") or 0)
 
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
     render_context["retired_devices_page"] = [[r.get(k) for k in rule2_keys] for r in retired_slice]
@@ -2281,7 +2278,7 @@ def api_oracle_data(request):
         if data_type not in ("all", "installations"):
             return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
 
-        qs = USUInstallation.objects.filter(server__is_active=True).select_related("server").order_by("server__server_name")
+        qs = USUInstallation.objects.select_related("server").order_by("server__server_name")
         if db_pf is not None:
             qs = qs.filter(product_family=db_pf)
         if status_filter:
@@ -2351,7 +2348,7 @@ def api_oracle_data(request):
         if data_type not in ("all", "demand"):
             return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
 
-        qs = USUDemandDetail.objects.filter(server__is_active=True).select_related("server").order_by("server__server_name")
+        qs = USUDemandDetail.objects.select_related("server").order_by("server__server_name")
         if db_pf is not None:
             qs = qs.filter(product_family=db_pf)
 
@@ -2803,9 +2800,7 @@ def download_demand_data(request):
     )
     from io import BytesIO
 
-    rows = USUDemandDetail.objects.filter(
-        server__is_active=True
-    ).exclude(
+    rows = USUDemandDetail.objects.exclude(
         product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
     ).select_related("server").values(
         "server__server_name",

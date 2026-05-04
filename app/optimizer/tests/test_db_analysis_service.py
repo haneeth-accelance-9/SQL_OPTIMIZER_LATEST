@@ -279,32 +279,47 @@ def test_compute_live_db_metrics_uses_db_backed_rule1(monkeypatch):
     ])
     captured = {}
 
-    class _DummyQuerySet:
-        def count(self):
-            return 277
+    class _DummyValuesList:
+        def __init__(self, values):
+            self._values = values
+
+        def distinct(self):
+            return self._values
 
     class _DummyManager:
-        def filter(self, **kwargs):
-            return _DummyQuerySet()
+        def __init__(self, values):
+            self._values = values
 
-    class _DummyServer:
-        objects = _DummyManager()
+        def exclude(self, **kwargs):
+            return self
+
+        def values_list(self, *args, **kwargs):
+            return _DummyValuesList(self._values)
+
+    class _DummyDemandDetail:
+        objects = _DummyManager(list(range(1, 140)))
+
+    class _DummyInstallation:
+        objects = _DummyManager(list(range(140, 278)))
 
     def _fake_rule1(source_df):
         captured["rule1_source"] = source_df.copy()
         return source_df.iloc[[0]].copy()
 
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_installations_df", lambda: installations_df)
+    monkeypatch.setattr("optimizer.services.db_analysis_service._build_payg_installations_df", lambda: installations_df)
+    monkeypatch.setattr("optimizer.services.db_analysis_service._build_retired_installations_df", lambda: installations_df.iloc[0:0].copy())
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_demand_df", lambda: demand_df)
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_prices_df", lambda: prices_df)
     monkeypatch.setattr("optimizer.services.db_analysis_service._prepare_db_prices_for_demand", lambda demand, prices: prices)
     monkeypatch.setattr("optimizer.services.db_analysis_service.find_azure_payg_candidates_from_db", _fake_rule1)
     monkeypatch.setattr(
-        "optimizer.services.db_analysis_service.find_retired_devices_with_installations",
+        "optimizer.services.db_analysis_service.find_retired_devices_with_installations_from_db",
         lambda source_df: source_df.iloc[0:0].copy(),
     )
     monkeypatch.setattr("optimizer.services.db_analysis_service.compute_rightsizing_metrics", lambda: {"error": None})
-    monkeypatch.setattr("optimizer.models.Server", _DummyServer)
+    monkeypatch.setattr("optimizer.models.USUDemandDetail", _DummyDemandDetail)
+    monkeypatch.setattr("optimizer.models.USUInstallation", _DummyInstallation)
 
     context = compute_live_db_metrics()
 
@@ -346,22 +361,36 @@ def test_compute_live_db_metrics_uses_db_backed_rule2(monkeypatch):
     ])
     captured = {}
 
-    class _DummyQuerySet:
-        def count(self):
-            return 277
+    class _DummyValuesList:
+        def __init__(self, values):
+            self._values = values
+
+        def distinct(self):
+            return self._values
 
     class _DummyManager:
-        def filter(self, **kwargs):
-            return _DummyQuerySet()
+        def __init__(self, values):
+            self._values = values
 
-    class _DummyServer:
-        objects = _DummyManager()
+        def exclude(self, **kwargs):
+            return self
+
+        def values_list(self, *args, **kwargs):
+            return _DummyValuesList(self._values)
+
+    class _DummyDemandDetail:
+        objects = _DummyManager(list(range(1, 140)))
+
+    class _DummyInstallation:
+        objects = _DummyManager(list(range(140, 278)))
 
     def _fake_rule2(source_df):
         captured["rule2_source"] = source_df.copy()
         return source_df.iloc[[0]].copy()
 
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_installations_df", lambda: installations_df)
+    monkeypatch.setattr("optimizer.services.db_analysis_service._build_payg_installations_df", lambda: installations_df.iloc[0:0].copy())
+    monkeypatch.setattr("optimizer.services.db_analysis_service._build_retired_installations_df", lambda: installations_df)
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_demand_df", lambda: demand_df)
     monkeypatch.setattr("optimizer.services.db_analysis_service._build_prices_df", lambda: prices_df)
     monkeypatch.setattr("optimizer.services.db_analysis_service._prepare_db_prices_for_demand", lambda demand, prices: prices)
@@ -374,7 +403,8 @@ def test_compute_live_db_metrics_uses_db_backed_rule2(monkeypatch):
         _fake_rule2,
     )
     monkeypatch.setattr("optimizer.services.db_analysis_service.compute_rightsizing_metrics", lambda: {"error": None})
-    monkeypatch.setattr("optimizer.models.Server", _DummyServer)
+    monkeypatch.setattr("optimizer.models.USUDemandDetail", _DummyDemandDetail)
+    monkeypatch.setattr("optimizer.models.USUInstallation", _DummyInstallation)
 
     context = compute_live_db_metrics()
 

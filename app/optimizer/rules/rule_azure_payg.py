@@ -103,9 +103,9 @@ def find_azure_payg_candidates_from_db(
     then applies the same Rule 1 filter logic.
     """
     if installation_df is None:
-        from optimizer.services.db_analysis_service import _build_installations_df
+        from optimizer.services.db_analysis_service import _build_payg_installations_df
 
-        installation_df = _build_installations_df()
+        installation_df = _build_payg_installations_df()
 
     return find_azure_payg_candidates(
         installation_df,

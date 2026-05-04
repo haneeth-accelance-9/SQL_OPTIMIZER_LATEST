@@ -301,6 +301,62 @@ def test_results_applies_rs3_workload_and_screen_selection(client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_results_keeps_live_uc2_count_visible_even_when_savings_are_zero(client, monkeypatch):
+    user = get_user_model().objects.create_user(username="uc2-live", password="secret123")
+    client.force_login(user)
+
+    fake_context = {
+        "rule_results": {
+            "azure_payg_count": 0,
+            "azure_payg": [],
+            "retired_count": 6,
+            "retired_devices": [
+                {"server_name": f"retired-sql-0{i}", "install_status": "Retired"}
+                for i in range(1, 7)
+            ],
+            "retired_devices_savings_eur": 0.0,
+        },
+        "license_metrics": {
+            "total_demand_quantity": 1485,
+            "total_license_cost": 5131041.24,
+            "by_product": [],
+            "price_distribution": [],
+            "cost_reduction_tips": [],
+        },
+        "rightsizing": {
+            "cpu_optimizations": [],
+            "ram_optimizations": [],
+            "screen_summaries": {},
+            "default_filters": {},
+            "cpu_chart_data": [],
+            "ram_chart_data": [],
+            "cpu_count": 0,
+            "cpu_prod_count": 0,
+            "cpu_nonprod_count": 0,
+            "ram_count": 0,
+            "ram_prod_count": 0,
+            "ram_nonprod_count": 0,
+            "total_vcpu_reduction": 0,
+            "total_ram_reduction_gib": 0,
+            "error": None,
+        },
+    }
+
+    monkeypatch.setattr(
+        "optimizer.services.db_analysis_service.compute_live_db_metrics",
+        lambda: fake_context,
+    )
+
+    response = client.get(reverse("optimizer:results"))
+
+    assert response.status_code == 200
+    assert response.context["retired_count"] == 6
+    assert response.context["retired_devices_savings"] == 0.0
+    assert response.context["rr"]["retired_count"] == 6
+    assert len(response.context["rr"]["retired_devices"]) == 6
+
+
+@pytest.mark.django_db
 def test_api_strategy3_rightsizing_filters_and_sorts_cpu_records(client, monkeypatch):
     user = get_user_model().objects.create_user(username="api-rs3-cpu", password="secret123")
     client.force_login(user)
