@@ -130,6 +130,10 @@ STORAGE_RULE_CODE_BY_REPORT_ID = {
     spec["report_rule_id"]: spec["storage_rule_code"]
     for spec in LOCAL_AGENT_RULE_SPECS
 }
+HIDDEN_REPORT_RULE_IDS = frozenset({
+    "uc_3_5_lifecycle_risk_flags",
+    "uc_3_6_physical_system_review",
+})
 
 
 def _get_client():
@@ -550,6 +554,12 @@ def build_agent_strategy_results_payload(
 ) -> Dict[str, Any]:
     rule_results = dict(native_context.get("rule_results") or {})
     rightsizing = dict(native_context.get("rightsizing") or {})
+    logger.info(
+        "[S3-SAVINGS-DEBUG] rightsizing.cpu_savings_eur=%r  rightsizing_cpu_savings=%r  rule_wise.rightsizing_cpu=%r",
+        rightsizing.get("cpu_savings_eur"),
+        native_context.get("rightsizing_cpu_savings"),
+        (native_context.get("rule_wise_savings") or {}).get("rightsizing_cpu"),
+    )
 
     base = {
         "strategy_1_azure_byol_payg": {
@@ -579,7 +589,8 @@ def build_agent_strategy_results_payload(
             "lifecycle_count": _safe_int(rightsizing.get("lifecycle_count")),
             "physical_count": _safe_int(rightsizing.get("physical_count")),
             "estimated_savings_eur": _safe_float(
-                native_context.get("rightsizing_cpu_savings")
+                (native_context.get("rightsizing") or {}).get("cpu_savings_eur")
+                or native_context.get("rightsizing_cpu_savings")
                 or (native_context.get("rule_wise_savings") or {}).get("rightsizing_cpu")
                 or 0
             ),
@@ -609,8 +620,11 @@ def _build_agent_report_summary_context(
     license_metrics = native_context.get("license_metrics") or {}
     s3 = (strategy_results.get("strategy_3_rightsizing") or {}) if isinstance(strategy_results, dict) else {}
     # Use CPU-only savings for Strategy 3 to match the dashboard "CPU Estimate Savings" card
+    # Prefer rightsizing["cpu_savings_eur"] — the direct per-row sum from _apply_rightsizing_cost_savings(),
+    # same source the dashboard uses. Falls back through rule_wise_savings if not available.
     rightsizing_savings = _safe_float(
-        s3.get("estimated_savings_eur")
+        (native_context.get("rightsizing") or {}).get("cpu_savings_eur")
+        or s3.get("estimated_savings_eur")
         or native_context.get("rightsizing_cpu_savings")
         or (native_context.get("rule_wise_savings") or {}).get("rightsizing_cpu")
         or 0
@@ -625,8 +639,8 @@ def _build_agent_report_summary_context(
         or native_context.get("retired_devices_savings")
         or 0
     )
-    # Use the full combined total from native_context (includes RAM savings) to match the dashboard
-    total_savings = _safe_float(native_context.get("total_savings"))
+    # Match the dashboard's potential_savings: per-row azure + retired + cpu-only rightsizing
+    total_savings = round(azure_payg_savings + retired_devices_savings + rightsizing_savings, 2)
     return {
         "total_demand_quantity": _safe_int(license_metrics.get("total_demand_quantity")),
         "total_license_cost": _safe_float(license_metrics.get("total_license_cost")),
@@ -668,6 +682,7 @@ def _render_local_agent_report_markdown(
         for rule in rules_docs
         if str(rule.get("id") or "").strip()
     ]
+    visible_rule_ids = [rule_id for rule_id in ordered_rule_ids if rule_id not in HIDDEN_REPORT_RULE_IDS]
 
     lines: list[str] = ["# Agent Report", ""]
     lines.extend(["## Executive Summary", ""])
@@ -714,13 +729,13 @@ def _render_local_agent_report_markdown(
     lines.extend(["## Rule Coverage", ""])
     lines.append("| Rule id | Matched count |")
     lines.append("|---|---:|")
-    for rule_id in ordered_rule_ids:
+    for rule_id in visible_rule_ids:
         display_rule_id = rule_id.replace("_", " ").title()
         lines.append(f"| {display_rule_id} | {matched_counts.get(rule_id, 0)} |")
     lines.append("")
 
     lines.extend(["## Rule Results", ""])
-    for rule_id in ordered_rule_ids:
+    for rule_id in visible_rule_ids:
         meta = rules_meta.get(rule_id) or {}
         lines.append(f"### {rule_id.replace('_', ' ').title()}")
         lines.append("")

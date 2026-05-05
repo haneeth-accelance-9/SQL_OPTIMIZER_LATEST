@@ -88,6 +88,28 @@ def _title_case_rule_id(match: re.Match) -> str:
     return f"| {match.group(1).replace('_', ' ').title()} |"
 
 
+def _remove_hidden_report_rules(text: str) -> str:
+    hidden_labels = (
+        "Uc 3 5 Lifecycle Risk Flags",
+        "Uc 3 6 Physical System Review",
+        "Lifecycle Risk Flags (Human Review)",
+        "Physical Systems Require Review",
+    )
+    normalized = text
+    for label in hidden_labels:
+        normalized = re.sub(
+            rf"(?mi)^\|\s*{re.escape(label)}\s*\|\s*.*\|\s*$\n?",
+            "",
+            normalized,
+        )
+        normalized = re.sub(
+            rf"(?ims)^###\s*{re.escape(label)}\s*$.*?(?=^###\s|^##\s|\Z)",
+            "",
+            normalized,
+        )
+    return normalized
+
+
 def normalize_report_content_text(text: str) -> str:
     normalized = normalize_report_currency_text(_normalize_report_text(text))
     for legacy_title in LEGACY_REPORT_TITLES:
@@ -116,6 +138,8 @@ def normalize_report_content_text(text: str) -> str:
         normalized,
         flags=re.MULTILINE,
     )
+    normalized = _remove_hidden_report_rules(normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized).strip()
     return normalized
 
 

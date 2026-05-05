@@ -633,6 +633,15 @@ document.addEventListener('DOMContentLoaded', function () {
         reportContent.classList.add('flex', 'items-center', 'justify-center', 'h-full', 'text-slate-400', 'font-medium', 'text-base');
     }
 
+    /* Hide the two review-only metrics cards requested for removal */
+    document.querySelectorAll('#tab-live-metrics h3').forEach(function (heading) {
+        var title = (heading.textContent || '').trim();
+        if (title.indexOf('UC3.5') !== -1 || title === 'Physical Systems') {
+            var card = heading.closest('.bg-white.border.border-slate-200.rounded-2xl.shadow-sm.overflow-hidden');
+            if (card) card.remove();
+        }
+    });
+
     /* ── Export dropdown ────────────────────────────────────────────────── */
     var exportDropdown = document.getElementById('export-dropdown');
     var exportToggle   = document.getElementById('export-dropdown-toggle');
