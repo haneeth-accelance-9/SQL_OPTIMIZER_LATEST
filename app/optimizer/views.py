@@ -139,19 +139,19 @@ def _get_analysis_record(request):
     """Load the current persisted analysis record and enforce ownership/TTL checks."""
     analysis_id = request.session.get("optimizer_analysis_id")
     if not analysis_id:
-        return None, redirect("optimizer:home")
+        return None, redirect("optimizer:dashboard")
     analysis = AnalysisSession.objects.filter(pk=analysis_id).first()
     if not analysis:
         messages.info(request, "Analysis not found. Please upload a new file.")
-        return None, redirect("optimizer:home")
+        return None, redirect("optimizer:dashboard")
     if analysis.user_id and analysis.user_id != request.user.id:
-        return None, redirect("optimizer:home")
+        return None, redirect("optimizer:dashboard")
     ttl = getattr(settings, "OPTIMIZER_ANALYSIS_TTL_SECONDS", 86400)
     if ttl > 0 and analysis.created_at:
         from datetime import timedelta
         if timezone.now() - analysis.created_at > timedelta(seconds=ttl):
             messages.info(request, "This analysis has expired. Please upload a new file.")
-            return None, redirect("optimizer:home")
+            return None, redirect("optimizer:dashboard")
     return analysis, None
 
 
@@ -185,7 +185,7 @@ def _get_analysis_context(request):
         return None, redir
     raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
     if not raw_context:
-        return None, redirect("optimizer:home")
+        return None, redirect("optimizer:dashboard")
     return _normalize_analysis_context(analysis), None
 
 
@@ -1042,7 +1042,7 @@ def signup_view(request):
     GET redirects to login with tab=signup so the unified auth page shows the signup form.
     """
     if request.user.is_authenticated:
-        return redirect("optimizer:home")
+        return redirect("optimizer:dashboard")
     if request.method == "GET":
         login_url = reverse("optimizer:login")
         if not login_url.startswith("/"):
@@ -1097,8 +1097,8 @@ def ready(request):
 @require_GET
 @login_required
 def home(request):
-    """Landing page with upload form and instructions."""
-    return render(request, "optimizer/home.html", {"title": "SQL License Optimizer"})
+    """Redirect directly to the dashboard."""
+    return redirect("optimizer:dashboard")
 
 
 @require_http_methods(["GET", "POST"])
@@ -1107,15 +1107,12 @@ def home(request):
 def upload(request):
     """Handle file upload, process Excel, store results in session, redirect to results or loading."""
     if request.method != "POST":
-        return redirect("optimizer:home")
+        return redirect("optimizer:dashboard")
 
     file_obj = request.FILES.get("excel_file")
     if not file_obj or not file_obj.name.lower().endswith((".xlsx", ".xls")):
-        return render(
-            request,
-            "optimizer/home.html",
-            {"error": "Please upload an Excel file (.xlsx or .xls).", "title": "SQL License Optimizer"},
-        )
+        messages.error(request, "Please upload an Excel file (.xlsx or .xls).")
+        return redirect("optimizer:dashboard")
 
     upload_dir = getattr(settings, "MEDIA_ROOT", None) or os.path.join(settings.BASE_DIR, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
