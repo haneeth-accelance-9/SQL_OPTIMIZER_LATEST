@@ -274,6 +274,12 @@ def _friendly_rule_heading(rule_id: str, meta: dict[str, Any] | None) -> str:
     return "Additional finding"
 
 
+HIDDEN_REPORT_RULE_IDS = {
+    "uc_3_5_lifecycle_risk_flags",
+    "uc_3_6_physical_system_review",
+}
+
+
 def _fmt_eur(value: Any) -> str:
     try:
         if value is None:
@@ -571,9 +577,10 @@ def _render_markdown(
     # Render all rules that exist either in rules.base.yaml OR in the evaluation payload.
     # This ensures criticality/lifecycle/physical rules show up when the evaluator provides them.
     all_rule_ids = sorted({*rules_meta.keys(), *matched_counts_map.keys()})
+    visible_rule_ids = [rid for rid in all_rule_ids if rid not in HIDDEN_REPORT_RULE_IDS]
 
     matched_counts: list[tuple[str, int]] = []
-    for rid in all_rule_ids:
+    for rid in visible_rule_ids:
         matched_counts.append((rid, matched_counts_map.get(rid, 0)))
     matched_total = sum(cnt for _, cnt in matched_counts)
 
@@ -669,8 +676,7 @@ def _render_markdown(
 
     lines.append("## Rule results")
     lines.append("")
-    # Render one section per known rule (YAML + evaluation payload ids)
-    for rid in all_rule_ids:
+    for rid in visible_rule_ids:
         meta = rules_meta.get(rid, {})
         desc = meta.get("description") if isinstance(meta, dict) else None
         rtype = meta.get("type") if isinstance(meta, dict) else None
