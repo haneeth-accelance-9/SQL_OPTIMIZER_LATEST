@@ -701,7 +701,7 @@ def _render_local_agent_report_markdown(
         f"- **Strategy 3 – CPU/RAM Rightsizing**: **{summary_context.get('cpu_count', 0)}** CPU candidates,"
         f" **{summary_context.get('ram_count', 0)}** RAM candidates,"
         f" **{summary_context.get('total_vcpu_reduction', 0)}** vCPU reduction potential,"
-        f" estimated saving **{format_currency(summary_context.get('rightsizing_savings', 0))}**."
+        f" estimated saving **<span id=\"report-s3-cpu-savings\">{format_currency(summary_context.get('rightsizing_savings', 0))}</span>**."
     )
     if summary_context.get("crit_cpu_count") or summary_context.get("crit_ram_count"):
         lines.append(

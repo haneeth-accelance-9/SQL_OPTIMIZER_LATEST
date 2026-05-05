@@ -1067,7 +1067,7 @@
                             <p class="text-5xl font-extrabold tracking-tight text-sky-600"><span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-2xl font-bold">vCPUs</span></p>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total">{{ rightsizing_cpu_savings_eu }}</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total">0,00 €</span></p>
                         </div>
                         <p class="mt-1 text-xs text-slate-500">Estimated annual savings from CPU rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
@@ -3153,6 +3153,9 @@
         // Fixed components for Potential Savings total (Potential = PAYG + Retired + CPU)
         var OVERVIEW_PAYG_SAVINGS_RAW    = {{ azure_payg_savings|default:0 }};
         var OVERVIEW_RETIRED_SAVINGS_RAW = {{ retired_devices_savings|default:0 }};
+        // Total CPU values (PROD + NON-PROD combined) — overview card must always show these, never a filtered subset
+        var OVERVIEW_CPU_SAVINGS_RAW     = {{ rightsizing_cpu_savings|default:0 }};
+        var OVERVIEW_CPU_VCPU_RAW        = {{ rightsizing.total_vcpu_reduction|default:0 }};
         var rs3State = {
             workload: rs3WorkloadFilter ? String(rs3WorkloadFilter.value || 'ALL').toLowerCase() : 'all',
             shared: {
@@ -3172,7 +3175,10 @@
                 sortField: 'potential_vcpu_reduction',
                 sortOrder: 'desc',
                 hostingZone: '',
-                installedStatus: ''
+                installedStatus: '',
+                savingsEur: 0,
+                totalSavingsEur: OVERVIEW_CPU_SAVINGS_RAW,
+                totalVcpuReduction: OVERVIEW_CPU_VCPU_RAW
             },
             ram: {
                 data: rs3RamDataEl ? JSON.parse(rs3RamDataEl.textContent || '[]') : [],
@@ -3560,7 +3566,13 @@
                     setRs3EmptyState(type, totalRows > 0);
                     updateRs3TotalBadge(type, totalRows);
                     updateRs3Pagination(type, page, totalPages, totalRows);
-                    if (result.summary) updateRs3Summary(type, result.summary);
+                    if (result.summary) {
+                        updateRs3Summary(type, result.summary);
+                        if (result.summary.savings_eur != null) {
+                            rs3State[type].savingsEur = Math.round(Number(result.summary.savings_eur) || 0);
+                            renderRs3SavingsTile(type);
+                        }
+                    }
                     setRs3Loading(type, false);
                 })
                 .catch(function() {
@@ -3642,26 +3654,32 @@
             setText('rs3-' + type + '-legend-2', config.chartLabels[1]);
             if (summary.savings_eur != null) {
                 var savingsInt = Math.round(Number(summary.savings_eur) || 0);
-                setText('rs3-' + type + '-savings-total', euCurrency(savingsInt));
                 setText('rs3-' + type + '-reduction-value', euCurrency(savingsInt));
             }
-            // Sync overview "Potential Savings" card
-            if (type === 'cpu') {
-                setText('overview-cpu-vcpu', summary.reduction_total);
-                if (summary.savings_eur != null) {
-                    var cpuSavingsInt = Math.round(Number(summary.savings_eur) || 0);
-                    setText('overview-cpu-savings', euCurrency(cpuSavingsInt));
-                    // Recalculate Potential Savings = PAYG + Retired + CPU
-                    var newPotential = Math.round(
-                        (Number(OVERVIEW_PAYG_SAVINGS_RAW) || 0) +
-                        (Number(OVERVIEW_RETIRED_SAVINGS_RAW) || 0) +
-                        cpuSavingsInt
-                    );
-                    setText('overview-potential-savings', euCurrency(newPotential));
-                }
-            } else if (type === 'ram') {
+            if (type === 'ram') {
                 setText('overview-ram-gib', summary.reduction_total);
                 setText('overview-ram-gib-sub', summary.reduction_total);
+            }
+        }
+
+        function renderOverviewCpuCard() {
+            setText('overview-cpu-savings', euCurrency(rs3State.cpu.totalSavingsEur || 0));
+            setText('overview-cpu-vcpu', rs3State.cpu.totalVcpuReduction || 0);
+            var newPotential = Math.round(
+                (Number(OVERVIEW_PAYG_SAVINGS_RAW) || 0) +
+                (Number(OVERVIEW_RETIRED_SAVINGS_RAW) || 0) +
+                (rs3State.cpu.totalSavingsEur || 0)
+            );
+            setText('overview-potential-savings', euCurrency(newPotential));
+        }
+
+        function renderRs3SavingsTile(type) {
+            var el = document.getElementById('rs3-' + type + '-savings-total');
+            if (el) el.textContent = euCurrency(rs3State[type].savingsEur || 0);
+            if (type === 'cpu') {
+                var reportEl = document.getElementById('report-s3-cpu-savings');
+                if (reportEl) reportEl.textContent = euCurrency(rs3State.cpu.savingsEur || 0);
+                renderOverviewCpuCard();
             }
         }
 
