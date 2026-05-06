@@ -244,6 +244,15 @@ def _build_rightsizing_filter_funnel() -> dict:
     cpu_nonprod_f3 = cpu_nonprod_f2[cpu_nonprod_f2["Current_vCPU"].fillna(0) >= 4]
 
     cpu_final_df = find_cpu_rightsizing_optimizations(df)
+    if not cpu_final_df.empty:
+        cpu_final_df = cpu_final_df[
+            cpu_final_df["Recommended_vCPU"].notna() &
+            (cpu_final_df["Recommended_vCPU"] != cpu_final_df["Current_vCPU"])
+        ]
+        cpu_final_df = cpu_final_df[
+            (cpu_final_df["Current_vCPU"] >= 4) &
+            (cpu_final_df["Recommended_vCPU"] >= 4)
+        ]
     if not cpu_final_df.empty and "Env_Type" in cpu_final_df.columns:
         cpu_prod_final    = int((cpu_final_df["Env_Type"] == "PROD").sum())
         cpu_nonprod_final = int((cpu_final_df["Env_Type"] == "NON-PROD").sum())
@@ -282,10 +291,44 @@ def _build_rightsizing_filter_funnel() -> dict:
         crit_cpu_up_final = len(find_criticality_cpu_upsize_optimizations(df))
         crit_ram_dn_final = len(find_criticality_ram_downsize_optimizations(df))
         crit_ram_up_final = len(find_criticality_ram_upsize_optimizations(df))
+
+        # Combined + post-rule filters matching compute_rightsizing_metrics()
+        _crit_cpu_combined = pd.concat(
+            [find_criticality_cpu_downsize_optimizations(df),
+             find_criticality_cpu_upsize_optimizations(df)],
+            ignore_index=True,
+        )
+        if not _crit_cpu_combined.empty:
+            _crit_cpu_combined = _crit_cpu_combined[
+                _crit_cpu_combined["Recommended_vCPU"].notna() &
+                (_crit_cpu_combined["Recommended_vCPU"] != _crit_cpu_combined["Current_vCPU"])
+            ]
+            _crit_cpu_combined = _crit_cpu_combined[
+                (_crit_cpu_combined["Current_vCPU"] >= 4) &
+                (_crit_cpu_combined["Recommended_vCPU"] >= 4)
+            ]
+        crit_cpu_filtered_final = len(_crit_cpu_combined)
+
+        _crit_ram_combined = pd.concat(
+            [find_criticality_ram_downsize_optimizations(df),
+             find_criticality_ram_upsize_optimizations(df)],
+            ignore_index=True,
+        )
+        if not _crit_ram_combined.empty:
+            _crit_ram_combined = _crit_ram_combined[
+                _crit_ram_combined["Recommended_RAM_GiB"].notna() &
+                (_crit_ram_combined["Recommended_RAM_GiB"] != _crit_ram_combined["Current_RAM_GiB"])
+            ]
+            _crit_ram_combined = _crit_ram_combined[
+                (_crit_ram_combined["Current_RAM_GiB"] >= 8) &
+                (_crit_ram_combined["Recommended_RAM_GiB"] >= 8)
+            ]
+        crit_ram_filtered_final = len(_crit_ram_combined)
     else:
         crit_all_count = crit_bus_count = 0
         crit_cpu_dn_f2 = crit_cpu_up_f2 = crit_ram_dn_f2 = crit_ram_up_f2 = 0
         crit_cpu_dn_final = crit_cpu_up_final = crit_ram_dn_final = crit_ram_up_final = 0
+        crit_cpu_filtered_final = crit_ram_filtered_final = 0
 
     # ── UC3.5 Lifecycle ────────────────────────────────────────────────────────
     if has_criticality:
@@ -339,13 +382,13 @@ def _build_rightsizing_filter_funnel() -> dict:
         "crit_cpu_up_f2":     crit_cpu_up_f2,
         "crit_cpu_dn_final":  crit_cpu_dn_final,
         "crit_cpu_up_final":  crit_cpu_up_final,
-        "crit_cpu_final":     crit_cpu_dn_final + crit_cpu_up_final,
+        "crit_cpu_final":     crit_cpu_filtered_final,
         # UC3.4 Crit RAM
         "crit_ram_dn_f2":    crit_ram_dn_f2,
         "crit_ram_up_f2":    crit_ram_up_f2,
         "crit_ram_dn_final": crit_ram_dn_final,
         "crit_ram_up_final": crit_ram_up_final,
-        "crit_ram_final":    crit_ram_dn_final + crit_ram_up_final,
+        "crit_ram_final":    crit_ram_filtered_final,
         # UC3.5 Lifecycle
         "lc_f1":    lc_f1_count,
         "lc_f2":    lc_f2_count,
