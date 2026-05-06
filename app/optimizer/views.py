@@ -1432,6 +1432,7 @@ def results(request):
     # ── Data Quality: USU, Grafana, Flat Files ────────────────────────────────
     try:
         from optimizer.models import USUInstallation, GrafanaMetricSnapshot, GrafanaMetricMonthlyRollup, CPUUtilisation
+        usu_install_total = USUInstallation.objects.filter(product_family="SQL Server").count()
         usu_qs = (
             USUInstallation.objects
             .select_related("server")
@@ -1700,9 +1701,12 @@ def results(request):
         dq_grafana_connections_by_server = []
         dq_grafana_rollup_summary, dq_grafana_kpis = [], {"total_records": 0, "unique_metrics": 0, "unique_servers": 0, "unique_dashboards": 0}
         dq_grafana_is_snapshot = False
+        usu_install_total = 0
 
     render_context["dq_usu_rows"] = dq_usu_rows
     render_context["dq_usu_keys"] = list(dq_usu_rows[0].keys()) if dq_usu_rows else []
+    if usu_install_total:
+        render_context["total_devices_analyzed"] = usu_install_total
     render_context["dq_grafana_rows"] = dq_grafana_rows
     render_context["dq_grafana_keys"] = list(dq_grafana_rows[0].keys()) if dq_grafana_rows else []
     render_context["dq_flatfile_rows"] = dq_flatfile_rows

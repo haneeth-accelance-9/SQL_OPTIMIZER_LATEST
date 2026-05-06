@@ -181,7 +181,7 @@
         <button type="button" class="tab-btn active px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
                 data-tab="tab-agent-report">Agent Report</button>
         <button type="button" class="tab-btn px-5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold transition"
-                data-tab="tab-agentic">
+                data-tab="tab-agentic" style="display:none;">
             Agentic Analysis
             {% if has_agentic_data %}<span class="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700 text-xs font-bold">{{ agentic.candidates_total }}</span>{% endif %}
         </button>
@@ -196,10 +196,8 @@
         <div id="report-content" class="report-body text-sm leading-relaxed max-w-4xl mx-auto"></div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════════════════
-         TAB 2: Agentic Analysis (AgentRun + OptimizationCandidates)
-    ══════════════════════════════════════════════════════════════════════════ -->
-    <div id="tab-agentic" class="tab-panel flex-1 min-h-0 overflow-y-auto">
+    <!-- TAB 2: Agentic Analysis (AgentRun + OptimizationCandidates) -->
+    <div id="tab-agentic" class="tab-panel flex-1 min-h-0 overflow-y-auto" style="display:none;">
         {% if has_agentic_data %}
         <!-- Agent run metadata card -->
         <div class="bg-white border border-slate-200 rounded-2xl p-5 mb-5 shadow-sm">

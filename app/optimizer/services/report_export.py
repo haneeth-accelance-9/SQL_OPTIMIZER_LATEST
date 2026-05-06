@@ -70,6 +70,8 @@ def _get_asset_path(relative_path: Path) -> Optional[Path]:
 
 def _normalize_report_text(text: str) -> str:
     normalized = text or ""
+    # Strip HTML tags (e.g. <span id="...">value</span>) keeping inner text
+    normalized = re.sub(r'<[^>]+>', '', normalized)
     for source, target in TEXT_REPLACEMENTS.items():
         normalized = normalized.replace(source, target)
     return normalized.strip()
