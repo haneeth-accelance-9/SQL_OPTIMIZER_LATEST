@@ -1,7 +1,7 @@
 ﻿"""
-Views for SQL License Optimizer: upload, process, results, dashboard, report.
+Views for SQL License Optimizer: results, dashboard, report.
 All optimizer views require authentication (enterprise security).
-Uses AnalysisSession for persistence and TTL; session stores only analysis_id.
+All analysis data is sourced live from the database.
 """
 import logging
 import os
@@ -32,10 +32,10 @@ from django.contrib import messages
 from django.utils import timezone
 
 import pandas as pd
-from optimizer.models import AnalysisSession, UserProfile
+from optimizer.models import UserProfile
 from optimizer.forms import SignUpForm, UserProfileForm
-from optimizer.services.analysis_service import run_analysis, build_dashboard_context
-from optimizer.services.analysis_logs import build_analysis_summary_metrics, get_user_analysis_logs
+from optimizer.services.analysis_service import build_dashboard_context
+from optimizer.services.analysis_logs import get_user_analysis_logs
 from optimizer.services.report_export import (
     export_pdf,
     export_docx,
@@ -133,60 +133,6 @@ def _build_post_login_redirect_url() -> str:
     return f"{reverse('optimizer:dashboard')}#{POST_LOGIN_RESULTS_FRAGMENT}"
 
 
-
-
-def _get_analysis_record(request):
-    """Load the current persisted analysis record and enforce ownership/TTL checks."""
-    analysis_id = request.session.get("optimizer_analysis_id")
-    if not analysis_id:
-        return None, redirect("optimizer:dashboard")
-    analysis = AnalysisSession.objects.filter(pk=analysis_id).first()
-    if not analysis:
-        messages.info(request, "Analysis not found. Please upload a new file.")
-        return None, redirect("optimizer:dashboard")
-    if analysis.user_id and analysis.user_id != request.user.id:
-        return None, redirect("optimizer:dashboard")
-    ttl = getattr(settings, "OPTIMIZER_ANALYSIS_TTL_SECONDS", 86400)
-    if ttl > 0 and analysis.created_at:
-        from datetime import timedelta
-        if timezone.now() - analysis.created_at > timedelta(seconds=ttl):
-            messages.info(request, "This analysis has expired. Please upload a new file.")
-            return None, redirect("optimizer:dashboard")
-    return analysis, None
-
-
-def _normalize_analysis_context(analysis):
-    """Return a safe, normalized analysis context from persisted result data."""
-    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
-    context = dict(raw_context)
-    context["rule_results"] = context.get("rule_results") or {}
-    context["license_metrics"] = context.get("license_metrics") or {}
-    context["file_name"] = context.get("file_name") or analysis.file_name or ""
-    context["sheet_names_used"] = context.get("sheet_names_used") or {}
-    context["total_devices_analyzed"] = int(context.get("total_devices_analyzed", 0) or 0)
-    context["report_text"] = context.get("report_text") or ""
-    context["report_used_fallback"] = bool(context.get("report_used_fallback", False))
-    context["cost_reduction_ai_recommendations"] = context.get("cost_reduction_ai_recommendations") or ""
-
-    dashboard_defaults = build_dashboard_context(context)
-    context["rule_wise_savings"] = context.get("rule_wise_savings") or dashboard_defaults.get("rule_wise_savings", {})
-    context["scenario_wise_savings"] = context.get("scenario_wise_savings") or dashboard_defaults.get("scenario_wise_savings", {})
-    context["total_savings"] = float(context.get("total_savings", dashboard_defaults.get("total_savings", 0)) or 0)
-    return context
-
-
-def _get_analysis_context(request):
-    """
-    Load analysis context from DB by session's analysis_id. Check TTL and ownership.
-    Returns (context dict, None) or (None, redirect_response).
-    """
-    analysis, redir = _get_analysis_record(request)
-    if redir is not None:
-        return None, redir
-    raw_context = analysis.result_data if isinstance(analysis.result_data, dict) else {}
-    if not raw_context:
-        return None, redirect("optimizer:dashboard")
-    return _normalize_analysis_context(analysis), None
 
 
 def _build_report_render_context(context):
@@ -1024,28 +970,6 @@ def _build_table_rows(records, columns):
     return [[record.get(column) for column in columns] for record in records]
 
 
-def _validate_excel_upload(file_path, original_filename):
-    """
-    Validate saved file by magic bytes. Returns (True, None) if valid, (False, error_message) otherwise.
-    - .xlsx: PK (ZIP)
-    - .xls: D0 CF 11 E0 (OLE)
-    """
-    try:
-        with open(file_path, "rb") as f:
-            header = f.read(8)
-        name_lower = (original_filename or "").lower()
-        if name_lower.endswith(".xlsx"):
-            if not header.startswith(b"PK"):
-                return False, "File is not a valid .xlsx (expected ZIP format)."
-        elif name_lower.endswith(".xls"):
-            if not header[:8].startswith(b"\xD0\xCF\x11\xE0"):
-                return False, "File is not a valid .xls (expected OLE format)."
-        return True, None
-    except Exception as e:
-        logger.warning("Upload validation failed: %s", e)
-        return False, "Could not validate file content."
-
-
 def _sanitize_filename(name: str, max_len: int = 200) -> str:
     """Remove path separators and control chars; limit length for Content-Disposition."""
     if not name or not isinstance(name, str):
@@ -1142,107 +1066,6 @@ def ready(request):
 def home(request):
     """Redirect directly to the dashboard."""
     return redirect("optimizer:dashboard")
-
-
-@require_http_methods(["GET", "POST"])
-@csrf_protect
-@login_required
-def upload(request):
-    """Handle file upload, process Excel, store results in session, redirect to results or loading."""
-    if request.method != "POST":
-        return redirect("optimizer:dashboard")
-
-    file_obj = request.FILES.get("excel_file")
-    if not file_obj or not file_obj.name.lower().endswith((".xlsx", ".xls")):
-        messages.error(request, "Please upload an Excel file (.xlsx or .xls).")
-        return redirect("optimizer:dashboard")
-
-    upload_dir = getattr(settings, "MEDIA_ROOT", None) or os.path.join(settings.BASE_DIR, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    safe_name = f"{uuid.uuid4().hex}_{_sanitize_filename(file_obj.name)}"
-    file_path = os.path.join(upload_dir, safe_name)
-    with open(file_path, "wb") as f:
-        for chunk in file_obj.chunks():
-            f.write(chunk)
-
-    allowed, error_msg = _validate_excel_upload(file_path, file_obj.name)
-    if not allowed:
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
-        messages.error(request, error_msg or "Invalid file.")
-        return render(request, "optimizer/home.html", {"error": error_msg, "title": "SQL License Optimizer"})
-
-    if not request.session.session_key:
-        request.session.save()
-
-    analysis_record = AnalysisSession(
-        user=request.user,
-        file_name=file_obj.name,
-        file_path=os.path.basename(file_path),
-        status="processing",
-        session_key=request.session.session_key or "",
-    )
-    analysis_record.save()
-    request_id = getattr(request, "request_id", None)
-    logger.info(
-        "Analysis started analysis_id=%s user_id=%s username=%s file_name=%s uploaded_at=%s request_id=%s",
-        analysis_record.id,
-        request.user.id,
-        request.user.username,
-        file_obj.name,
-        timezone.localtime(analysis_record.created_at).isoformat() if analysis_record.created_at else None,
-        request_id,
-    )
-
-    result = run_analysis(file_path, file_obj.name)
-    if not result["success"]:
-        analysis_record.status = "failed"
-        analysis_record.error_message = result["error"] or ""
-        analysis_record.completed_at = timezone.now()
-        analysis_record.summary_metrics = {}
-        analysis_record.save()
-        logger.warning(
-            "Analysis failed analysis_id=%s user_id=%s username=%s file_name=%s completed_at=%s error=%s request_id=%s",
-            analysis_record.id,
-            request.user.id,
-            request.user.username,
-            file_obj.name,
-            timezone.localtime(analysis_record.completed_at).isoformat() if analysis_record.completed_at else None,
-            analysis_record.error_message,
-            request_id,
-        )
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
-        messages.error(request, result["error"] or "Analysis failed.")
-        return render(request, "optimizer/home.html", {"error": result["error"], "title": "SQL License Optimizer"})
-
-    context = result["context"]
-    summary_metrics = build_analysis_summary_metrics(context)
-    analysis_record.status = "completed"
-    analysis_record.result_data = _make_json_serializable(context)
-    analysis_record.summary_metrics = _make_json_serializable(summary_metrics)
-    analysis_record.completed_at = timezone.now()
-    analysis_record.save()
-
-    request.session["optimizer_analysis_id"] = analysis_record.id
-    request.session.pop("optimizer_results", None)
-    request.session.pop("optimizer_file_path", None)
-    request.session.pop("optimizer_file_name", None)
-    logger.info(
-        "Analysis completed analysis_id=%s user_id=%s username=%s file_name=%s completed_at=%s summary_metrics=%s request_id=%s",
-        analysis_record.id,
-        request.user.id,
-        request.user.username,
-        file_obj.name,
-        timezone.localtime(analysis_record.completed_at).isoformat() if analysis_record.completed_at else None,
-        summary_metrics,
-        request_id,
-    )
-    return redirect("optimizer:results")
 
 
 @require_GET

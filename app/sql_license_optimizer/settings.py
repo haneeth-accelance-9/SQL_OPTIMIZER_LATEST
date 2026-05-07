@@ -110,12 +110,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
 STATIC_ROOT = BASE_DIR / "staticfiles"
-MEDIA_URL = "uploads/"
-MEDIA_ROOT = BASE_DIR / "uploads"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-DATA_UPLOAD_MAX_MEMORY_SIZE = 52_428_800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52_428_800
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_SAVE_EVERY_REQUEST = True
@@ -160,12 +155,6 @@ AZURE_OPENAI_DEPLOYMENT = (
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview").strip() or "2024-02-15-preview"
 AZURE_OPENAI_TIMEOUT = int(os.environ.get("AZURE_OPENAI_TIMEOUT", "60"))
 
-EXCEL_SHEET_INSTALLATIONS = os.environ.get("EXCEL_SHEET_INSTALLATIONS", "MVP - Data 1 - Installation")
-EXCEL_SHEET_DEMAND = os.environ.get("EXCEL_SHEET_DEMAND", "MVP - Data 2 - Demand Results")
-EXCEL_SHEET_PRICES = os.environ.get("EXCEL_SHEET_PRICES", "MVP - Data 3 - Prices")
-EXCEL_SHEET_OPTIMIZATION = os.environ.get("EXCEL_SHEET_OPTIMIZATION", "MVP - Data 4 - Optimization potential")
-EXCEL_SHEET_HELPFUL_REPORTS = os.environ.get("EXCEL_SHEET_HELPFUL_REPORTS", "MVP - Data 5 - Helpful Reports")
-
 # Demand API (USU) — fetched by `python manage.py fetch_demand_data`
 # Override via environment variables or set directly here.
 DEMAND_API_BASE_URL = os.environ.get("DEMAND_API_BASE_URL", "https://lima.bayer.cloud.usu.com")
@@ -188,7 +177,6 @@ DEMAND_API_OUTPUT_FILE = os.environ.get("DEMAND_API_OUTPUT_FILE", str(BASE_DIR /
 OPTIMIZER_AI_REPORT_ENABLED = _env_bool("OPTIMIZER_AI_REPORT_ENABLED", True)
 OPTIMIZER_CHARTS_ENABLED = _env_bool("OPTIMIZER_CHARTS_ENABLED", True)
 OPTIMIZER_ANALYSIS_TTL_SECONDS = int(os.environ.get("OPTIMIZER_ANALYSIS_TTL_SECONDS", "86400"))
-OPTIMIZER_UPLOAD_RETENTION_DAYS = int(os.environ.get("OPTIMIZER_UPLOAD_RETENTION_DAYS", "7"))
 
 # ── License Optimizer Agent (A2A server) ──────────────────────────────────────
 # Base URL of the running liscence-optimizer A2A agent (default: local dev port)

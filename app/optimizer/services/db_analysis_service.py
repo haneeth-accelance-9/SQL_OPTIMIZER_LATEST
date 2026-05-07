@@ -650,70 +650,143 @@ def _build_retired_installations_df() -> pd.DataFrame:
 
 def _build_demand_df() -> pd.DataFrame:
     """
-    Build a demand DataFrame that mirrors the SQL:
-      SELECT udd.*
-      FROM usu_installation ui
-      INNER JOIN usu_demand_detail udd ON ui.server_id = udd.server_id
-      WHERE ui.product_family = 'SQL Server'
-        AND udd.product_family = 'SQL Server'
+    Build a demand DataFrame using the mirror SQL query that joins
+    usu_installation ⟶ usu_demand_detail ⟶ server, scoped to SQL Server.
 
-    Traversing server__usu_installations makes Django emit a real INNER JOIN
-    (not a subquery), so the result includes one row per (installation, demand)
-    pair — matching the SQL row count exactly.
-
-    Total Demand  = count of matched rows (including cartesian pairs)
-    Current Cost  = SUM( (price * eff_quantity) / 2 ) across those rows
+    One row per (installation × demand) pair — matching the mirror query row
+    count exactly.  installation_product_edition is preferred for license-type
+    classification; demand_product_edition is the fallback.
     """
-    from optimizer.models import USUDemandDetail
+    from django.db import connection
 
-    rows = USUDemandDetail.objects.filter(
-        product_family="SQL Server",
-        server__usu_installations__product_family="SQL Server",
-    ).values(
-        "product_description",
-        "product_edition",
-        "product_family",
-        "eff_quantity",
-        "cpu_core_count",
-        "no_license_required",
-    )
+    sql = """
+        SELECT
+            ui.product_edition  AS installation_product_edition,
+            udd.product_description,
+            udd.product_edition AS demand_product_edition,
+            udd.eff_quantity,
+            udd.cpu_core_count,
+            udd.product_family,
+            udd.no_license_required,
+            s.hosting_zone
+        FROM usu_installation ui
+        INNER JOIN usu_demand_detail udd ON ui.server_id = udd.server_id
+        LEFT JOIN server s ON ui.server_id = s.id
+        WHERE ui.product_family = 'SQL Server'
+          AND udd.product_family = 'SQL Server'
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
 
     if not rows:
         return pd.DataFrame()
 
-    records = [
-        {
+    records = []
+    for row in rows:
+        r = dict(zip(columns, row))
+        inst_edition   = str(r.get("installation_product_edition") or "").strip()
+        demand_edition = str(r.get("demand_product_edition") or "").strip()
+        edition = inst_edition or demand_edition
+        records.append({
             "product_name":       r["product_description"] or "",
             "quantity_effective": float(r["eff_quantity"] or 0),
             "cpu_core_count":     float(r["cpu_core_count"] or 0),
-            "product_edition":    r["product_edition"] or "",
+            "product_edition":    edition,
             "product_family":     r["product_family"] or "",
-        }
-        for r in rows
-    ]
+        })
     return pd.DataFrame(records)
 
 
-def _build_prices_df() -> pd.DataFrame:
-    """Build a prices DataFrame from LicenseRule.cost_per_core_pair_eur."""
-    from optimizer.models import LicenseRule
+def _build_prices_df(demand_df: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Fallback prices DataFrame used only for the by_product breakdown inside
+    compute_license_metrics.  Price distribution totals are now computed
+    directly via SQL in _build_price_distribution_df() and passed as
+    helpful_reports_df, so this join path no longer drives the dashboard cards.
+    """
+    return pd.DataFrame([
+        {"product_name": "Standard",   "price": RIGHTSIZING_CPU_LICENSE_COSTS_EUR["standard"]},
+        {"product_name": "Developer",  "price": 0.0},
+        {"product_name": "Enterprise", "price": RIGHTSIZING_CPU_LICENSE_COSTS_EUR["enterprise"]},
+    ])
 
-    rows = LicenseRule.objects.filter(
-        is_active=True,
-        cost_per_core_pair_eur__isnull=False,
-    ).values("product_family", "rule_name", "cost_per_core_pair_eur")
+
+def _build_price_distribution_df() -> pd.DataFrame:
+    """
+    Compute price distribution totals directly via SQL using udd.product_edition
+    as the sole classification signal — no Python-level join or dedup involved.
+
+    Returns a DataFrame shaped like the Helpful Reports pivot table so that
+    compute_license_metrics() picks it up via _get_price_distribution_from_helpful_reports()
+    and uses these pre-aggregated values directly for the dashboard cards.
+
+    Formula per row (matches compute_license_metrics):
+        line_cost = (unit_price × eff_quantity) / 2
+    where unit_price comes from RIGHTSIZING_CPU_LICENSE_COSTS_EUR by license type.
+    """
+    from django.db import connection
+
+    std_price = RIGHTSIZING_CPU_LICENSE_COSTS_EUR["standard"]
+    ent_price = RIGHTSIZING_CPU_LICENSE_COSTS_EUR["enterprise"]
+
+    sql = f"""
+        WITH classified AS (
+            SELECT
+                udd.eff_quantity,
+                CASE
+                    WHEN LOWER(udd.product_edition) LIKE '%%developer%%'
+                      OR LOWER(udd.product_edition) LIKE '%%dev %%'
+                        THEN 'Developer'
+                    WHEN LOWER(udd.product_edition) LIKE '%%enterprise%%'
+                      OR LOWER(udd.product_edition) LIKE '%%ent %%'
+                      OR LOWER(udd.product_edition) LIKE '%%enterprise edition%%'
+                        THEN 'Enterprise'
+                    WHEN LOWER(udd.product_edition) LIKE '%%standard%%'
+                      OR LOWER(udd.product_edition) LIKE '%%std %%'
+                      OR LOWER(udd.product_edition) LIKE '%%standard edition%%'
+                        THEN 'Standard'
+                    ELSE 'Other'
+                END AS edition,
+                CASE
+                    WHEN LOWER(udd.product_edition) LIKE '%%developer%%'
+                      OR LOWER(udd.product_edition) LIKE '%%dev %%'
+                        THEN 0.0
+                    WHEN LOWER(udd.product_edition) LIKE '%%enterprise%%'
+                      OR LOWER(udd.product_edition) LIKE '%%ent %%'
+                      OR LOWER(udd.product_edition) LIKE '%%enterprise edition%%'
+                        THEN {ent_price}
+                    WHEN LOWER(udd.product_edition) LIKE '%%standard%%'
+                      OR LOWER(udd.product_edition) LIKE '%%std %%'
+                      OR LOWER(udd.product_edition) LIKE '%%standard edition%%'
+                        THEN {std_price}
+                    ELSE 0.0
+                END AS unit_price
+            FROM usu_installation ui
+            INNER JOIN usu_demand_detail udd ON ui.server_id = udd.server_id
+            WHERE ui.product_family  = 'SQL Server'
+              AND udd.product_family = 'SQL Server'
+        )
+        SELECT
+            edition,
+            SUM(eff_quantity)                               AS quantity,
+            ROUND(SUM((unit_price * eff_quantity) / 2.0), 2) AS total_license_cost
+        FROM classified
+        GROUP BY edition
+        ORDER BY edition
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
 
     if not rows:
         return pd.DataFrame()
 
-    records = [
-        {
-            "product_name": r["product_family"] or r["rule_name"] or "",
-            "price":        float(r["cost_per_core_pair_eur"]),
-        }
-        for r in rows
-    ]
-    return pd.DataFrame(records)
+    return pd.DataFrame([dict(zip(columns, row)) for row in rows])
 
 
 def _prepare_db_prices_for_demand(
@@ -1020,8 +1093,7 @@ def compute_db_metrics() -> dict:
     # ── Build DataFrames from DB ──────────────────────────────────────────────
     installations_df = _build_installations_df()
     demand_df = _build_demand_df()
-    prices_df = _build_prices_df()
-    prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
+    prices_df = _build_prices_df(demand_df)
 
     from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
     _dd_server_ids = set(
@@ -1086,9 +1158,13 @@ def compute_db_metrics() -> dict:
         rule_results["retired_count"] = len(_enriched_retired_df_uc2)
 
     # ── Run existing license metrics (same as upload path) ────────────────────
+    # Price distribution is pre-computed via SQL using udd.product_edition,
+    # passed as helpful_reports_df so compute_license_metrics uses it directly.
+    price_dist_df = _build_price_distribution_df()
     license_metrics = compute_license_metrics(
         demand_df if not demand_df.empty else pd.DataFrame(),
         prices_df if not prices_df.empty else pd.DataFrame(),
+        helpful_reports_df=price_dist_df if not price_dist_df.empty else None,
     )
 
     # ── Calculate savings (same formula as upload path) ───────────────────────
@@ -2131,8 +2207,7 @@ def compute_live_db_metrics() -> dict:
     """
     installations_df = _build_installations_df()
     demand_df = _build_demand_df()
-    prices_df = _build_prices_df()
-    prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
+    prices_df = _build_prices_df(demand_df)
 
     from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
     _dd_server_ids = set(
@@ -2216,9 +2291,12 @@ def compute_live_db_metrics() -> dict:
         rule_results["azure_payg"] = _to_records(_enriched_payg_df)
         rule_results["azure_payg_count"] = len(_enriched_payg_df)
 
+    # Price distribution pre-computed via SQL using udd.product_edition
+    price_dist_df = _build_price_distribution_df()
     license_metrics = compute_license_metrics(
         demand_df if not demand_df.empty else pd.DataFrame(),
         prices_df if not prices_df.empty else pd.DataFrame(),
+        helpful_reports_df=price_dist_df if not price_dist_df.empty else None,
     )
 
     # Strategy 3: run rightsizing first so we can include its savings in the totals
