@@ -4,19 +4,8 @@ import pandas as pd
 
 from optimizer.services.analysis_service import (
     _build_payg_zone_breakdown,
-    get_sheet_config,
     build_dashboard_context,
 )
-
-
-def test_get_sheet_config_returns_five_keys():
-    config = get_sheet_config()
-    assert "installations" in config
-    assert "demand" in config
-    assert "prices" in config
-    assert "optimization" in config
-    assert "helpful_reports" in config
-    assert all(isinstance(v, str) for v in config.values())
 
 
 def test_build_dashboard_context_flat_integers():

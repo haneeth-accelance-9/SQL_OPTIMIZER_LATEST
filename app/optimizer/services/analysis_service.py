@@ -9,7 +9,6 @@ import pandas as pd
 
 from django.conf import settings
 
-from optimizer.services.excel_processor import ExcelProcessor
 from optimizer.services.rule_engine import run_rules, compute_license_metrics
 from optimizer.services.ai_report_generator import (
     generate_report_text,
@@ -18,17 +17,6 @@ from optimizer.services.ai_report_generator import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def get_sheet_config() -> Dict[str, str]:
-    """Single source of truth for sheet names from settings."""
-    return {
-        "installations": getattr(settings, "EXCEL_SHEET_INSTALLATIONS", "MVP - Data 1 - Installation"),
-        "demand": getattr(settings, "EXCEL_SHEET_DEMAND", "MVP - Data 2 - Demand Results"),
-        "prices": getattr(settings, "EXCEL_SHEET_PRICES", "MVP - Data 3 - Prices"),
-        "optimization": getattr(settings, "EXCEL_SHEET_OPTIMIZATION", "MVP - Data 4 - Optimization potential"),
-        "helpful_reports": getattr(settings, "EXCEL_SHEET_HELPFUL_REPORTS", "MVP - Data 5 - Helpful Reports"),
-    }
 
 
 def _calculate_savings(
@@ -193,92 +181,6 @@ def _build_payg_zone_breakdown(
         "current": [int(current_counts[label]) for label in labels],
         "estimated": [int(estimated_counts[label]) for label in labels],
     }
-
-
-def run_analysis(file_path: str, file_name: str) -> Dict[str, Any]:
-    """
-    Run full analysis pipeline: load Excel, run rules, compute metrics, generate report.
-    Returns dict with keys: success, error, context (or None).
-    context is the full render context (rule_results, license_metrics, report_text, etc.) for templates.
-    """
-    sheets = get_sheet_config()
-    processor = ExcelProcessor(
-        sheet_installations=sheets["installations"],
-        sheet_demand=sheets["demand"],
-        sheet_prices=sheets["prices"],
-        sheet_optimization=sheets["optimization"],
-        sheet_helpful_reports=sheets.get("helpful_reports"),
-    )
-    data = processor.load_file(file_path)
-    if data.get("error"):
-        return {"success": False, "error": data["error"], "context": None}
-
-    installations_df = data["installations"]
-    demand_df = data.get("demand")
-    prices_df = data.get("prices")
-
-    try:
-        rule_results = run_rules(installations_df)
-    except Exception as e:
-        logger.exception("Rule engine failed: %s", e)
-        return {"success": False, "error": "Analysis failed (rules). Please check the file format.", "context": None}
-    rule_results["payg_zone_breakdown"] = _build_payg_zone_breakdown(
-        installations_df,
-        rule_results.get("azure_payg") or [],
-    )
-
-    try:
-        license_metrics = compute_license_metrics(
-            demand_df if demand_df is not None else pd.DataFrame(),
-            prices_df if prices_df is not None else pd.DataFrame(),
-            helpful_reports_df=data.get("helpful_reports"),
-        )
-    except Exception as e:
-        logger.exception("License metrics failed: %s", e)
-        return {"success": False, "error": "Analysis failed (metrics). Please check the file format.", "context": None}
-
-    total_devices_analyzed = len(installations_df) if installations_df is not None else 0
-    context = {
-        "rule_results": rule_results,
-        "license_metrics": license_metrics,
-        "file_name": file_name,
-        "sheet_names_used": data.get("sheet_names_used", {}),
-        "total_devices_analyzed": total_devices_analyzed,
-    }
-    context.update(_calculate_savings(rule_results, license_metrics))
-
-    report_text = None
-    used_fallback = False
-    if getattr(settings, "OPTIMIZER_AI_REPORT_ENABLED", True):
-        report_context = {
-            "azure_payg_count": rule_results.get("azure_payg_count", 0),
-            "retired_count": rule_results.get("retired_count", 0),
-            "total_demand_quantity": license_metrics.get("total_demand_quantity", 0),
-            "total_license_cost": license_metrics.get("total_license_cost", 0),
-            "by_product": license_metrics.get("by_product", []),
-            "demand_row_count": license_metrics.get("demand_row_count", 0),
-        }
-        report_text = generate_report_text(report_context)
-    if not report_text:
-        report_text = get_fallback_report({
-            "azure_payg_count": rule_results.get("azure_payg_count", 0),
-            "retired_count": rule_results.get("retired_count", 0),
-            "total_demand_quantity": license_metrics.get("total_demand_quantity", 0),
-            "total_license_cost": license_metrics.get("total_license_cost", 0),
-            "demand_row_count": license_metrics.get("demand_row_count", 0),
-        })
-        used_fallback = True
-    context["report_text"] = report_text
-    context["report_used_fallback"] = used_fallback
-
-    # AI-generated cost reduction and server conversion recommendations (for Dashboard tab)
-    if getattr(settings, "OPTIMIZER_AI_REPORT_ENABLED", True):
-        ai_recommendations = generate_cost_reduction_recommendations(license_metrics, rule_results)
-        context["cost_reduction_ai_recommendations"] = ai_recommendations or ""
-    else:
-        context["cost_reduction_ai_recommendations"] = ""
-
-    return {"success": True, "error": None, "context": context}
 
 
 def build_dashboard_context(context: Dict[str, Any], request_id: Optional[str] = None) -> Dict[str, Any]:
