@@ -48,13 +48,6 @@
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-3 lg:pt-1">
-                <!-- <a href="{% url 'optimizer:home' %}"
-                    class="inline-flex items-center gap-2 rounded-md bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    Run New Batch
-                </a> -->
                 <div class="relative">
                     <details class="download-sheets-dropdown">
                         <summary
@@ -831,21 +824,7 @@
                         {% endif %}
                     </div>
 
-                    <!-- <div class="xl:col-span-5 dashboard-panel-card">
-                        <div>
-                            <span class="dashboard-section-label">CPU Core Optimization</span>
-                            <p class="mt-1 text-sm text-slate-500">Core footprint patterns across switch candidates.</p>
-                        </div>
-                        <div class="mt-4 h-[330px]">
-                            {% if chart_specs.chart_azure_cores %}
-                            <div id="chart-dash-chart_azure_cores" class="plotly-chart h-full w-full"></div>
-                            {% elif chart_images.chart_azure_cores %}
-                            <img src="data:image/{{ chart_formats.chart_azure_cores|default:'gif' }};base64,{{ chart_images.chart_azure_cores }}" alt="CPU core optimization" class="h-full w-full object-contain">
-                            {% else %}
-                            <div class="flex h-full items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">No chart data</div>
-                            {% endif %}
-                        </div>
-                    </div> -->
+                 
                 </div>
             </section>
 
@@ -891,36 +870,7 @@
                 </div>
             </section>
 
-            <!-- <section class="flex-shrink-0 mb-6">
-                <div class="dashboard-panel-card">
-                    <div class="mb-4 flex items-center justify-between">
-                        <div>
-                            <h3 class="text-base font-bold text-slate-900">AI Generated Insight Panel</h3>
-                            <p class="mt-1 text-sm text-slate-500">Recommendations based on demand, PAYG candidates, and retired-device findings.</p>
-                        </div>
-                    </div>
-                    <div id="dashboard-ai-recommendations" class="dashboard-ai-content rounded-[22px] bg-slate-50 px-5 py-4 text-sm text-slate-700 prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5"></div>
-                    <div id="dashboard-cost-tips-fallback" class="hidden">
-                        {% if cost_reduction_tips %}
-                        <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            {% for tip in cost_reduction_tips %}
-                            <div class="rounded-[20px] border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-sm">
-                                <div class="mb-3 flex items-center justify-between">
-                                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">BYOL to PAYG candidates</span>
-                                    <span class="rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-semibold text-white">High Impact</span>
-                                </div>
-                                <p class="font-semibold text-slate-900">Switch BYOL Candidates to Pay-As-You-Go</p>
-                                <p class="mt-2 text-slate-600">{{ tip }}</p>
-                                <p class="mt-3 text-xs text-slate-500">Estimated Savings : {{ potential_savings_eu }}</p>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        {% else %}
-                        <p class="mt-3 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">Review PAYG candidates and retired devices to reduce over-licensing. Use Developer for dev/test and Standard or Enterprise only where needed. Configure Azure OpenAI for AI-generated cost reduction and server conversion recommendations.</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </section> -->
+           
             {{ cost_reduction_ai_recommendations|default:""|json_script:"cost-reduction-ai-text" }}
             <script>
             (function() {
@@ -943,75 +893,7 @@
             })();
             </script>
 
-            <!--
-            <section class="flex-shrink-0 mb-6">
-                <div class="dashboard-panel-card">
-                    <div class="mb-4 flex items-center justify-between">
-                        <div>
-                            <h3 class="text-base font-bold text-slate-900">Rule Result Snapshots</h3>
-                            <p class="mt-1 text-sm text-slate-500">Quick previews from the two active optimization rules.</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        <div class="overflow-hidden rounded-[22px] border border-slate-200 bg-white">
-                            <h4 class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">Rule 1: Azure PAYG</h4>
-                            <div class="overflow-x-auto overflow-y-auto" style="max-height:220px;">
-                                {% if rule1_keys and azure_payg_page %}
-                                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                                    <thead class="sticky top-0 bg-slate-50"><tr>{% for key in rule1_keys %}<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ key }}</th>{% endfor %}</tr></thead>
-                                    <tbody class="divide-y divide-slate-100">{% for row in azure_payg_page|slice:":5" %}<tr class="hover:bg-slate-50">{% for val in row %}<td class="px-3 py-2 text-slate-700">{{ val|default:"â€”" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-                                </table>
-                                {% if total_rule1_pages %}<p class="px-3 py-3 text-xs text-slate-500">Showing first 5 rows. Switch to <strong>PAYG Recommendation</strong> for the full table.</p>{% endif %}
-                                {% else %}<p class="p-4 text-sm text-slate-500">No Rule 1 data.</p>{% endif %}
-                            </div>
-                        </div>
-                        <div class="overflow-hidden rounded-[22px] border border-slate-200 bg-white">
-                            <h4 class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">Rule 2: Retired Devices</h4>
-                            <div class="overflow-x-auto overflow-y-auto" style="max-height:220px;">
-                                {% if rule2_keys and retired_devices_page %}
-                                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                                    <thead class="sticky top-0 bg-slate-50"><tr>{% for key in rule2_keys %}<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{{ key }}</th>{% endfor %}</tr></thead>
-                                    <tbody class="divide-y divide-slate-100">{% for row in retired_devices_page|slice:":5" %}<tr class="hover:bg-slate-50">{% for val in row %}<td class="px-3 py-2 text-slate-700">{{ val|default:"â€”" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-                                </table>
-                                {% if total_rule2_pages %}<p class="px-3 py-3 text-xs text-slate-500">Showing first 5 rows. Switch to <strong>Retired Devices</strong> for the full table.</p>{% endif %}
-                                {% else %}<p class="p-4 text-sm text-slate-500">No Rule 2 data.</p>{% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            -->
-
-            <!-- <section class="flex-shrink-0 mb-0">
-                <div class="dashboard-panel-card">
-                    <div class="mb-4 flex items-center justify-between">
-                        <div>
-                            <h3 class="text-base font-bold text-slate-900">License Optimization</h3>
-                            <p class="mt-1 text-sm text-slate-500">Reduce or increase allocations to align cost with actual workload demand.</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                        <div class="dashboard-optimization-card border-t-4 border-t-sky-500">
-                            <span class="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">Standard Licenses</span>
-                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Move {{ azure_payg_count }} PAYG candidates to Azure Pay-As-You-Go to reduce standard license count and cost.</p>
-                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Add only where production workloads genuinely require full standard coverage.</p>
-                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: align standard count with actual production demand.</p>
-                        </div>
-                        <div class="dashboard-optimization-card border-t-4 border-t-emerald-500">
-                            <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Developer Licenses</span>
-                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Use developer editions for dev and test instead of standard or enterprise to cut cost.</p>
-                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Remove developer licenses for retired or unused environments such as the {{ retired_count }} flagged devices.</p>
-                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: dev and test on developer only, never production.</p>
-                        </div>
-                        <div class="dashboard-optimization-card border-t-4 border-t-lime-500">
-                            <span class="rounded-full bg-lime-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-lime-700">Enterprise Licenses</span>
-                            <p class="mt-4 text-sm leading-6 text-slate-600"><strong>Reduce:</strong> Migrate eligible workloads to PAYG or Standard where enterprise-only features are not required.</p>
-                            <p class="mt-3 text-sm leading-6 text-slate-600"><strong>Increase:</strong> Reserve enterprise for systems that need advanced capabilities and consolidate duplicate coverage.</p>
-                            <p class="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Target: right-size enterprise demand against {{ total_demand_quantity }} total required licenses.</p>
-                        </div>
-                    </div>
-                </div>
-            </section> -->
+          
         </div>
 
         <!-- RULE 3: CPU & RAM Right-Sizing -->
@@ -1103,26 +985,14 @@
                                     <p id="rs3-cpu-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_nonprod_count|default:0 }}</p>
                                 </div>
                             </div>
-                            <!-- <div class="grid grid-cols-4 gap-2 border-b border-slate-200 pb-3">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">Total Candidates</p>
-                                    <p id="rs3-cpu-total-count" class="mt-1 text-xl font-bold text-slate-900">{{ rs.cpu_count|default:0 }}</p>
-                                </div>
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-slate-400">vCPU Reduction</p>
-                                    <p class="mt-1 text-xl font-bold text-emerald-700">-<span id="rs3-cpu-reduction-total">{{ rs.total_vcpu_reduction|default:0 }}</span></p>
-                                </div>
-                            </div> -->
+                          
                         </div>
                     </div>
                     <!-- CPU chart -->
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
                             <h3 id="rs3-cpu-chart-title" class="chart-card-title">Top 10 Servers - Average vs Peak CPU Utilisation (%)</h3>
-                            <!-- <div class="chart-legend-hint">
-                                <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-cpu-legend-1">Avg CPU%</span>
-                                <span class="chart-dot" style="background:#89D329"></span><span id="rs3-cpu-legend-2">Peak CPU%</span>
-                            </div> -->
+                          
                         </div>
                         <div class="chart-container chart-height-reference">
                             <div id="chart-rs3-cpu" class="plotly-chart w-full h-full"></div>
@@ -1284,10 +1154,7 @@
                     <div class="chart-card chart-card-featured chart-card-reference xl:col-span-8">
                         <div class="chart-card-head">
                             <h3 id="rs3-ram-chart-title" class="chart-card-title">Top 10 Servers - Average vs Min Free Memory (%)</h3>
-                            <!-- <div class="chart-legend-hint">
-                                <span class="chart-dot" style="background:#84D329"></span><span id="rs3-ram-legend-1">Avg Free Mem%</span>
-                                <span class="chart-dot" style="background:#00BCFF"></span><span id="rs3-ram-legend-2">Min Free Mem%</span>
-                            </div> -->
+                          
                         </div>
                         <div class="chart-container chart-height-reference">
                             <div id="chart-rs3-ram" class="plotly-chart w-full h-full"></div>
@@ -5405,7 +5272,7 @@
                 }], Object.assign({}, baseLayout, {
                     title: { text: 'Average Value per Metric', font: { size: 12, color: '#0f172a' } },
                     bargap: 0.6,
-                    yaxis: { type: 'log', automargin: true, tickfont: { size: 10 }, gridcolor: '#f1f5f9', linecolor: '#e2e8f0', zeroline: false, exponentformat: 'none', tickformat: ',' },
+                    yaxis: { type: 'log', automargin: true, tickfont: { size: 10 }, gridcolor: '#f1f5f9', linecolor: '#e2e8f0', zeroline: false },
                     showlegend: false,
                 }), cfg);
             }
