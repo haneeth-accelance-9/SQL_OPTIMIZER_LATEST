@@ -3291,7 +3291,7 @@ def download_uc3_cpu_input_data(request):
     """
     from io import BytesIO
     from optimizer.services.db_analysis_service import _build_rightsizing_df
-    from optimizer.rules.rightsizing import NON_PROD_ENVS, find_cpu_rightsizing_optimizations
+    from optimizer.rules.rightsizing import NON_PROD_ENVS
 
     df = _build_rightsizing_df()
     if df.empty:
@@ -3329,11 +3329,15 @@ def download_uc3_cpu_input_data(request):
     mask_np3 = mask_np2 & (vcpu_np >= 4)
     nonprod_eligible = int(mask_np3.sum())
 
-    # ── Actual final candidates via full rule ─────────────────────────────────
-    final_df = find_cpu_rightsizing_optimizations(df)
-    prod_candidates   = int((final_df["Env_Type"] == "PROD").sum())
-    nonprod_candidates = int((final_df["Env_Type"] == "NON-PROD").sum())
-    total_candidates  = prod_candidates + nonprod_candidates
+    # ── Table Data sheet: built first so counts match the dashboard ──────────────
+    from optimizer.services.db_analysis_service import build_rightsizing_sheet_export
+    prod_table_df = build_rightsizing_sheet_export("PROD_CPU_Rightsizing")
+    nonprod_table_df = build_rightsizing_sheet_export("NONPROD_CPU_Rightsizing")
+    table_df = pd.concat([prod_table_df, nonprod_table_df], ignore_index=True)
+
+    prod_candidates    = len(prod_table_df)
+    nonprod_candidates = len(nonprod_table_df)
+    total_candidates   = prod_candidates + nonprod_candidates
 
     # ── Environment breakdown ─────────────────────────────────────────────────
     env_counts = df["Environment"].astype(str).value_counts().reset_index()
@@ -3368,6 +3372,7 @@ def download_uc3_cpu_input_data(request):
         df.to_excel(writer, index=False, sheet_name="UC3 CPU Input Data")
         summary_df.to_excel(writer, index=False, sheet_name="UC3 CPU Summary")
         _apply_summary_styles(writer.sheets["UC3 CPU Summary"])
+        table_df.to_excel(writer, index=False, sheet_name="CPU Candidates")
 
     buf.seek(0)
     response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -3391,7 +3396,6 @@ def download_uc3_crit_cpu_input_data(request):
     from optimizer.services.db_analysis_service import _build_rightsizing_df
     from optimizer.rules.rightsizing import (
         ALL_CRITICAL_VALS, CRITICAL_VALS,
-        find_criticality_cpu_optimizations,
         find_criticality_cpu_downsize_optimizations,
         find_criticality_cpu_upsize_optimizations,
     )
@@ -3420,12 +3424,11 @@ def download_uc3_crit_cpu_input_data(request):
         total_critical = downsize_eligible = total_bc_mc = upsize_eligible = 0
 
     # ── Actual final candidates via full rule ─────────────────────────────────
-    final_df   = find_criticality_cpu_optimizations(df)
     downsize_df = find_criticality_cpu_downsize_optimizations(df)
     upsize_df   = find_criticality_cpu_upsize_optimizations(df)
-    downsize_final = len(downsize_df)
-    upsize_final   = len(upsize_df)
-    total_candidates = len(final_df)
+    downsize_final   = len(downsize_df)
+    upsize_final     = len(upsize_df)
+    total_candidates = downsize_final + upsize_final
 
     # ── Criticality breakdown ─────────────────────────────────────────────────
     crit_counts = df["Criticality"].astype(str).value_counts().reset_index() if crit_col else pd.DataFrame(columns=["criticality", "count"])
@@ -3444,7 +3447,7 @@ def download_uc3_crit_cpu_input_data(request):
         {"Description": "UC3.3b Filter 2: Avg_CPU_12m > 80%", "Count": upsize_eligible, "Note": ""},
         {"Description": "UC3.3b UPSIZE CANDIDATES", "Count": upsize_final, "Note": "Flag Only — Human Intervention Required"},
         {"Description": "", "Count": None, "Note": ""},
-        {"Description": "UC3.3 Crit CPU FINAL FLAGS", "Count": total_candidates, "Note": f"{downsize_final} Downsize, {upsize_final} Upsize — Rows the rule will action"},
+        {"Description": "UC3.3 Crit CPU FINAL FLAGS", "Count": total_candidates, "Note": "-"},
         {"Description": "", "Count": None, "Note": ""},
         {"Description": "--- Criticality breakdown (all input rows) ---", "Count": None, "Note": ""},
     ]
@@ -3481,7 +3484,6 @@ def download_uc3_crit_ram_input_data(request):
     from optimizer.services.db_analysis_service import _build_rightsizing_df
     from optimizer.rules.rightsizing import (
         ALL_CRITICAL_VALS, CRITICAL_VALS,
-        find_criticality_ram_optimizations,
         find_criticality_ram_downsize_optimizations,
         find_criticality_ram_upsize_optimizations,
     )
@@ -3508,12 +3510,11 @@ def download_uc3_crit_ram_input_data(request):
     else:
         total_critical = downsize_eligible = total_bc_mc = upsize_eligible = 0
 
-    final_df    = find_criticality_ram_optimizations(df)
     downsize_df = find_criticality_ram_downsize_optimizations(df)
     upsize_df   = find_criticality_ram_upsize_optimizations(df)
     downsize_final   = len(downsize_df)
     upsize_final     = len(upsize_df)
-    total_candidates = len(final_df)
+    total_candidates = downsize_final + upsize_final
 
     crit_counts = df["Criticality"].astype(str).value_counts().reset_index() if crit_col else pd.DataFrame(columns=["criticality", "count"])
     crit_counts.columns = ["criticality", "count"]

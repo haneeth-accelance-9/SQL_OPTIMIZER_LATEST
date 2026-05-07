@@ -411,7 +411,7 @@
         <!-- ── Rule 3 header ──────────────────────────────────────────────── -->
         <div class="px-1 flex items-center gap-3">
             <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-teal-600 text-white text-[10px] font-bold flex-shrink-0">3</span>
-            <h2 class="text-sm font-bold text-slate-900">Rule 3 — VM Rightsizing (UC3.1 – UC3.5 + Physical)</h2>
+            <h2 class="text-sm font-bold text-slate-900">Rule 3 — VM Rightsizing (UC3.1 – UC3.4)</h2>
             <span class="text-[10px] text-slate-400 ml-1">Input: {{ filter_funnel.total_input|default:0 }} active servers with utilisation data</span>
         </div>
 
@@ -499,7 +499,7 @@
                         <tr><td>&nbsp;&nbsp;UC3.3b Filter 2: Avg_CPU_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_cpu_up_f2|default:0 }}</td><td></td></tr>
                         <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_cpu_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>UC3.3 Crit CPU FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>{{ filter_funnel.crit_cpu_dn_final|default:0 }} Downsize, {{ filter_funnel.crit_cpu_up_final|default:0 }} Upsize — Rows the rule will action</td></tr>
+                        <tr class="final-warn"><td>UC3.3 Crit CPU FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>-</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -527,7 +527,7 @@
                         <tr><td>&nbsp;&nbsp;UC3.4b Filter 2: Avg_FreeMem_12m &lt; 20%</td><td class="count">{{ filter_funnel.crit_ram_up_f2|default:0 }}</td><td></td></tr>
                         <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>UC3.4 Crit RAM FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>{{ filter_funnel.crit_ram_dn_final|default:0 }} Downsize, {{ filter_funnel.crit_ram_up_final|default:0 }} Upsize — Rows the rule will action</td></tr>
+                        <tr class="final-warn"><td>UC3.4 Crit RAM FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>-</td></tr>
                     </tbody>
                 </table>
             </div>
