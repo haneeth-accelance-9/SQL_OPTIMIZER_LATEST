@@ -12,6 +12,7 @@ Column mapping (DB → DataFrame column expected by rules):
   LicenseRule.cost_per_core_pair_eur  → price
 """
 import logging
+import os
 from datetime import date
 from typing import Any
 
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 # demand/cost metrics that feed savings calculations.
 SHOWCASE_ONLY_PRODUCT_FAMILIES = frozenset({"Java"})
 RIGHTSIZING_CPU_LICENSE_COSTS_EUR = {
-    "enterprise": 2637.96,
-    "standard": 687.96,
+    "enterprise": float(os.environ.get("RIGHTSIZING_CPU_LICENSE_COST_ENTERPRISE_EUR", "2637.96")),
+    "standard":   float(os.environ.get("RIGHTSIZING_CPU_LICENSE_COST_STANDARD_EUR",   "687.96")),
 }
 
 RIGHTSIZING_REPORT_METADATA_HEADERS = [
@@ -1092,7 +1093,12 @@ def compute_db_metrics() -> dict:
     Reuses run_rules, compute_license_metrics, _calculate_savings, and
     _build_payg_zone_breakdown — identical to the upload path.
     """
+    import time as _time
+    from optimizer.services.analysis_service import PipelineTimer
+    _timer = PipelineTimer()
+
     # ── Build DataFrames from DB ──────────────────────────────────────────────
+    _ingestion_start = _time.perf_counter()
     installations_df = _build_installations_df()
     demand_df = _build_demand_df()
     prices_df = _build_prices_df()
@@ -1110,8 +1116,10 @@ def compute_db_metrics() -> dict:
         .values_list("server_id", flat=True).distinct()
     )
     total_devices = len(_dd_server_ids | _inst_server_ids)
+    _timer.record("ingestion", _time.perf_counter() - _ingestion_start)
 
     # ── Run existing rule engine (same as upload path) ────────────────────────
+    _rule_eval_start = _time.perf_counter()
     azure_df_uc1 = pd.DataFrame()
     retired_df_uc2 = pd.DataFrame()
     uc2_df = pd.DataFrame()
@@ -1168,6 +1176,7 @@ def compute_db_metrics() -> dict:
 
     # ── Calculate savings (same formula as upload path) ───────────────────────
     rightsizing = compute_rightsizing_metrics()
+    _timer.record("rule_eval", _time.perf_counter() - _rule_eval_start)
 
     avg_cost_per_core_pair_eur = 0.0
     if not prices_df.empty and "price" in prices_df.columns:
@@ -2204,28 +2213,35 @@ def compute_live_db_metrics() -> dict:
     and USUInstallation, and cost/savings are derived from USUDemandDetail and
     LicenseRule.
     """
-    installations_df = _build_installations_df()
-    demand_df = _build_demand_df()
-    prices_df = _build_prices_df()
-    prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
+    from optimizer.services.analysis_service import PipelineTimer
+    _timer = PipelineTimer()
 
-    from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
-    _dd_server_ids = set(
-        _UDD.objects
-        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
-        .values_list("server_id", flat=True).distinct()
-    )
-    _inst_server_ids = set(
-        _USUInst.objects
-        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
-        .values_list("server_id", flat=True).distinct()
-    )
-    total_devices = len(_dd_server_ids | _inst_server_ids)
+    with _timer.phase("ingestion"):
+        installations_df = _build_installations_df()
+        demand_df = _build_demand_df()
+        prices_df = _build_prices_df()
+        prices_df = _prepare_db_prices_for_demand(demand_df, prices_df)
+
+        from optimizer.models import USUDemandDetail as _UDD, USUInstallation as _USUInst
+        _dd_server_ids = set(
+            _UDD.objects
+            .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+            .values_list("server_id", flat=True).distinct()
+        )
+        _inst_server_ids = set(
+            _USUInst.objects
+            .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+            .values_list("server_id", flat=True).distinct()
+        )
+        total_devices = len(_dd_server_ids | _inst_server_ids)
 
     def _to_records(df: pd.DataFrame) -> list[dict]:
         if df is None or df.empty:
             return []
         return df.replace({pd.NA: None}).to_dict("records")
+
+    import time as _time
+    _rule_eval_start = _time.perf_counter()
 
     azure_df = pd.DataFrame()
     retired_df = pd.DataFrame()
@@ -2298,6 +2314,8 @@ def compute_live_db_metrics() -> dict:
 
     # Strategy 3: run rightsizing first so we can include its savings in the totals
     rightsizing = compute_rightsizing_metrics()
+
+    _timer.record("rule_eval", _time.perf_counter() - _rule_eval_start)
 
     # Derive avg cost per core pair from the active LicenseRule prices
     avg_cost_per_core_pair_eur = 0.0

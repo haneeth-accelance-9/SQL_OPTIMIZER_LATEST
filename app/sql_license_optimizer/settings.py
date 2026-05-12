@@ -59,9 +59,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "optimizer.middleware.JWTAuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "optimizer.middleware.RequestIdMiddleware",
+    "optimizer.middleware.PayloadEncryptionMiddleware",
 ]
 
 ROOT_URLCONF = "sql_license_optimizer.urls"
@@ -92,10 +94,23 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
         "HOST":     _db_host,
         "PORT":     os.environ.get("DB_PORT", "5432"),
-        "OPTIONS":  {"sslmode": "require", "connect_timeout": 10} if "azure.com" in _db_host else {},
+        "OPTIONS":  {"sslmode": os.environ.get("DB_SSL_MODE", "require"), "connect_timeout": 10} if "azure.com" in _db_host else {},
         "CONN_MAX_AGE": 60,
     }
 }
+# Rate-limit sliding-window counters are stored here.
+# Run once after deploy: python manage.py createcachetable
+# For Redis, swap BACKEND to "django.core.cache.backends.redis.RedisCache"
+# and set LOCATION to your Redis URL.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "rate_limit_cache",
+        "TIMEOUT": 3600,
+        "OPTIONS": {"MAX_ENTRIES": 50000},
+    }
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -116,7 +131,7 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_AGE = 86400 * 2
+SESSION_COOKIE_AGE = int(os.environ.get("SESSION_COOKIE_AGE_SECONDS", str(86400 * 2)))
 if _IS_PRODUCTION:
     SESSION_COOKIE_SECURE = True
 
@@ -145,6 +160,21 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
+# ── JWT (OAuth2 Bearer tokens for API clients) ────────────────────────────────
+# Uses SECRET_KEY as fallback so dev works without extra config.
+# In production set JWT_SECRET_KEY to an independent high-entropy secret.
+JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "").strip() or SECRET_KEY
+JWT_ALGORITHM = "HS256"
+# Access token lifetime in seconds (default 1 hour)
+JWT_ACCESS_TOKEN_LIFETIME = int(os.environ.get("JWT_ACCESS_TOKEN_LIFETIME", "3600"))
+# Refresh token lifetime in seconds (default 7 days)
+JWT_REFRESH_TOKEN_LIFETIME = int(os.environ.get("JWT_REFRESH_TOKEN_LIFETIME", str(86400 * 7)))
+
+# ── Payload Encryption (AES-256-GCM for API clients) ─────────────────────────
+# Generate key: python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"
+# Leave empty to disable payload encryption (middleware becomes a no-op).
+PAYLOAD_ENCRYPTION_KEY = os.environ.get("PAYLOAD_ENCRYPTION_KEY", "").strip()
+
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip()
 AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
 AZURE_OPENAI_DEPLOYMENT = (
@@ -155,6 +185,12 @@ AZURE_OPENAI_DEPLOYMENT = (
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview").strip() or "2024-02-15-preview"
 AZURE_OPENAI_TIMEOUT = int(os.environ.get("AZURE_OPENAI_TIMEOUT", "60"))
 
+# Azure API Management gateway — routes LLM calls through APIM instead of directly to Azure OpenAI.
+# When set, AZURE_APIM_ENDPOINT overrides AZURE_OPENAI_ENDPOINT for the AzureOpenAI client.
+# AZURE_APIM_SUB_KEY is sent as Ocp-Apim-Subscription-Key on every request.
+AZURE_APIM_ENDPOINT = os.environ.get("AZURE_APIM_ENDPOINT", "").strip()
+AZURE_APIM_SUB_KEY = os.environ.get("AZURE_APIM_SUB_KEY", "").strip()
+
 # Demand API (USU) — fetched by `python manage.py fetch_demand_data`
 # Override via environment variables or set directly here.
 DEMAND_API_BASE_URL = os.environ.get("DEMAND_API_BASE_URL", "https://lima.bayer.cloud.usu.com")
@@ -162,15 +198,21 @@ DEMAND_API_START_URI = os.environ.get(
     "DEMAND_API_START_URI",
     "/prod/index.php/api/customization/v1.0/demanddetails?$skip=0&$top=10000",
 )
-DEMAND_API_AUTH_HEADER = os.environ.get(
+DEMAND_API_AUTH_HEADER = _require_env(
     "DEMAND_API_AUTH_HEADER",
-    "Basic dXN1ZGF0YXVzZXI6QlVFUFdFZkw2JCM5eVEh",
+    "DEMAND_API_AUTH_HEADER must be set (e.g. 'Basic <base64(user:pass)>').",
 )
 
 # USU API — used by fetch_usu_data management command (weekly sync)
 USU_API_BASE_URL  = os.environ.get("USU_API_BASE_URL",  "https://lima.bayer.cloud.usu.com")
-USU_API_USERNAME  = os.environ.get("USU_API_USERNAME",  "myusudata")
-USU_API_PASSWORD  = os.environ.get("USU_API_PASSWORD",  "test123Usu")
+USU_API_USERNAME  = _require_env(
+    "USU_API_USERNAME",
+    "USU_API_USERNAME must be set.",
+)
+USU_API_PASSWORD  = _require_env(
+    "USU_API_PASSWORD",
+    "USU_API_PASSWORD must be set.",
+)
 # Output file path — defaults to BASE_DIR/response_full.json
 DEMAND_API_OUTPUT_FILE = os.environ.get("DEMAND_API_OUTPUT_FILE", str(BASE_DIR / "response_full.json"))
 
@@ -186,11 +228,138 @@ AGENT_A2A_TIMEOUT = int(os.environ.get("AGENT_A2A_TIMEOUT", "120"))
 # Max retries on 429/5xx before falling back to Azure OpenAI direct report
 AGENT_A2A_MAX_RETRIES = int(os.environ.get("AGENT_A2A_MAX_RETRIES", "2"))
 
+# ── Logging — JSON formatter + daily per-level file rotation ─────────────────
+# JSON record shape (one line per record):
+#   {"time": "...", "level": "...", "logger": "...", "request_id": "...", "message": "..."}
+#
+# Log level controlled by LOG_LEVEL env var (default INFO).
+# Files written to logs/YYYY-MM-DD/<level>.log via DailyLevelFileHandler.
+_LOG_DIR  = str(BASE_DIR / "logs")
+_LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "loggers": {"optimizer": {"handlers": ["console"], "level": "DEBUG" if DEBUG else "INFO", "propagate": False}},
+
+    # ── Formatters ────────────────────────────────────────────────────────────
+    "formatters": {
+        # Human-readable text for the console — includes %(request_id)s
+        "standard": {
+            "format":   "%(asctime)s [%(levelname)-8s] [%(request_id)s] %(name)s — %(message)s",
+            "datefmt":  "%Y-%m-%d %H:%M:%S",
+        },
+        # Structured JSON for file handlers — {"time","level","logger","request_id","message"}
+        "json": {
+            "()": "optimizer.logger.JsonFormatter",
+        },
+    },
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+    # RequestIdFilter lives in middleware.py (co-located with RequestIdMiddleware).
+    # It is also attached to logging.root by RequestIdMiddleware.__init__, so
+    # ALL loggers carry request_id automatically — the entry here covers any
+    # handler that is NOT rooted through the root logger.
+    "filters": {
+        "request_id": {
+            "()": "optimizer.middleware.RequestIdFilter",
+        },
+        # Redacts email addresses (including notified_to_email) from console output
+        "pii_redact": {
+            "()": "optimizer.middleware.PiiRedactingFilter",
+        },
+    },
+
+    # ── Handlers ──────────────────────────────────────────────────────────────
+    "handlers": {
+        # Console — human-readable with %(request_id)s; level follows LOG_LEVEL
+        "console": {
+            "class":     "logging.StreamHandler",
+            "formatter": "standard",
+            "filters":   ["request_id", "pii_redact"],
+            "level":     _LOG_LEVEL,
+        },
+
+        # logs/YYYY-MM-DD/debug.log
+        "file_debug": {
+            "()": "optimizer.logger.DailyLevelFileHandler",
+            "log_dir": _LOG_DIR,
+            "filename": "debug.log",
+            "min_level": "DEBUG",
+            "formatter": "json",
+            "filters": ["request_id"],
+            "level": "DEBUG",
+        },
+
+        # logs/YYYY-MM-DD/info.log
+        "file_info": {
+            "()": "optimizer.logger.DailyLevelFileHandler",
+            "log_dir": _LOG_DIR,
+            "filename": "info.log",
+            "min_level": "INFO",
+            "formatter": "json",
+            "filters": ["request_id"],
+            "level": "INFO",
+        },
+
+        # logs/YYYY-MM-DD/warning.log
+        "file_warning": {
+            "()": "optimizer.logger.DailyLevelFileHandler",
+            "log_dir": _LOG_DIR,
+            "filename": "warning.log",
+            "min_level": "WARNING",
+            "formatter": "json",
+            "filters": ["request_id"],
+            "level": "WARNING",
+        },
+
+        # logs/YYYY-MM-DD/error.log
+        "file_error": {
+            "()": "optimizer.logger.DailyLevelFileHandler",
+            "log_dir": _LOG_DIR,
+            "filename": "error.log",
+            "min_level": "ERROR",
+            "formatter": "json",
+            "filters": ["request_id"],
+            "level": "ERROR",
+        },
+    },
+
+    # ── Loggers ───────────────────────────────────────────────────────────────
+    "loggers": {
+        # All optimizer app modules — level gated by LOG_LEVEL
+        "optimizer": {
+            "handlers": ["console", "file_debug", "file_info", "file_warning", "file_error"],
+            "level": _LOG_LEVEL,
+            "propagate": False,
+        },
+
+        # Django internal warnings / errors
+        "django": {
+            "handlers": ["console", "file_warning", "file_error"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+
+        # Every 4xx / 5xx response → error.log
+        "django.request": {
+            "handlers": ["file_error"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+
+        # Slow-query / DB warnings
+        "django.db.backends": {
+            "handlers": ["file_warning"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+
+    # Root — catch-all for third-party libs; level follows LOG_LEVEL
+    "root": {
+        "handlers": ["console", "file_warning"],
+        "level": _LOG_LEVEL,
+    },
 }
 
 # ── Grafana / Mimir (Prometheus remote-read) ──────────────────────────────────

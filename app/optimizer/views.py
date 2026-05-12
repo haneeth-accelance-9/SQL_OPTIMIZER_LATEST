@@ -30,6 +30,13 @@ from django.contrib.auth.views import LoginView
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib import messages
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from optimizer.middleware import rate_limit
+from optimizer.permissions import (
+    ROLE_ADMIN, ROLE_EDITOR, ROLE_VIEWER,
+    editor_or_above, admin_only, get_user_role,
+)
 
 import pandas as pd
 from optimizer.models import UserProfile
@@ -985,6 +992,192 @@ def _safe_content_disposition(filename: str) -> str:
     return f'attachment; filename="{safe}"'
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# JWT / OAuth2 token endpoints  (CSRF-exempt — clients use Bearer tokens)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _issue_jwt_pair(user):
+    """Return (access_token, refresh_token) signed JWTs for the given user."""
+    import jwt as pyjwt
+    now = int(timezone.now().timestamp())
+    role = get_user_role(user)
+
+    access_payload = {
+        "type": "access",
+        "user_id": user.pk,
+        "username": user.username,
+        "role": role,
+        "iat": now,
+        "exp": now + settings.JWT_ACCESS_TOKEN_LIFETIME,
+    }
+    refresh_payload = {
+        "type": "refresh",
+        "user_id": user.pk,
+        "iat": now,
+        "exp": now + settings.JWT_REFRESH_TOKEN_LIFETIME,
+    }
+    access = pyjwt.encode(access_payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    refresh = pyjwt.encode(refresh_payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return access, refresh
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rate_limit("jwt_token", limit=10, window_seconds=60, use_user=False, use_ip=True)
+def api_auth_token(request):
+    """
+    OAuth2 Resource Owner Password Credentials Grant.
+
+    POST /api/auth/token/
+    Content-Type: application/x-www-form-urlencoded  OR  application/json
+
+    Fields:
+      grant_type  password  (required)
+      username              (required)
+      password              (required)
+
+    Response 200:
+      { "access_token", "refresh_token", "token_type": "Bearer",
+        "expires_in": <seconds>, "role": "admin|editor|viewer" }
+    """
+    import json as _json
+    from django.contrib.auth import authenticate
+
+    ct = request.content_type or ""
+    if "application/json" in ct:
+        try:
+            body = _json.loads(request.body)
+        except Exception:
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    else:
+        body = request.POST
+
+    grant_type = body.get("grant_type", "password")
+    if grant_type != "password":
+        return JsonResponse({"error": "Unsupported grant_type. Only 'password' is supported."}, status=400)
+
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    if not username or not password:
+        return JsonResponse({"error": "username and password are required."}, status=400)
+
+    user = authenticate(request, username=username, password=password)
+    if user is None:
+        return JsonResponse({"error": "Invalid credentials."}, status=401)
+    if not user.is_active:
+        return JsonResponse({"error": "Account is disabled."}, status=401)
+
+    access, refresh = _issue_jwt_pair(user)
+    return JsonResponse({
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "Bearer",
+        "expires_in": settings.JWT_ACCESS_TOKEN_LIFETIME,
+        "role": get_user_role(user),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rate_limit("jwt_refresh", limit=20, window_seconds=60, use_user=False, use_ip=True)
+def api_auth_token_refresh(request):
+    """
+    Exchange a refresh token for a new access token.
+
+    POST /api/auth/token/refresh/
+    Body (JSON):  { "refresh_token": "eyJ..." }
+
+    Response 200: { "access_token", "token_type": "Bearer", "expires_in" }
+    """
+    import json as _json
+    import jwt as pyjwt
+
+    try:
+        body = _json.loads(request.body)
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    token = (body.get("refresh_token") or "").strip()
+    if not token:
+        return JsonResponse({"error": "refresh_token is required."}, status=400)
+
+    try:
+        payload = pyjwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    except pyjwt.ExpiredSignatureError:
+        return JsonResponse({"error": "Refresh token has expired."}, status=401)
+    except pyjwt.InvalidTokenError as exc:
+        return JsonResponse({"error": f"Invalid refresh token: {exc}"}, status=401)
+
+    if payload.get("type") != "refresh":
+        return JsonResponse({"error": "Token is not a refresh token."}, status=400)
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=payload["user_id"], is_active=True)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found or inactive."}, status=401)
+
+    access, _ = _issue_jwt_pair(user)
+    return JsonResponse({
+        "access_token": access,
+        "token_type": "Bearer",
+        "expires_in": settings.JWT_ACCESS_TOKEN_LIFETIME,
+        "role": get_user_role(user),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_auth_token_verify(request):
+    """
+    Verify an access token is valid and return its claims.
+
+    POST /api/auth/token/verify/
+    Body (JSON):  { "token": "eyJ..." }
+
+    Response 200: { "valid": true, "user_id", "username", "role", "expires_at" }
+    Response 200: { "valid": false, "error": "..." }
+    """
+    import json as _json
+    import jwt as pyjwt
+
+    try:
+        body = _json.loads(request.body)
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    token = (body.get("token") or "").strip()
+    if not token:
+        return JsonResponse({"error": "token is required."}, status=400)
+
+    try:
+        payload = pyjwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    except pyjwt.ExpiredSignatureError:
+        return JsonResponse({"valid": False, "error": "Token has expired."})
+    except pyjwt.InvalidTokenError as exc:
+        return JsonResponse({"valid": False, "error": str(exc)})
+
+    if payload.get("type") != "access":
+        return JsonResponse({"valid": False, "error": "Not an access token."})
+
+    return JsonResponse({
+        "valid": True,
+        "user_id": payload.get("user_id"),
+        "username": payload.get("username"),
+        "role": payload.get("role"),
+        "expires_at": payload.get("exp"),
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session-based login / signup
+# ─────────────────────────────────────────────────────────────────────────────
+
+@method_decorator(
+    rate_limit("login", limit=10, window_seconds=60, use_user=False, use_ip=True),
+    name="post",
+)
 class OptimizerLoginView(LoginView):
     """Enterprise login: unified auth page (Sign in | Create account)."""
     template_name = "optimizer/auth.html"
@@ -1003,6 +1196,7 @@ class OptimizerLoginView(LoginView):
 
 @require_http_methods(["GET", "POST"])
 @csrf_protect
+@rate_limit("signup", limit=5, window_seconds=600, use_user=False, use_ip=True)
 def signup_view(request):
     """
     Enterprise signup: POST creates user and redirects to login with success message.
@@ -1763,6 +1957,7 @@ def report_page(request):
 
 @require_GET
 @login_required
+@rate_limit("report_download", limit=10, window_seconds=60)
 def report_download(request, format_type):
     """Download report as PDF, Word, or Excel — uses agent AI report markdown."""
     normalized_format = REPORT_FORMAT_ALIASES.get(format_type, format_type)
@@ -2400,6 +2595,8 @@ def api_agent_run_detail(request, run_id):
 @require_http_methods(["POST"])
 @csrf_protect
 @login_required
+@editor_or_above
+@rate_limit("agent_run", limit=20, window_seconds=3600)
 def api_trigger_agent_run(request):
     """
     API: Trigger a new agent run using live DB data.
@@ -2482,6 +2679,7 @@ def api_trigger_agent_run(request):
 @require_http_methods(["POST"])
 @csrf_protect
 @login_required
+@editor_or_above
 def api_candidate_decision(request, candidate_id):
     """
     API: Accept or reject an OptimizationCandidate.
@@ -2657,6 +2855,7 @@ def api_rule2_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_demand_data(request):
     """Export all Total Demand License rows with Actual_Line_Cost as Excel."""
     from optimizer.models import USUDemandDetail
@@ -2715,6 +2914,7 @@ def download_demand_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_rule_data(request, rule_id):
     """Download Rule 1 or Rule 2 data as Excel. rule_id whitelisted to rule1, rule2."""
     if rule_id not in ALLOWED_RULE_IDS:
@@ -2788,6 +2988,7 @@ def download_rule_data(request, rule_id):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_rightsizing_sheet(request, sheet_key):
     """Download a specific Strategy 3 sheet as a single-sheet Excel workbook."""
     normalized_sheet_key = str(sheet_key or "").strip()
@@ -2816,6 +3017,7 @@ def download_rightsizing_sheet(request, sheet_key):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc1_input_data(request):
     """
     Export the full UC1 input dataset (all rows, all columns) plus a filter-funnel
@@ -2933,6 +3135,7 @@ def download_uc1_input_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_ram_input_data(request):
     """
     Export the full UC3.2 RAM Rightsizing input dataset (all rows, all columns) plus
@@ -3105,6 +3308,7 @@ def _apply_summary_styles(ws):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_cpu_input_data(request):
     """
     Export the full UC3.1 CPU Rightsizing input dataset plus a filter-funnel summary.
@@ -3205,6 +3409,7 @@ def download_uc3_cpu_input_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_crit_cpu_input_data(request):
     """
     Export the full UC3.3 Criticality-Aware CPU input dataset plus a filter-funnel summary.
@@ -3293,6 +3498,7 @@ def download_uc3_crit_cpu_input_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_crit_ram_input_data(request):
     """
     Export the full UC3.4 Criticality-Aware RAM input dataset plus a filter-funnel summary.
@@ -3378,6 +3584,7 @@ def download_uc3_crit_ram_input_data(request):
 
 @require_GET
 @login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_physical_input_data(request):
     """
     Export the full Physical Systems input dataset plus a filter-funnel summary.
@@ -3443,6 +3650,9 @@ def download_uc3_physical_input_data(request):
     return response
 
 
+@require_GET
+@login_required
+@rate_limit("data_download", limit=20, window_seconds=60)
 def download_uc3_lifecycle_input_data(request):
     """
     Export the full UC3.5 Lifecycle Risk Flags input dataset plus a filter-funnel summary.

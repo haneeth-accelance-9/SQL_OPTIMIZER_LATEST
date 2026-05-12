@@ -2,12 +2,20 @@
 Analysis service: run upload pipeline and return result DTO.
 Single place for business logic; views handle HTTP only.
 """
+import contextlib
+import contextvars
 import logging
+import os
+import time
 from typing import Any, Dict, Optional
 
 import pandas as pd
 
 from django.conf import settings
+
+# Savings multipliers — configurable per environment/tier via .env
+PAYG_SAVINGS_MULTIPLIER = float(os.environ.get("PAYG_SAVINGS_MULTIPLIER", "0.28"))
+RETIRED_DEVICE_SAVINGS_MULTIPLIER = float(os.environ.get("RETIRED_DEVICE_SAVINGS_MULTIPLIER", "0.05"))
 
 from optimizer.services.rule_engine import run_rules, compute_license_metrics
 from optimizer.services.ai_report_generator import (
@@ -17,6 +25,97 @@ from optimizer.services.ai_report_generator import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pipeline timing
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ContextVar so timings accumulate across the synchronous call stack (ingestion
+# and rule-eval run inside db_analysis_service; llm-gen runs in ai_report_generator)
+# without threading any extra parameters through function signatures.
+_pipeline_timings_var: contextvars.ContextVar[dict] = contextvars.ContextVar(
+    "pipeline_timings", default=None
+)
+
+
+class PipelineTimer:
+    """
+    Named-phase stopwatch backed by a ContextVar.
+
+    Phases measured in the same request/thread accumulate automatically:
+
+        timer = PipelineTimer()
+        with timer.phase("ingestion"):
+            load_data_from_db()
+        with timer.phase("rule_eval"):
+            run_rules()
+        # timer.durations → {"ingestion_sec": 1.23, "rule_eval_sec": 0.45}
+
+    Because durations are stored in a ContextVar, a PipelineTimer created
+    anywhere in the call stack sees phases recorded by other PipelineTimer
+    instances in the same synchronous execution context.
+    """
+
+    def __init__(self) -> None:
+        if _pipeline_timings_var.get(None) is None:
+            _pipeline_timings_var.set({})
+
+    @contextlib.contextmanager
+    def phase(self, name: str):
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed = round(time.perf_counter() - start, 3)
+            timings = _pipeline_timings_var.get({}) or {}
+            timings[f"{name}_sec"] = elapsed
+            _pipeline_timings_var.set(timings)
+            logger.debug("Pipeline phase %s: %.3fs", name, elapsed)
+
+    def record(self, name: str, duration: float) -> None:
+        """Directly record a pre-measured duration (seconds) for a named phase."""
+        timings = _pipeline_timings_var.get({}) or {}
+        timings[f"{name}_sec"] = round(duration, 3)
+        _pipeline_timings_var.set(timings)
+        logger.debug("Pipeline phase %s: %.3fs", name, duration)
+
+    @property
+    def durations(self) -> dict:
+        return dict(_pipeline_timings_var.get({}) or {})
+
+
+def record_run_timings(agent_run_id: str, extra: Optional[dict] = None) -> None:
+    """
+    Merge phase durations from the ContextVar into AgentRun.input_file_versions.
+
+    ``extra`` allows the caller to supply additional key/value pairs (e.g. a
+    phase timed outside the ContextVar scope) that are merged on top.
+
+    Stored structure inside input_file_versions::
+
+        {
+            "pipeline_timings": {
+                "ingestion_sec": 1.234,
+                "rule_eval_sec": 0.567,
+                "llm_gen_sec":  12.345
+            }
+        }
+    """
+    try:
+        from optimizer.models import AgentRun
+        run = AgentRun.objects.get(pk=agent_run_id)
+        timings = dict(_pipeline_timings_var.get({}) or {})
+        if extra:
+            timings.update(extra)
+        if not timings:
+            return
+        existing = dict(run.input_file_versions or {})
+        existing["pipeline_timings"] = timings
+        run.input_file_versions = existing
+        run.save(update_fields=["input_file_versions"])
+        logger.info("pipeline_timings stored run=%s %s", agent_run_id, timings)
+    except Exception as exc:
+        logger.warning("record_run_timings failed run=%s: %s", agent_run_id, exc)
 
 
 def _calculate_savings(
@@ -97,8 +196,8 @@ def _calculate_savings(
     payg_share = azure_payg_count / total_demand_quantity
     retired_share = retired_count / total_demand_quantity
 
-    azure_payg_savings = round(total_license_cost * payg_share * 0.28, 2)
-    retired_devices_savings = round(total_license_cost * retired_share * 0.05, 2)
+    azure_payg_savings = round(total_license_cost * payg_share * PAYG_SAVINGS_MULTIPLIER, 2)
+    retired_devices_savings = round(total_license_cost * retired_share * RETIRED_DEVICE_SAVINGS_MULTIPLIER, 2)
 
     scenario_wise_savings = {
         "cloud_licensing_optimization": azure_payg_savings,

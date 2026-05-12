@@ -137,7 +137,11 @@ HIDDEN_REPORT_RULE_IDS = frozenset({
 
 
 def _get_client():
-    """Reuse a single Azure OpenAI client (module-level cache)."""
+    """Reuse a single Azure OpenAI client (module-level cache).
+
+    Routes through Azure APIM when AZURE_APIM_ENDPOINT + AZURE_APIM_SUB_KEY are
+    configured; falls back to a direct AzureOpenAI endpoint otherwise.
+    """
     global _azure_client
     if _azure_client is not None:
         return _azure_client
@@ -146,13 +150,26 @@ def _get_client():
     except ImportError:
         return None
     from django.conf import settings
-    if not getattr(settings, "AZURE_OPENAI_API_KEY", None) or not getattr(settings, "AZURE_OPENAI_ENDPOINT", None):
+
+    api_key = getattr(settings, "AZURE_OPENAI_API_KEY", "")
+    apim_endpoint = getattr(settings, "AZURE_APIM_ENDPOINT", "")
+    apim_sub_key = getattr(settings, "AZURE_APIM_SUB_KEY", "")
+    openai_endpoint = getattr(settings, "AZURE_OPENAI_ENDPOINT", "")
+
+    # Prefer APIM gateway when configured; fall back to direct Azure OpenAI endpoint.
+    endpoint = apim_endpoint or openai_endpoint
+    if not endpoint or not api_key:
         return None
-    _azure_client = AzureOpenAI(
-        api_key=settings.AZURE_OPENAI_API_KEY,
-        api_version=getattr(settings, "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-        azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
-    )
+
+    client_kwargs = {
+        "api_key": api_key,
+        "api_version": getattr(settings, "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
+        "azure_endpoint": endpoint,
+    }
+    if apim_sub_key:
+        client_kwargs["default_headers"] = {"Ocp-Apim-Subscription-Key": apim_sub_key}
+
+    _azure_client = AzureOpenAI(**client_kwargs)
     return _azure_client
 
 
@@ -1236,7 +1253,11 @@ def generate_and_store_agentic_report(
         agent_endpoint=endpoint,
     )
 
+    from optimizer.services.analysis_service import PipelineTimer, record_run_timings
+    _timer = PipelineTimer()
+
     started = time.time()
+    _llm_gen_start = time.perf_counter()
     try:
         result = call_agent_generate_report(
             records=records,
@@ -1244,6 +1265,7 @@ def generate_and_store_agentic_report(
             strategy_results=strategy_results,
         )
     except Exception as exc:
+        _timer.record("llm_gen", time.perf_counter() - _llm_gen_start)
         elapsed = time.time() - started
         run.status = AgentRun.STATUS_FAILED
         run.error_detail = str(exc)
@@ -1252,6 +1274,7 @@ def generate_and_store_agentic_report(
         run.save(update_fields=["status", "error_detail", "run_duration_sec", "finished_at"])
         logger.exception("A2A agent call failed: %s", exc)
         return {"success": False, "error": str(exc), "agent_run_id": str(run.id)}
+    _timer.record("llm_gen", time.perf_counter() - _llm_gen_start)
 
     elapsed = time.time() - started
 
@@ -1351,6 +1374,8 @@ def generate_and_store_agentic_report(
         "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",
         "rules_evaluation", "finished_at",
     ])
+
+    record_run_timings(str(run.id))
 
     return {
         "success": True,

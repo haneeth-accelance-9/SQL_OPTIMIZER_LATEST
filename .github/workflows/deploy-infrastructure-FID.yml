@@ -42,6 +42,12 @@ on:
         required: false
       AZURE_APIM_SUB_KEY:
         required: true
+      USU_API_USERNAME:
+        required: true
+      USU_API_PASSWORD:
+        required: true
+      DEMAND_API_AUTH_HEADER:
+        required: true
 
 env:
   # Azure credentials for OIDC authentication
@@ -138,6 +144,9 @@ jobs:
           TF_VAR_azure_apim_sub_key: ${{ secrets.AZURE_APIM_SUB_KEY || 'placeholder-key' }}
           TF_VAR_azure_apim_openai_deployment_name: ${{ vars.AZURE_APIM_OPENAI_DEPLOYMENT_NAME || 'gpt-4o' }}
           TF_VAR_azure_apim_openai_api_version: ${{ vars.AZURE_APIM_OPENAI_API_VERSION }}
+          TF_VAR_usu_api_username: ${{ secrets.USU_API_USERNAME }}
+          TF_VAR_usu_api_password: ${{ secrets.USU_API_PASSWORD }}
+          TF_VAR_demand_api_auth_header: ${{ secrets.DEMAND_API_AUTH_HEADER }}
         run: |
           set +e
           terraform plan -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -detailed-exitcode -no-color -out=tfplan
@@ -289,6 +298,9 @@ jobs:
           TF_VAR_azure_apim_sub_key: ${{ secrets.AZURE_APIM_SUB_KEY || 'placeholder-key' }}
           TF_VAR_azure_apim_openai_deployment_name: ${{ vars.AZURE_APIM_OPENAI_DEPLOYMENT_NAME || 'gpt-4o' }}
           TF_VAR_azure_apim_openai_api_version: ${{ vars.AZURE_APIM_OPENAI_API_VERSION }}
+          TF_VAR_usu_api_username: ${{ secrets.USU_API_USERNAME }}
+          TF_VAR_usu_api_password: ${{ secrets.USU_API_PASSWORD }}
+          TF_VAR_demand_api_auth_header: ${{ secrets.DEMAND_API_AUTH_HEADER }}
         run: |
           terraform apply -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -auto-approve tfplan
 

@@ -597,10 +597,26 @@ class AnalysisSession(models.Model):
 
 class UserProfile(models.Model):
     """Extended profile attached to Django's built-in User."""
+
+    ROLE_ADMIN = "admin"
+    ROLE_EDITOR = "editor"
+    ROLE_VIEWER = "viewer"
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, "Admin"),
+        (ROLE_EDITOR, "Editor"),
+        (ROLE_VIEWER, "Viewer"),
+    ]
+
     user       = models.OneToOneField(
                      settings.AUTH_USER_MODEL,
                      on_delete=models.CASCADE,
                      related_name="optimizer_profile",
+                 )
+    role       = models.CharField(
+                     max_length=10,
+                     choices=ROLE_CHOICES,
+                     default=ROLE_VIEWER,
+                     db_index=True,
                  )
     team_name  = models.CharField(max_length=120, blank=True)
     image_url  = models.URLField(blank=True)
@@ -611,4 +627,16 @@ class UserProfile(models.Model):
         verbose_name_plural = "User profiles"
 
     def __str__(self):
-        return f"Profile({self.user})"
+        return f"Profile({self.user}, {self.role})"
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == self.ROLE_ADMIN
+
+    @property
+    def is_editor(self) -> bool:
+        return self.role in (self.ROLE_ADMIN, self.ROLE_EDITOR)
+
+    @property
+    def is_viewer_only(self) -> bool:
+        return self.role == self.ROLE_VIEWER

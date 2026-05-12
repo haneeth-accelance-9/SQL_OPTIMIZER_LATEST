@@ -36,12 +36,27 @@ NON-PROD eligibility (UC 3.2):
 - Current_RAM_GiB > 4
 """
 import logging
+import os
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# CPU rightsizing eligibility thresholds — configurable via .env
+RS_PROD_AVG_CPU_THRESHOLD    = int(os.environ.get("RIGHTSIZING_PROD_AVG_CPU_THRESHOLD",    "15"))
+RS_PROD_PEAK_CPU_THRESHOLD   = int(os.environ.get("RIGHTSIZING_PROD_PEAK_CPU_THRESHOLD",   "70"))
+RS_NONPROD_AVG_CPU_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_AVG_CPU_THRESHOLD", "25"))
+RS_NONPROD_PEAK_CPU_THRESHOLD= int(os.environ.get("RIGHTSIZING_NONPROD_PEAK_CPU_THRESHOLD","80"))
+
+# RAM rightsizing eligibility thresholds — configurable via .env
+RS_PROD_AVG_FREEMEM_THRESHOLD    = int(os.environ.get("RIGHTSIZING_PROD_AVG_FREEMEM_THRESHOLD",    "35"))
+RS_PROD_MIN_FREEMEM_THRESHOLD    = int(os.environ.get("RIGHTSIZING_PROD_MIN_FREEMEM_THRESHOLD",    "20"))
+RS_PROD_MIN_RAM_GIB              = int(os.environ.get("RIGHTSIZING_PROD_MIN_RAM_GIB",              "8"))
+RS_NONPROD_AVG_FREEMEM_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_AVG_FREEMEM_THRESHOLD", "30"))
+RS_NONPROD_MIN_FREEMEM_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_MIN_FREEMEM_THRESHOLD", "15"))
+RS_NONPROD_MIN_RAM_GIB           = int(os.environ.get("RIGHTSIZING_NONPROD_MIN_RAM_GIB",           "4"))
 
 NON_PROD_ENVS: List[str] = [
     "Development",
@@ -190,19 +205,17 @@ def find_cpu_rightsizing_candidates(
 def _cpu_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
     prod = df[~df["Environment"].isin(non_prod_envs)]
     return prod[
-        (prod["Avg_CPU_12m"]  < 15) &
-        (prod["Peak_CPU_12m"] <= 70) &
+        (prod["Avg_CPU_12m"]  < RS_PROD_AVG_CPU_THRESHOLD) &
+        (prod["Peak_CPU_12m"] <= RS_PROD_PEAK_CPU_THRESHOLD) &
         (prod["Current_vCPU"] >= 4)   # UC 3.1: Current vCPU >= 4
     ].copy()
 
 
 def _cpu_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
-    # Eligibility expanded to Avg_CPU_12m < 25% (was < 15%) so that the
-    # second recommendation tier (Avg in 15-25%) is reachable and not dead code.
     nonprod = df[df["Environment"].isin(non_prod_envs)]
     return nonprod[
-        (nonprod["Avg_CPU_12m"]  < 25) &
-        (nonprod["Peak_CPU_12m"] <= 80) &
+        (nonprod["Avg_CPU_12m"]  < RS_NONPROD_AVG_CPU_THRESHOLD) &
+        (nonprod["Peak_CPU_12m"] <= RS_NONPROD_PEAK_CPU_THRESHOLD) &
         (nonprod["Current_vCPU"] >= 4)  # UC 3.1: Current vCPU >= 4
     ].copy()
 
@@ -327,18 +340,18 @@ def find_ram_rightsizing_candidates(
 def _ram_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
     prod = df[~df["Environment"].isin(non_prod_envs)]
     return prod[
-        (prod["Avg_FreeMem_12m"] >= 35) &
-        (prod["Min_FreeMem_12m"] >= 20) &
-        (prod["Current_RAM_GiB"] > 8)
+        (prod["Avg_FreeMem_12m"] >= RS_PROD_AVG_FREEMEM_THRESHOLD) &
+        (prod["Min_FreeMem_12m"] >= RS_PROD_MIN_FREEMEM_THRESHOLD) &
+        (prod["Current_RAM_GiB"] > RS_PROD_MIN_RAM_GIB)
     ].copy()
 
 
 def _ram_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
     nonprod = df[df["Environment"].isin(non_prod_envs)]
     return nonprod[
-        (nonprod["Avg_FreeMem_12m"] >= 30) &
-        (nonprod["Min_FreeMem_12m"] >= 15) &
-        (nonprod["Current_RAM_GiB"] > 4)
+        (nonprod["Avg_FreeMem_12m"] >= RS_NONPROD_AVG_FREEMEM_THRESHOLD) &
+        (nonprod["Min_FreeMem_12m"] >= RS_NONPROD_MIN_FREEMEM_THRESHOLD) &
+        (nonprod["Current_RAM_GiB"] > RS_NONPROD_MIN_RAM_GIB)
     ].copy()
 
 

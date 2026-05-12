@@ -4,6 +4,14 @@ from . import views
 app_name = "optimizer"
 
 urlpatterns = [
+    # ── OAuth2 JWT token endpoints ─────────────────────────────────────────────
+    # POST /api/auth/token/          → obtain access + refresh tokens
+    # POST /api/auth/token/refresh/  → exchange refresh token for new access token
+    # POST /api/auth/token/verify/   → inspect / validate an access token
+    path("api/auth/token/", views.api_auth_token, name="api_auth_token"),
+    path("api/auth/token/refresh/", views.api_auth_token_refresh, name="api_auth_token_refresh"),
+    path("api/auth/token/verify/", views.api_auth_token_verify, name="api_auth_token_verify"),
+    # ── Health / readiness ────────────────────────────────────────────────────
     path("health/", views.health, name="health"),
     path("ready/", views.ready, name="ready"),
     path("", views.home, name="home"),
