@@ -130,7 +130,7 @@ def _get_or_create_user_profile(user):
 
 def _build_post_login_redirect_url() -> str:
     """Return the default authenticated landing page for login flows."""
-    return f"{reverse('optimizer:dashboard')}#{POST_LOGIN_RESULTS_FRAGMENT}"
+    return reverse('optimizer:home')
 
 
 
@@ -1064,7 +1064,18 @@ def ready(request):
 @require_GET
 @login_required
 def home(request):
-    """Redirect directly to the dashboard."""
+    """File upload landing page shown after login."""
+    return render(request, "optimizer/home.html")
+
+
+@require_http_methods(["POST"])
+@login_required
+@csrf_protect
+def upload_view(request):
+    """Accept the uploaded Excel workbook and proceed to the dashboard."""
+    excel_file = request.FILES.get("excel_file")
+    if not excel_file:
+        return render(request, "optimizer/home.html", {"error": "Please select an Excel file to upload."})
     return redirect("optimizer:dashboard")
 
 

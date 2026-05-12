@@ -7,6 +7,7 @@ urlpatterns = [
     path("health/", views.health, name="health"),
     path("ready/", views.ready, name="ready"),
     path("", views.home, name="home"),
+    path("upload/", views.upload_view, name="upload"),
     path("login/", views.OptimizerLoginView.as_view(), name="login"),
     path("signup/", views.signup_view, name="signup"),
     path("logout/", views.logout_view, name="logout"),

@@ -182,7 +182,7 @@
     <div class="appbar-wrap">
         <nav class="appbar" role="navigation" aria-label="Main">
             <div class="flex w-full min-h-[74px] items-center justify-between px-4 lg:px-8">
-                <a href="{% url 'optimizer:dashboard' %}" class="flex items-center gap-4 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white" aria-label="Enterprise SQL Optimizer Home">
+                <a href="{% url 'optimizer:home' %}" class="flex items-center gap-4 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white" aria-label="Enterprise SQL Optimizer Home">
                     <img src="{% static 'assets/logo.svg' %}" alt="Enterprise SQL Optimizer logo" class="h-11 w-11 object-contain">
                     <div class="flex flex-col">
                         <span class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Enterprise sql optimizer</span>
@@ -191,6 +191,8 @@
                 </a>
                 <div class="flex items-center gap-5 lg:gap-8">
                     {% if user.is_authenticated %}
+                    <a href="{% url 'optimizer:home' %}" class="appbar-link {% if request.resolver_match.url_name == 'home' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">UPLOAD</a>
+                    <a href="{% url 'optimizer:dashboard' %}" class="appbar-link {% if request.resolver_match.url_name == 'dashboard' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">DASHBOARD</a>
                     {% if request.session.optimizer_analysis_id %}
                     <a href="{% url 'optimizer:results' %}" class="appbar-link {% if request.resolver_match.url_name == 'results' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">RESULTS</a>
                     <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
