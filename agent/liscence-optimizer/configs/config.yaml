@@ -55,10 +55,10 @@ observability:
   # Static labels attached to every span, metric, and log from this agent.
   # Add any team/squad/cell identifiers relevant to your agent here.
   # Values support ${ENV_VAR:default} substitution.
-  resource_attributes: {}
-  #   cell_identifier: "<your-cell-id>"
-  #   beat_id: "${BEAT_ID:unknown}"
-  #   app_squad: "<your-squad>"
+  resource_attributes:
+    cell_identifier: "006"
+    beat_id: "${BEAT_ID:unknown}"
+    app_squad: "itf-af"
  
   grafana:
     otlp_endpoint: "${RUNTIME_OTLP_ENDPOINT:http://localhost:4317}"
