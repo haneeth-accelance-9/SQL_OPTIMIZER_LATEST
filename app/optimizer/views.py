@@ -1788,7 +1788,8 @@ def report_download(request, format_type):
     report_text = _resolve_report_markdown(context, agentic=get_latest_agentic_context())
     report_text = normalize_report_content_text(report_text or "")
     generated_at = timezone.localtime()
-    base_name = "sql_license_optimization_report_db"
+    dt_str = generated_at.strftime("%Y-%m-%d_%H.%M.%S")
+    base_name = f"SQL License Optimization Report_{dt_str}"
     # Pass report_context=None so export functions use _parse_report_blocks(report_text)
     # instead of the old _build_template_blocks — this preserves the agent AI report structure.
     if normalized_format == "pdf":
@@ -2738,14 +2739,17 @@ def download_rule_data(request, rule_id):
         _build_raw_installations_df,
         _build_raw_rule1_df,
     )
+    from datetime import datetime
+
     context = compute_live_db_metrics()
     rr = context.get("rule_results", {})
+    dt_str = datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
     if rule_id == "rule1":
         data = rr.get("azure_payg", [])
-        filename = "azure_payg_candidates.xlsx"
+        filename = f"PAYG Candidates_{dt_str}.xlsx"
     else:
         data = rr.get("retired_devices", [])
-        filename = "retired_devices_with_installations.xlsx"
+        filename = f"Retired Devices_{dt_str}.xlsx"
     if not data:
         return HttpResponse("No data to download.", status=404)
     from io import BytesIO
@@ -2811,8 +2815,12 @@ def download_rightsizing_sheet(request, sheet_key):
     from io import BytesIO
     from optimizer.services.db_analysis_service import build_rightsizing_sheet_export
 
+    from datetime import datetime
+
     df = build_rightsizing_sheet_export(normalized_sheet_key)
-    workbook_name = f"{normalized_sheet_key.lower()}.xlsx"
+    label = _format_rs3_sheet_label(normalized_sheet_key).replace("Cpu", "CPU").replace("Ram", "RAM")
+    dt_str = datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
+    workbook_name = f"{label}_{dt_str}.xlsx"
     sheet_name = normalized_sheet_key[:31] or "Sheet1"
 
     buffer = BytesIO()
