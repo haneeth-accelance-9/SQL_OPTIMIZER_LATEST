@@ -990,6 +990,9 @@ class OptimizerLoginView(LoginView):
     template_name = "optimizer/auth.html"
     redirect_authenticated_user = True
 
+    def get_success_url(self):
+        return _build_post_login_redirect_url()
+
     def get_default_redirect_url(self):
         return _build_post_login_redirect_url()
 
@@ -1072,11 +1075,11 @@ def home(request):
 @login_required
 @csrf_protect
 def upload_view(request):
-    """Accept the uploaded Excel workbook and proceed to the dashboard."""
+    """Accept the uploaded Excel workbook and redirect to the results page."""
     excel_file = request.FILES.get("excel_file")
     if not excel_file:
         return render(request, "optimizer/home.html", {"error": "Please select an Excel file to upload."})
-    return redirect("optimizer:dashboard")
+    return redirect("optimizer:results")
 
 
 @require_GET
