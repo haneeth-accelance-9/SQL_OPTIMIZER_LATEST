@@ -89,9 +89,21 @@ module "agentcell_stack" {
   agent_debugpy_wait                    = var.agent_debugpy_wait
 
   # ── Observability ──────────────────────────────────────────────────────────
+  # These three flags control the old Application Insights integration — kept false
+  # because SDK 1.2.0 uses Grafana Cloud (OpenLIT) instead.
   observability_enable_tracing  = var.observability_enable_tracing
   observability_enable_metrics  = var.observability_enable_metrics
   observability_enable_logging  = var.observability_enable_logging
+
+  # Grafana Cloud OTLP env vars injected into every agent Container App at runtime.
+  # Sensitive values (endpoint, headers) come from GitHub Secrets via TF_VAR_*.
+  agent_common_env_vars = {
+    RUNTIME_OTLP_ENDPOINT      = var.runtime_otlp_endpoint
+    OTEL_EXPORTER_OTLP_HEADERS = var.otel_exporter_otlp_headers
+    OTEL_LOGS_EXPORTER         = "none"
+    DEPLOYMENT_ENVIRONMENT     = var.env_name
+    BEAT_ID                    = "unknown"
+  }
 
   # ── Scheduler ──────────────────────────────────────────────────────────────
   scheduler_enabled                 = var.scheduler_enabled
