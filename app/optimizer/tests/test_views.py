@@ -88,19 +88,67 @@ def test_upload_without_file_shows_error(client):
 
 
 @pytest.mark.django_db
-def test_upload_with_file_redirects_to_dashboard(client):
-    user = get_user_model().objects.create_user(username="uploadfile", password="secret123")
+def test_upload_wrong_extension_shows_error(client):
+    user = get_user_model().objects.create_user(username="uploadbadext", password="secret123")
     client.force_login(user)
 
-    fake_file = SimpleUploadedFile(
-        "report.xlsx",
-        b"PK\x03\x04fake-xlsx-content",
+    bad_file = SimpleUploadedFile("report.csv", b"col1,col2", content_type="text/csv")
+    response = client.post(reverse("optimizer:upload"), {"excel_file": bad_file})
+
+    assert response.status_code == 200
+    assert b"Only .xlsx" in response.content
+
+
+@pytest.mark.django_db
+def test_upload_oversized_file_shows_error(client):
+    user = get_user_model().objects.create_user(username="uploadbigfile", password="secret123")
+    client.force_login(user)
+
+    # 21 MB of zeros
+    big_content = b"\x00" * (21 * 1024 * 1024)
+    big_file = SimpleUploadedFile(
+        "big.xlsx",
+        big_content,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    response = client.post(reverse("optimizer:upload"), {"excel_file": fake_file})
+    response = client.post(reverse("optimizer:upload"), {"excel_file": big_file})
+
+    assert response.status_code == 200
+    assert b"too large" in response.content
+
+
+@pytest.mark.django_db
+def test_upload_valid_file_redirects_to_results(client):
+    """A structurally valid xlsx (correct 110 headers) redirects to results."""
+    import io
+    import openpyxl
+    from optimizer.services.upload_validator import EXPECTED_HEADERS
+
+    user = get_user_model().objects.create_user(username="uploadvalid", password="secret123")
+    client.force_login(user)
+
+    # Build a minimal xlsx with the exact expected headers in row 1
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    # Write headers — use the raw (un-normalised) form by adding double-space
+    # where the spec calls for it (Logical CPU Apr-25 → 'Logical CPU  Apr-25')
+    # For the test we use the already-normalised expected values directly;
+    # _normalize() is idempotent so they pass validation unchanged.
+    for col_idx, header in enumerate(EXPECTED_HEADERS, start=1):
+        ws.cell(row=1, column=col_idx, value=header if header else None)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    valid_file = SimpleUploadedFile(
+        "boones.xlsx",
+        buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response = client.post(reverse("optimizer:upload"), {"excel_file": valid_file})
 
     assert response.status_code == 302
-    assert response.url == reverse("optimizer:dashboard")
+    assert response.url == reverse("optimizer:results")
 
 
 @pytest.mark.django_db

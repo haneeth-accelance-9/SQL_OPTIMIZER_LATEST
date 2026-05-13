@@ -1269,10 +1269,48 @@ def home(request):
 @login_required
 @csrf_protect
 def upload_view(request):
-    """Accept the uploaded Excel workbook and redirect to the results page."""
+    """Validate the uploaded Boones workbook, ingest into cpu_utilisation, then redirect."""
+    from optimizer.services.upload_validator import validate_upload
+    from optimizer.services.cpu_utilisation_processor import process_cpu_utilisation
+
     excel_file = request.FILES.get("excel_file")
     if not excel_file:
         return render(request, "optimizer/home.html", {"error": "Please select an Excel file to upload."})
+
+    try:
+        result = validate_upload(excel_file)
+    except Exception:
+        logger.exception("upload_view: unexpected error during file validation")
+        return render(
+            request,
+            "optimizer/home.html",
+            {"error": "An unexpected error occurred while validating the file. Please try again."},
+        )
+
+    if not result.valid:
+        return render(request, "optimizer/home.html", {"error": result.error})
+
+    # No separate tenant lookup — tenant is resolved inside the processor
+    # from the matched Server rows themselves.
+    try:
+        proc = process_cpu_utilisation(excel_file, uploaded_by=request.user)
+    except Exception:
+        logger.exception("upload_view: unexpected error during cpu_utilisation processing")
+        return render(
+            request,
+            "optimizer/home.html",
+            {"error": "File validated but an error occurred while importing data. Please try again."},
+        )
+
+    if proc.errors:
+        logger.warning(
+            "upload_view: cpu_utilisation processing completed with %d error(s): %s",
+            len(proc.errors), proc.errors[:5],
+        )
+
+    from django.contrib import messages
+    messages.success(request, proc.summary())
+
     return redirect("optimizer:results")
 
 
