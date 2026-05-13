@@ -1,4 +1,4 @@
-﻿"""
+"""
 Views for SQL License Optimizer: results, dashboard, report.
 All optimizer views require authentication (enterprise security).
 All analysis data is sourced live from the database.
@@ -2455,24 +2455,31 @@ def api_trigger_agent_run(request):
     started = time.time()
 
     # Build normalized records from live DB (same pipeline as db_analysis_service)
+    # Phase 1: Data load — USU installations from DB
+    t0 = time.monotonic()
     try:
         df = _build_installations_df()
         records = df.to_dict("records") if not df.empty else []
     except Exception as exc:
         logger.exception("Failed to build installation records for agent run: %s", exc)
         records = []
+    data_load_sec = round(time.monotonic() - t0, 3)
 
     # Also add the strategy outputs used by the agent report.
+    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing
+    t0 = time.monotonic()
     try:
         strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
     except Exception:
         strategy_results = {}
+    rule_eval_sec = round(time.monotonic() - t0, 3)
 
     result = generate_and_store_agentic_report(
         records=records,
         usecase_id=usecase_id,
         strategy_results=strategy_results,
         triggered_by=request.user.email or request.user.username,
+        phase_timings={"data_load_sec": data_load_sec, "rule_eval_sec": rule_eval_sec},
     )
 
     elapsed_ms = int((time.time() - started) * 1000)

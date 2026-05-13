@@ -1,4 +1,4 @@
-﻿"""
+"""
 AI report generator using Azure OpenAI.
 Produces a professional optimization report from rule results and license metrics.
 """
@@ -12,6 +12,7 @@ from optimizer.services.report_export import format_currency, normalize_report_c
 
 logger = logging.getLogger(__name__)
 
+PROMPT_VERSION = "1.0.0"
 
 _azure_client = None
 
@@ -1200,6 +1201,7 @@ def generate_and_store_agentic_report(
     strategy_results: Optional[Dict[str, Any]] = None,
     triggered_by: str = "system",
     tenant=None,
+    phase_timings: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Full pipeline:
@@ -1237,6 +1239,8 @@ def generate_and_store_agentic_report(
     )
 
     started = time.time()
+    # Phase 3: LLM call — agent /generate-report (includes rules eval + Azure OpenAI)
+    t_llm = time.monotonic()
     try:
         result = call_agent_generate_report(
             records=records,
@@ -1252,6 +1256,7 @@ def generate_and_store_agentic_report(
         run.save(update_fields=["status", "error_detail", "run_duration_sec", "finished_at"])
         logger.exception("A2A agent call failed: %s", exc)
         return {"success": False, "error": str(exc), "agent_run_id": str(run.id)}
+    llm_call_sec = round(time.monotonic() - t_llm, 3)
 
     elapsed = time.time() - started
 
@@ -1346,10 +1351,22 @@ def generate_and_store_agentic_report(
     run.candidates_found = candidate_rows_created
     run.rules_evaluation = rules_eval
     run.finished_at = timezone.now()
+    # Build complete phase timings: merge caller-supplied (data_load, rule_eval)
+    # with the LLM call measured here, then add total.
+    _pt = dict(phase_timings or {})
+    _pt["llm_call_sec"] = llm_call_sec
+    _pt["total_sec"] = round(elapsed, 3)
+    logger.info("performance.phase_timings", extra=_pt)
+
+    run.input_file_versions = {
+        **(run.input_file_versions or {}),
+        "prompt_version": PROMPT_VERSION,
+        "phase_timings": _pt,
+    }
     run.save(update_fields=[
         "status", "report_markdown", "llm_model", "llm_used", "llm_tokens_used",
         "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",
-        "rules_evaluation", "finished_at",
+        "rules_evaluation", "finished_at", "input_file_versions",
     ])
 
     return {

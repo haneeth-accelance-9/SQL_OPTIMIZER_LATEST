@@ -71,6 +71,21 @@ variable "azure_apim_sub_key" {
   default     = "placeholder-key"
 }
 
+# ── Grafana OTLP Observability ─────────────────────────────────────────────────
+
+variable "runtime_otlp_endpoint" {
+  description = "Grafana Cloud OTLP endpoint URL. Supply via GH Secret RUNTIME_OTLP_ENDPOINT – never commit."
+  type        = string
+  default     = ""
+}
+
+variable "otel_exporter_otlp_headers" {
+  description = "Grafana Cloud auth header (Authorization=Basic <base64>). Supply via GH Secret OTEL_EXPORTER_OTLP_HEADERS – never commit."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "azure_apim_openai_deployment_name" {
   description = "OpenAI deployment name configured in APIM."
   type        = string
