@@ -2,12 +2,13 @@
 {% block title %}{{ title|default:"Enterprise SQL Optimizer" }}{% endblock %}
 {% block content %}
 <div class="min-h-full overflow-y-auto home-shell flex flex-col">
-    <section class="relative overflow-hidden flex-1 flex items-center">
+    <section class="relative overflow-hidden flex-1 flex flex-col">
         <div class="absolute inset-0 home-aurora pointer-events-none"></div>
         <div class="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-cyan-300/20 blur-3xl pointer-events-none"></div>
         <div class="absolute top-20 right-0 w-80 h-80 rounded-full bg-lime-300/20 blur-3xl pointer-events-none"></div>
 
-        <div class="relative hero-shell mx-auto px-4 py-8 sm:px-6 lg:px-8 lg:py-10 w-full">
+        <div class="relative flex items-center w-full pt-10 sm:pt-14 lg:pt-16">
+        <div class="hero-shell mx-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8 w-full">
             <div class="hero-grid grid gap-10 items-center">
                 <div class="text-center hero-copy mx-auto w-full">
                     <div class="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/60 bg-white/70 shadow-sm backdrop-blur text-slate-700 text-sm font-semibold">
@@ -79,7 +80,7 @@
                                     </div>
                                     <span class="block text-slate-800 font-semibold text-lg sm:text-xl">Drag and drop your Excel file here</span>
                                     <span class="mt-2 block text-slate-500 text-sm">or <span class="text-cyan-700 font-semibold">browse files</span> from your computer</span>
-                                    <span class="mt-5 inline-flex px-3 py-1.5 bg-slate-100 rounded-full text-xs text-slate-500 font-semibold tracking-wide">SUPPORTS .XLSX, .XLS</span>
+                                    <span class="mt-5 inline-flex px-3 py-1.5 bg-slate-100 rounded-full text-xs text-slate-500 font-semibold tracking-wide">SUPPORTS .XLSX, .XLS File should be less than 20MB</span>
                                 </label>
                             </div>
 
@@ -119,84 +120,166 @@
                                 <p class="info-text">Dashboard and executive summary</p>
                             </div>
                         </div>
-
-                        <!-- File Format Guide -->
-                        <div class="mt-5 border-t border-slate-100 pt-4">
-                            <button type="button" id="format-toggle"
-                                class="flex items-center justify-between w-full text-left group focus:outline-none"
-                                aria-expanded="false" aria-controls="format-panel">
-                                <span class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 group-hover:text-slate-700 transition-colors">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                    </svg>
-                                    Required file format
-                                </span>
-                                <svg id="format-chevron" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
-                            </button>
-
-                            <div id="format-panel" class="hidden mt-4 space-y-2">
-                                <!-- Excel workbook visual header -->
-                                <div class="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
-                                    <span class="sheet-tab sheet-tab-active">Data 1</span>
-                                    <span class="sheet-tab">Data 2</span>
-                                    <span class="sheet-tab">Data 3</span>
-                                    <span class="sheet-tab">Data 4</span>
-                                    <span class="sheet-tab">Data 5</span>
-                                </div>
-                                <!-- Sheet rows -->
-                                <div class="format-sheet-row">
-                                    <div class="format-sheet-num">1</div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="format-sheet-name">MVP – Data 1 – Installation</p>
-                                        <p class="format-sheet-desc">Server name, topology, CPU/socket count, product family &amp; edition, install status, hosting zone</p>
-                                    </div>
-                                    <span class="format-badge format-badge-required">Required</span>
-                                </div>
-                                <div class="format-sheet-row">
-                                    <div class="format-sheet-num">2</div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="format-sheet-name">MVP – Data 2 – Demand Results</p>
-                                        <p class="format-sheet-desc">License demand quantity, product family, license metric, total cost (EUR)</p>
-                                    </div>
-                                    <span class="format-badge format-badge-required">Required</span>
-                                </div>
-                                <div class="format-sheet-row">
-                                    <div class="format-sheet-num">3</div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="format-sheet-name">MVP – Data 3 – Prices</p>
-                                        <p class="format-sheet-desc">Unit price per license metric by product edition (EUR)</p>
-                                    </div>
-                                    <span class="format-badge format-badge-required">Required</span>
-                                </div>
-                                <div class="format-sheet-row">
-                                    <div class="format-sheet-num">4</div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="format-sheet-name">MVP – Data 4 – Optimization Potential</p>
-                                        <p class="format-sheet-desc">vCPU/RAM utilisation, rightsizing candidates, workload type, criticality</p>
-                                    </div>
-                                    <span class="format-badge format-badge-optional">Optional</span>
-                                </div>
-                                <div class="format-sheet-row">
-                                    <div class="format-sheet-num">5</div>
-                                    <div class="flex-1 min-w-0">
-                                        <p class="format-sheet-name">MVP – Data 5 – Helpful Reports</p>
-                                        <p class="format-sheet-desc">Pre-aggregated summary rows for executive reporting</p>
-                                    </div>
-                                    <span class="format-badge format-badge-optional">Optional</span>
-                                </div>
-                                <p class="mt-3 text-[11px] text-slate-400 leading-relaxed">
-                                    Sheet names are matched flexibly — "Data 1", "Installation", or the full name are all detected automatically.
-                                </p>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
+        </div><!-- /flex-1 hero wrapper -->
+
+        <!-- 12-col grid — inside section, shares gradient background -->
+        <div class="relative mx-auto w-full px-4 pb-4 sm:px-6 lg:px-8" style="max-width:118rem;">
+            <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-12">
+                <div class="format-guide-card">
+                    <button type="button" id="format-toggle"
+                        class="flex items-center justify-between w-full text-left group focus:outline-none"
+                        aria-expanded="false" aria-controls="format-panel">
+                        <span class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 group-hover:text-slate-700 transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            Required file format
+                        </span>
+                        <svg id="format-chevron" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                <div id="format-panel" class="hidden mt-4">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-3">Expected columns · 102 fields</p>
+                    <div class="format-table-wrap">
+                        <table class="format-table">
+                            <thead>
+                                <tr>
+                                    <!-- Server identity (10) -->
+                                    <th class="col-group-a">Number</th>
+                                    <th class="col-group-a">Server Name</th>
+                                    <th class="col-group-a">Is Virtual?</th>
+                                    <th class="col-group-a">Cluster Name</th>
+                                    <th class="col-group-a">Criticality</th>
+                                    <th class="col-group-a">Environment Type</th>
+                                    <th class="col-group-a">Hosting Zone</th>
+                                    <th class="col-group-a">Installed Status</th>
+                                    <th class="col-group-a">Location</th>
+                                    <th class="col-group-a">Platform / Class</th>
+                                    <!-- Logical CPU ×12 -->
+                                    <th class="col-group-a">Logical CPU Apr-25</th>
+                                    <th class="col-group-a">Logical CPU May-25</th>
+                                    <th class="col-group-a">Logical CPU June-25</th>
+                                    <th class="col-group-a">Logical CPU July-25</th>
+                                    <th class="col-group-a">Logical CPU Aug-25</th>
+                                    <th class="col-group-a">Logical CPU Sept-25</th>
+                                    <th class="col-group-a">Logical CPU Oct-25</th>
+                                    <th class="col-group-a">Logical CPU Nov-25</th>
+                                    <th class="col-group-a">Logical CPU Dec-25</th>
+                                    <th class="col-group-a">Logical CPU Jan-26</th>
+                                    <th class="col-group-a">Logical CPU Feb-26</th>
+                                    <th class="col-group-a">Logical CPU Mar-26</th>
+                                    <!-- Avg CPU Util % ×12 -->
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Apr-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - May-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - June-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - July-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Aug-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Sept-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Oct-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Nov-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Dec-25</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Jan-26</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Feb-26</th>
+                                    <th class="col-group-a">Average CPU Utilisation (%) - Mar-26</th>
+                                    <!-- Max CPU Util % ×12 -->
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Apr-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - May-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - June-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - July-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Aug-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Sept-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Oct-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Nov-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Dec-25</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Jan-26</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Feb-26</th>
+                                    <th class="col-group-a">Maximum CPU Utilisation (%) - Mar-26</th>
+                                    <!-- Physical RAM (GiB) ×12 -->
+                                    <th class="col-group-a">Physical RAM (GiB) - Apr-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - May-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - June-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - July-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Aug-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Sept-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Oct-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Nov-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Dec-25</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Jan-26</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Feb-26</th>
+                                    <th class="col-group-a">Physical RAM (GiB) - Mar-26</th>
+                                    <!-- Avg free Memory % ×12 -->
+                                    <th class="col-group-a">Average Free Memory (%) - Apr-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - May-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - June-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - July-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Aug-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Sept-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Oct-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Nov-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Dec-25</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Jan-26</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Feb-26</th>
+                                    <th class="col-group-a">Average Free Memory (%) - Mar-26</th>
+                                    <!-- Max free Memory % ×12 -->
+                                    <th class="col-group-a">Maximum Free Memory (%) - Apr-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - May-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - June-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - July-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Aug-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Sept-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Oct-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Nov-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Dec-25</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Jan-26</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Feb-26</th>
+                                    <th class="col-group-a">Maximum Free Memory (%) - Mar-26</th>
+                                    <!-- Min free Memory % ×12 -->
+                                    <th class="col-group-a">Minimum Free Memory (%) - Apr-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - May-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - June-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - July-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Aug-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Sept-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Oct-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Nov-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Dec-25</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Jan-26</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Feb-26</th>
+                                    <th class="col-group-a">Minimum Free Memory (%) - Mar-26</th>
+                                    <!-- Storage -->
+                                    <th class="col-group-a">Allocated Storage (GB) - Feb-26</th>
+                                    <th class="col-group-a">Allocated Storage (GB) - Mar-26</th>
+                                    <th class="col-group-a">Used Storage (GB) - Feb-26</th>
+                                    <th class="col-group-a">Used Storage (GB) - Mar-26</th>
+                                    <!-- Trailing -->
+                                    <th class="col-group-a">Comments for Allocation (GB)</th>
+                                    <th class="col-group-a">Comments for Usage (GB)</th>
+                                    <th class="col-group-a">Utilisation %</th>
+                                    <th class="col-group-a">Decommission Check</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="format-sample-row">
+                                    <td colspan="102" class="text-center text-[10px] text-slate-400 py-2 italic">Your data rows go here…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="mt-2 text-[10px] text-slate-400">Scroll horizontally to see all columns &nbsp;·&nbsp; Column names are matched flexibly by the engine</p>
+                </div>
+            </div><!-- /format-guide-card -->
+                </div><!-- /col-span-12 -->
+            </div><!-- /grid-cols-12 -->
+        </div><!-- /12-col container -->
     </section>
-</div>
+</div><!-- /home-shell -->
 
 <div id="loading-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4"
     style="background: rgba(15,23,42,0.85); backdrop-filter: blur(4px);">
@@ -481,78 +564,50 @@
         }
     }
 
-    /* File format guide */
-    .sheet-tab {
-        flex-shrink: 0;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.5rem 0.5rem 0 0;
-        font-size: 0.7rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        background: #f1f5f9;
-        color: #64748b;
+    /* File format guide — full-width card below hero */
+    .format-guide-card {
+        background: rgba(255,255,255,0.82);
+        border: 1px solid rgba(255,255,255,0.72);
+        box-shadow: 0 8px 30px rgba(15,23,42,0.08);
+        backdrop-filter: blur(10px);
+        border-radius: 1.5rem;
+        padding: 1.1rem 1.4rem;
+    }
+
+    /* File format guide — column table */
+    .format-table-wrap {
+        overflow-x: auto;
+        border-radius: 0.75rem;
         border: 1px solid #e2e8f0;
-        border-bottom: none;
+        max-height: 7rem;
     }
-    .sheet-tab-active {
-        background: #0f172a;
-        color: #fff;
-        border-color: #0f172a;
+    .format-table {
+        border-collapse: collapse;
+        white-space: nowrap;
+        font-size: 0.68rem;
+        width: max-content;
     }
-    .format-sheet-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.75rem;
-        padding: 0.65rem 0.75rem;
-        border-radius: 0.875rem;
-        background: linear-gradient(180deg, rgba(248,250,252,0.95), rgba(241,245,249,0.9));
-        border: 1px solid #e2e8f0;
-    }
-    .format-sheet-num {
-        flex-shrink: 0;
-        width: 1.4rem;
-        height: 1.4rem;
-        border-radius: 0.4rem;
-        background: #0f172a;
-        color: #fff;
-        font-size: 0.65rem;
-        font-weight: 800;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-top: 0.1rem;
-    }
-    .format-sheet-name {
-        font-size: 0.78rem;
+    .format-table thead tr th {
+        padding: 0.35rem 0.6rem;
         font-weight: 700;
-        color: #1e293b;
-        line-height: 1.3;
+        letter-spacing: 0.04em;
+        border-right: 1px solid rgba(226,232,240,0.6);
+        border-bottom: 2px solid #e2e8f0;
+        position: sticky;
+        top: 0;
+        z-index: 1;
     }
-    .format-sheet-desc {
-        margin-top: 0.2rem;
-        font-size: 0.72rem;
-        color: #64748b;
-        line-height: 1.4;
-    }
-    .format-badge {
-        flex-shrink: 0;
-        font-size: 0.62rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        padding: 0.2rem 0.5rem;
-        border-radius: 999px;
-        margin-top: 0.1rem;
-    }
-    .format-badge-required {
-        background: #ecfdf5;
-        color: #059669;
-        border: 1px solid #a7f3d0;
-    }
-    .format-badge-optional {
+    .format-table thead tr th:last-child { border-right: none; }
+    /* column group — uniform, no colour bands */
+    .col-group-a, .col-group-b, .col-group-c, .col-group-d,
+    .col-group-e, .col-group-f, .col-group-g, .col-group-h,
+    .col-group-i, .col-group-j {
         background: #f8fafc;
-        color: #94a3b8;
-        border: 1px solid #e2e8f0;
+        color: #334155;
+    }
+    .format-sample-row td {
+        background: #fafafa;
+        color: #cbd5e1;
     }
 </style>
 {% endblock %}

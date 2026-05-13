@@ -136,7 +136,7 @@ if _IS_PRODUCTION:
     SESSION_COOKIE_SECURE = True
 
 LOGIN_URL = "optimizer:login"
-LOGIN_REDIRECT_URL = "optimizer:dashboard"
+LOGIN_REDIRECT_URL = "optimizer:home"
 LOGOUT_REDIRECT_URL = "optimizer:login"
 
 SECURE_BROWSER_XSS_FILTER = True
