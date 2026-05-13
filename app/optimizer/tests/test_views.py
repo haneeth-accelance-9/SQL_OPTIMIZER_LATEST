@@ -1,9 +1,10 @@
-﻿"""View tests: health, ready, auth redirect."""
+﻿"""View tests: health, ready, auth redirect, upload."""
 from io import BytesIO
 
 import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from optimizer.models import AgentRun, AnalysisSession, Tenant, UserProfile
@@ -31,7 +32,7 @@ def test_home_redirects_to_login_when_anonymous(client):
 
 
 @pytest.mark.django_db
-def test_login_redirects_to_results_dashboard_by_default(client):
+def test_login_redirects_to_dashboard_by_default(client):
     user = get_user_model().objects.create_user(username="redirector", password="secret123")
 
     response = client.post(
@@ -40,10 +41,7 @@ def test_login_redirects_to_results_dashboard_by_default(client):
     )
 
     assert response.status_code == 302
-    assert response.url == (
-        f"{reverse('optimizer:results')}"
-        "?rs3_workload=ALL&rs3_filter=PROD_CPU_Optimization&rs3_page=1#dashboard"
-    )
+    assert response.url == reverse("optimizer:dashboard") + "#dashboard"
 
 
 @pytest.mark.django_db
@@ -61,17 +59,48 @@ def test_login_preserves_next_parameter(client):
 
 
 @pytest.mark.django_db
-def test_authenticated_login_page_redirects_to_results_dashboard_by_default(client):
+def test_authenticated_login_page_redirects_to_dashboard_by_default(client):
     user = get_user_model().objects.create_user(username="alreadyin", password="secret123")
     client.force_login(user)
 
     response = client.get(reverse("optimizer:login"))
 
     assert response.status_code == 302
-    assert response.url == (
-        f"{reverse('optimizer:results')}"
-        "?rs3_workload=ALL&rs3_filter=PROD_CPU_Optimization&rs3_page=1#dashboard"
+    assert response.url == reverse("optimizer:dashboard") + "#dashboard"
+
+
+@pytest.mark.django_db
+def test_upload_requires_login(client):
+    response = client.post(reverse("optimizer:upload"))
+    assert response.status_code == 302
+    assert reverse("optimizer:login") in response.url
+
+
+@pytest.mark.django_db
+def test_upload_without_file_shows_error(client):
+    user = get_user_model().objects.create_user(username="uploadnofile", password="secret123")
+    client.force_login(user)
+
+    response = client.post(reverse("optimizer:upload"))
+
+    assert response.status_code == 200
+    assert b"Please select" in response.content
+
+
+@pytest.mark.django_db
+def test_upload_with_file_redirects_to_dashboard(client):
+    user = get_user_model().objects.create_user(username="uploadfile", password="secret123")
+    client.force_login(user)
+
+    fake_file = SimpleUploadedFile(
+        "report.xlsx",
+        b"PK\x03\x04fake-xlsx-content",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    response = client.post(reverse("optimizer:upload"), {"excel_file": fake_file})
+
+    assert response.status_code == 302
+    assert response.url == reverse("optimizer:dashboard")
 
 
 @pytest.mark.django_db
