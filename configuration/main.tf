@@ -102,7 +102,7 @@ module "agentcell_stack" {
     OTEL_EXPORTER_OTLP_HEADERS = var.otel_exporter_otlp_headers
     OTEL_LOGS_EXPORTER         = "none"
     DEPLOYMENT_ENVIRONMENT     = var.env_name
-    BEAT_ID                    = "unknown"
+    BEAT_ID                    = "BEAT04084134"
   }
 
   # ── Scheduler ──────────────────────────────────────────────────────────────
