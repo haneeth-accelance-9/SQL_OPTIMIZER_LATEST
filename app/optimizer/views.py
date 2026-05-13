@@ -1,4 +1,4 @@
-﻿"""
+"""
 Views for SQL License Optimizer: results, dashboard, report.
 All optimizer views require authentication (enterprise security).
 All analysis data is sourced live from the database.
@@ -1308,9 +1308,6 @@ def upload_view(request):
             len(proc.errors), proc.errors[:5],
         )
 
-    from django.contrib import messages
-    messages.success(request, proc.summary())
-
     return redirect("optimizer:results")
 
 
@@ -2021,7 +2018,8 @@ def report_download(request, format_type):
     report_text = _resolve_report_markdown(context, agentic=get_latest_agentic_context())
     report_text = normalize_report_content_text(report_text or "")
     generated_at = timezone.localtime()
-    base_name = "sql_license_optimization_report_db"
+    dt_str = generated_at.strftime("%Y-%m-%d_%H.%M.%S")
+    base_name = f"SQL License Optimization Report_{dt_str}"
     # Pass report_context=None so export functions use _parse_report_blocks(report_text)
     # instead of the old _build_template_blocks — this preserves the agent AI report structure.
     if normalized_format == "pdf":
@@ -2689,24 +2687,31 @@ def api_trigger_agent_run(request):
     started = time.time()
 
     # Build normalized records from live DB (same pipeline as db_analysis_service)
+    # Phase 1: Data load — USU installations from DB
+    t0 = time.monotonic()
     try:
         df = _build_installations_df()
         records = df.to_dict("records") if not df.empty else []
     except Exception as exc:
         logger.exception("Failed to build installation records for agent run: %s", exc)
         records = []
+    data_load_sec = round(time.monotonic() - t0, 3)
 
     # Also add the strategy outputs used by the agent report.
+    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing
+    t0 = time.monotonic()
     try:
         strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
     except Exception:
         strategy_results = {}
+    rule_eval_sec = round(time.monotonic() - t0, 3)
 
     result = generate_and_store_agentic_report(
         records=records,
         usecase_id=usecase_id,
         strategy_results=strategy_results,
         triggered_by=request.user.email or request.user.username,
+        phase_timings={"data_load_sec": data_load_sec, "rule_eval_sec": rule_eval_sec},
     )
 
     elapsed_ms = int((time.time() - started) * 1000)
@@ -2976,14 +2981,17 @@ def download_rule_data(request, rule_id):
         _build_raw_installations_df,
         _build_raw_rule1_df,
     )
+    from datetime import datetime
+
     context = compute_live_db_metrics()
     rr = context.get("rule_results", {})
+    dt_str = datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
     if rule_id == "rule1":
         data = rr.get("azure_payg", [])
-        filename = "azure_payg_candidates.xlsx"
+        filename = f"PAYG Candidates_{dt_str}.xlsx"
     else:
         data = rr.get("retired_devices", [])
-        filename = "retired_devices_with_installations.xlsx"
+        filename = f"Retired Devices_{dt_str}.xlsx"
     if not data:
         return HttpResponse("No data to download.", status=404)
     from io import BytesIO
@@ -3050,8 +3058,12 @@ def download_rightsizing_sheet(request, sheet_key):
     from io import BytesIO
     from optimizer.services.db_analysis_service import build_rightsizing_sheet_export
 
+    from datetime import datetime
+
     df = build_rightsizing_sheet_export(normalized_sheet_key)
-    workbook_name = f"{normalized_sheet_key.lower()}.xlsx"
+    label = _format_rs3_sheet_label(normalized_sheet_key).replace("Cpu", "CPU").replace("Ram", "RAM")
+    dt_str = datetime.now().strftime("%Y-%m-%d_%H.%M.%S")
+    workbook_name = f"{label}_{dt_str}.xlsx"
     sheet_name = normalized_sheet_key[:31] or "Sheet1"
 
     buffer = BytesIO()

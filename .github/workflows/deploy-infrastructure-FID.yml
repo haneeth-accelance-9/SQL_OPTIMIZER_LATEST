@@ -147,6 +147,8 @@ jobs:
           TF_VAR_usu_api_username: ${{ secrets.USU_API_USERNAME }}
           TF_VAR_usu_api_password: ${{ secrets.USU_API_PASSWORD }}
           TF_VAR_demand_api_auth_header: ${{ secrets.DEMAND_API_AUTH_HEADER }}
+          TF_VAR_runtime_otlp_endpoint: ${{ secrets.RUNTIME_OTLP_ENDPOINT }}
+          TF_VAR_otel_exporter_otlp_headers: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
           set +e
           terraform plan -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -detailed-exitcode -no-color -out=tfplan
@@ -301,6 +303,8 @@ jobs:
           TF_VAR_usu_api_username: ${{ secrets.USU_API_USERNAME }}
           TF_VAR_usu_api_password: ${{ secrets.USU_API_PASSWORD }}
           TF_VAR_demand_api_auth_header: ${{ secrets.DEMAND_API_AUTH_HEADER }}
+          TF_VAR_runtime_otlp_endpoint: ${{ secrets.RUNTIME_OTLP_ENDPOINT }}
+          TF_VAR_otel_exporter_otlp_headers: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
           terraform apply -var="env_name=${{ env.ENV_NAME }}" -var="product_name=${{ vars.PROJECT_NAME }}" -var-file="terraform.tfvars" -auto-approve tfplan
 

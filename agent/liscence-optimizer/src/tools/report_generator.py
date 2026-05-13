@@ -13,6 +13,9 @@ from typing import Any
 
 from agenticai.tools import tool_registry
 
+# Semver: patch = wording only; minor = section added/removed; major = full rewrite
+# Increment this constant every time executive_summary.base.md (the prompt template) is changed.
+PROMPT_TEMPLATE_VERSION = "1.0.0"
 
 def _json_loads_maybe(payload: str | None) -> Any:
     if payload is None:
