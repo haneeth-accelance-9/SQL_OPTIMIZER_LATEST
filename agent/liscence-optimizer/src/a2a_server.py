@@ -17,6 +17,11 @@ except ImportError:
 
 from typing import Any, Optional
 
+# Semver: patch = wording only; minor = section added/removed; major = full rewrite
+# Increment this constant every time the system/user prompt in _llm_write_report() is changed.
+PROMPT_VERSION = "1.0.0"
+
+
 # Import AgenticAI SDK
 from agenticai.a2a import A2AFactory
 
