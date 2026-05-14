@@ -32,7 +32,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["a2a_server", "tools"]
+py-modules = ["a2a_server", "guardrails", "tools"]
 
 [tool.setuptools.package-data]
 "*" = ["configs/*.yaml", "prompts/*.md"]
