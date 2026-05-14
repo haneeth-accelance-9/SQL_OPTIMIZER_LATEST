@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.postgres",
-    "django_crontab",
     "optimizer",
 ]
 
@@ -147,12 +146,6 @@ if _IS_PRODUCTION:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-
-CSRF_TRUSTED_ORIGINS = [
-    f"https://{h.strip()}"                                                                                                                                     
-    for h in os.environ.get("ALLOWED_HOSTS", "localhost").split(",")                                                                                           
-    if h.strip() and h.strip() not in ("localhost", "127.0.0.1")                                                                                               
-]
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
@@ -423,55 +416,19 @@ GRAFANA_SNAPSHOT_RETENTION_DAYS = int(
     os.environ.get("GRAFANA_SNAPSHOT_RETENTION_DAYS", "90")
 )
 
-# ── Weekly data sync via django-crontab ──────────────────────────────────────
-# Both USU and Grafana syncs run once per week on Saturday.
-# Cron syntax: minute hour day-of-month month day-of-week (6 = Saturday)
-# Register  : python manage.py crontab add
-# Remove    : python manage.py crontab remove
-# Show      : python manage.py crontab show
-CRONJOBS = [
-    # ── USU MySQL data sync — every Saturday at 02:00 ────────────────────────
-    # Cron function name: fetch_usu_data
-    (
-        "0 2 * * 6",
-        "django.core.management.call_command",
-        ["fetch_usu_data"],
-        {},
-        ">> " + str(BASE_DIR / "logs" / "usu_sync.log") + " 2>&1",
-    ),
-    # ── USU Java/Oracle data sync — every Saturday at 02:30 ──────────────────
-    # Cron function name: fetch_java_usu_data
-    # product_family=Java → Oracle Server Data (~1 230 installations + ~1 230 demand records)
-    # Offset by 30 min from MySQL sync to avoid DB lock contention.
-    (
-        "30 2 * * 6",
-        "django.core.management.call_command",
-        ["fetch_java_usu_data"],
-        {},
-        ">> " + str(BASE_DIR / "logs" / "usu_java_sync.log") + " 2>&1",
-    ),
-    # ── Grafana metrics fetch — every Saturday at 04:00 ──────────────────────
-    # Runs once per week; offset 2 h after USU sync to avoid DB contention.
-    # Duplicate snapshot rows are silently ignored by bulk_create.
-    (
-        "0 4 * * 6",
-        "django.core.management.call_command",
-        ["fetch_grafana_metrics"],
-        {},
-        ">> " + str(BASE_DIR / "logs" / "grafana_fetch.log") + " 2>&1",
-    ),
-    # ── Grafana rollup + purge — 1st of every month at 03:00 ─────────────────
-    # Aggregates previous month's snapshots into monthly rollups, deletes
-    # raw rows older than GRAFANA_SNAPSHOT_RETENTION_DAYS (90 days).
-    (
-        "0 3 1 * *",
-        "django.core.management.call_command",
-        ["rollup_grafana_metrics"],
-        {},
-        ">> " + str(BASE_DIR / "logs" / "grafana_rollup.log") + " 2>&1",
-    ),
-]
+# ── Scheduled jobs via APScheduler (Django-native, no external infra) ─────────
+# Scheduling is handled by APScheduler started inside OptimizerConfig.ready().
+# The scheduler runs as a background thread in the same Django/Gunicorn process.
+# Configuration lives in optimizer/scheduler.py.
+#
+# Schedules (all UTC):
+#   fetch_usu_data         → every Saturday at 02:00
+#   fetch_java_usu_data    → every Saturday at 02:30
+#   fetch_grafana_metrics  → every hour, Monday–Friday
+#   rollup_grafana_metrics → 1st of every month at 03:00
+#
+# To disable the scheduler (e.g. during migrations or one-off commands):
+#   RUN_SCHEDULER=false python manage.py <command>
 
-# Ensure the logs directory exists so the cron log file can be written
-import pathlib
-pathlib.Path(BASE_DIR / "logs").mkdir(exist_ok=True)
+# Ensure the logs directory exists
+Path(BASE_DIR / "logs").mkdir(exist_ok=True)

@@ -34,13 +34,9 @@ Each [timestamp, value] pair = one GrafanaMetricSnapshot row.
 Duplicate rows are silently ignored (ignore_conflicts=True) so overlapping
 fetch windows never cause constraint errors.
 
-Cron schedule (settings.py CRONJOBS): every Saturday at 04:00.
+Schedule — APScheduler (optimizer/scheduler.py): every hour, Monday–Friday, UTC.
   Range  : now-2h   (2-hour overlap window prevents data gaps on delayed runs)
   Step   : 5m       (12 data points per hour per metric per server)
-
-Register : python manage.py crontab add
-Remove   : python manage.py crontab remove
-Show     : python manage.py crontab show
 
 Usage:
   python manage.py fetch_grafana_metrics
