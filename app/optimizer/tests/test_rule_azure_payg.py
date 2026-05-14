@@ -20,7 +20,7 @@ def test_find_azure_payg_candidates_from_db_builds_from_live_db_adapter(monkeypa
     ])
 
     monkeypatch.setattr(
-        "optimizer.services.db_analysis_service._build_installations_df",
+        "optimizer.services.db_analysis_service._build_payg_installations_df",
         lambda: source_df,
     )
 

@@ -137,7 +137,7 @@ def _get_or_create_user_profile(user):
 
 def _build_post_login_redirect_url() -> str:
     """Return the default authenticated landing page for login flows."""
-    return reverse('optimizer:home')
+    return reverse("optimizer:home")
 
 
 
@@ -1184,7 +1184,7 @@ class OptimizerLoginView(LoginView):
     redirect_authenticated_user = True
 
     def get_success_url(self):
-        return _build_post_login_redirect_url()
+        return self.get_redirect_url() or self.get_default_redirect_url()
 
     def get_default_redirect_url(self):
         return _build_post_login_redirect_url()
@@ -1997,7 +1997,11 @@ def report_page(request):
     # Merge in the latest agentic run data (agent report + candidates)
     from optimizer.services.db_analysis_service import get_latest_agentic_context
     agentic = get_latest_agentic_context()
-    context["report_text"] = _resolve_report_markdown(context, agentic=agentic)
+    agent_md = (agentic.get("agent_run") or {}).get("report_markdown") or ""
+    if agentic.get("has_agentic_data") and agent_md:
+        context["report_text"] = agent_md
+    else:
+        context["report_text"] = _resolve_report_markdown(context, agentic=agentic)
     context["agentic"] = agentic
     context["has_agentic_data"] = agentic.get("has_agentic_data", False)
 

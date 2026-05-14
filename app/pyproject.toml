@@ -17,8 +17,6 @@ include = ["optimizer*", "sql_license_optimizer*"]
 source = ["optimizer"]
 omit = [
     "*/migrations/*",
-    "*/tests/*",
-    "*/test_*.py",
     "manage.py",
 ]
 

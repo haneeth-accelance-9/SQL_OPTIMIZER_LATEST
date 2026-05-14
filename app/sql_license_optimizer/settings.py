@@ -423,40 +423,38 @@ GRAFANA_SNAPSHOT_RETENTION_DAYS = int(
     os.environ.get("GRAFANA_SNAPSHOT_RETENTION_DAYS", "90")
 )
 
-# ── Weekly USU data sync via django-crontab ───────────────────────────────────
-# Runs every Monday at 02:00 AM.
-# Cron syntax: minute hour day-of-month month day-of-week
+# ── Weekly data sync via django-crontab ──────────────────────────────────────
+# Both USU and Grafana syncs run once per week on Saturday.
+# Cron syntax: minute hour day-of-month month day-of-week (6 = Saturday)
 # Register  : python manage.py crontab add
 # Remove    : python manage.py crontab remove
 # Show      : python manage.py crontab show
 CRONJOBS = [
-    # ── USU MySQL data sync — every Monday at 02:00 ───────────────────────────
+    # ── USU MySQL data sync — every Saturday at 02:00 ────────────────────────
     # Cron function name: fetch_usu_data
     (
-        "0 2 * * 1",
+        "0 2 * * 6",
         "django.core.management.call_command",
         ["fetch_usu_data"],
         {},
         ">> " + str(BASE_DIR / "logs" / "usu_sync.log") + " 2>&1",
     ),
-    # ── USU Java/Oracle data sync — every Tuesday at 02:30 ───────────────────
+    # ── USU Java/Oracle data sync — every Saturday at 02:30 ──────────────────
     # Cron function name: fetch_java_usu_data
     # product_family=Java → Oracle Server Data (~1 230 installations + ~1 230 demand records)
     # Offset by 30 min from MySQL sync to avoid DB lock contention.
     (
-        "30 2 * * 2",
+        "30 2 * * 6",
         "django.core.management.call_command",
         ["fetch_java_usu_data"],
         {},
         ">> " + str(BASE_DIR / "logs" / "usu_java_sync.log") + " 2>&1",
     ),
-    # ── Grafana metrics fetch — every hour at minute 0 ───────────────────────
-    # Pulls the last 2 h of Prometheus metrics (5-min step) each run.
-    # 2-hour overlap window means a delayed/missed run never loses data.
+    # ── Grafana metrics fetch — every Saturday at 04:00 ──────────────────────
+    # Runs once per week; offset 2 h after USU sync to avoid DB contention.
     # Duplicate snapshot rows are silently ignored by bulk_create.
-    # Row volume: 8 metrics x ~N servers x 12 pts/hr x 24 hrs = ~2,300 rows/day per server.
     (
-        "0 * * * *",
+        "0 4 * * 6",
         "django.core.management.call_command",
         ["fetch_grafana_metrics"],
         {},

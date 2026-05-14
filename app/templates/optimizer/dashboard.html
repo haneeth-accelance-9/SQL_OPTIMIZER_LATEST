@@ -734,7 +734,7 @@
                                         <span class="dashboard-section-label">CPU</span>
                                         <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_vcpu_reduction|default:0 }}<span class="text-base font-semibold text-slate-600"> vCPUs </span></p>
                                         <!-- <p class="mt-1 text-sm font-semibold text-slate-600"></p> -->
-                                                                        <p class="mt-8 whitespace-nowrap text-sm leading-6 text-slate-500">{{ rightsizing.cpu_count|default:rightsizing.cpu_optimization_count|default:0 }} servers flagged for CPU right-sizing.</p>
+                                                                        <p class="mt-8 whitespace-nowrap text-sm leading-6 text-slate-500">{{ rightsizing.cpu_count|default:0 }} servers flagged for CPU right-sizing.</p>
 
                                     </div>
                                     <div class="flex w-full min-w-0 flex-col lg:w-[180px] lg:pt-1">
@@ -755,7 +755,7 @@
                                     <div class="min-w-0">
                                         <span class="dashboard-section-label">RAM</span>
                                         <p class="mt-3 text-3xl font-bold text-slate-900">{{ rightsizing.total_ram_reduction_gib|default:0 }}<span class="text-base font-semibold text-slate-600"> GiB RAM</span></p>
-                                                                        <p class="mt-6 whitespace-nowrap text-sm leading-6 text-slate-500">{{ rightsizing.ram_count|default:rightsizing.ram_optimization_count|default:0 }} servers flagged for RAM right-sizing.</p>
+                                                                        <p class="mt-6 whitespace-nowrap text-sm leading-6 text-slate-500">{{ rightsizing.ram_count|default:0 }} servers flagged for RAM right-sizing.</p>
 
                                         <!-- <p class="mt-1 text-sm font-semibold text-slate-600"></p> -->
                                     </div>

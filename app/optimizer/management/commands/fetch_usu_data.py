@@ -17,7 +17,7 @@ API URLs used:
   demanddetails : https://lima.bayer.cloud.usu.com/prod/index.php/api/customization/v1.0/demanddetails?product_family=SQL Server&$top=30000&$skip=0
 
 Scheduling — django-crontab (works on Windows, Linux, Mac):
-    Configured in settings.py → CRONJOBS (runs every Monday at 02:00).
+    Configured in settings.py → CRONJOBS (runs every Saturday at 02:00).
     Register : python manage.py crontab add
     Remove   : python manage.py crontab remove
     Show     : python manage.py crontab show

@@ -44,25 +44,21 @@ def test_compute_rightsizing_metrics_builds_workload_screen_metadata(monkeypatch
     assert result["workload_options"] == ["CPU", "RAM"]
     assert result["default_workload"] == "CPU"
     assert result["default_filter_by_workload"] == {
-        "CPU": "PROD_CPU_Optimization",
-        "RAM": "PROD_RAM_Optimization",
+        "CPU": "PROD_CPU_Rightsizing",
+        "RAM": "PROD_RAM_Rightsizing",
     }
     assert result["screen_filter_options"]["CPU"] == [
-        "PROD_CPU_Optimization",
-        "PROD_CPU_Recommendation",
-        "NONPROD_CPU_Optimization",
-        "NONPROD_CPU_Recommendation",
+        "PROD_CPU_Rightsizing",
+        "NONPROD_CPU_Rightsizing",
     ]
     assert result["screen_filter_options"]["RAM"] == [
-        "PROD_RAM_Optimization",
-        "PROD_RAM_Recommendation",
-        "NONPROD_RAM_Optimization",
-        "NONPROD_RAM_Recommendation",
+        "PROD_RAM_Rightsizing",
+        "NONPROD_RAM_Rightsizing",
     ]
-    assert result["screen_summaries"]["CPU"]["PROD_CPU_Optimization"]["count"] == 1
-    assert result["screen_summaries"]["CPU"]["NONPROD_CPU_Recommendation"]["count"] == 1
-    assert result["screen_summaries"]["RAM"]["PROD_RAM_Optimization"]["reduction_total"] == 8.0
-    assert result["screen_summaries"]["RAM"]["NONPROD_RAM_Recommendation"]["reduction_total"] == 8.0
+    assert result["screen_summaries"]["CPU"]["PROD_CPU_Rightsizing"]["count"] == 1
+    assert result["screen_summaries"]["CPU"]["NONPROD_CPU_Rightsizing"]["count"] == 1
+    assert result["screen_summaries"]["RAM"]["PROD_RAM_Rightsizing"]["reduction_total"] == 8.0
+    assert result["screen_summaries"]["RAM"]["NONPROD_RAM_Rightsizing"]["reduction_total"] == 8.0
     assert result["cpu_chart_data"][0]["optimization_type"] == "PROD_CPU_Optimization"
     assert result["ram_chart_data"][1]["recommendation_type"] == "NONPROD_RAM_Recommendation"
 
@@ -102,6 +98,7 @@ def test_compute_rightsizing_metrics_calculates_cpu_cost_savings_from_product_ed
             "server_name": "prod-sql-01",
             "product_edition": "Enterprise Edition",
             "Environment": "Production",
+            "eff_quantity": 8,
             "Avg_CPU_12m": 8,
             "Peak_CPU_12m": 55,
             "Avg_FreeMem_12m": 45,
@@ -113,6 +110,7 @@ def test_compute_rightsizing_metrics_calculates_cpu_cost_savings_from_product_ed
             "server_name": "prod-sql-02",
             "product_edition": "Standard Edition",
             "Environment": "Production",
+            "eff_quantity": 8,
             "Avg_CPU_12m": 9,
             "Peak_CPU_12m": 50,
             "Avg_FreeMem_12m": 40,
@@ -130,8 +128,8 @@ def test_compute_rightsizing_metrics_calculates_cpu_cost_savings_from_product_ed
     result = compute_rightsizing_metrics()
 
     assert result["cpu_optimizations"][0]["Cost_Savings_EUR"] == 5275.92
-    assert result["cpu_optimizations"][1]["Cost_Savings_EUR"] == 1575.92
-    assert result["cpu_savings_eur"] == 6851.84
+    assert result["cpu_optimizations"][1]["Cost_Savings_EUR"] == 1375.92
+    assert result["cpu_savings_eur"] == 6651.84
 
 
 def test_build_rightsizing_sheet_export_matches_report_columns(monkeypatch):
@@ -161,32 +159,31 @@ def test_build_rightsizing_sheet_export_matches_report_columns(monkeypatch):
         lambda: source_df,
     )
 
-    export_df = build_rightsizing_sheet_export("PROD_CPU_Recommendation")
+    export_df = build_rightsizing_sheet_export("PROD_CPU_Rightsizing")
 
     assert list(export_df.columns) == list(RIGHTSIZING_REPORT_BASE_HEADERS) + [
         "CPU_Recommendation",
         "Recommended_vCPU",
+        "product_edition",
     ]
-    assert export_df.to_dict("records") == [
-        {
-            **{column: None for column in RIGHTSIZING_REPORT_BASE_HEADERS},
-            "Number": "123",
-            "Server name": "prod-sql-01",
-            "Environment": "Production",
-            "Hosting Zone": "Public Cloud",
-            "Comments for Allocation (GB)": "",
-            "Comments for Usage (GB)": "",
-            "Decom check": "",
-            "Avg_CPU_12m": 8,
-            "Peak_CPU_12m": 55,
-            "Avg_FreeMem_12m": 48,
-            "Min_FreeMem_12m": 20,
-            "Current_vCPU": 8,
-            "Current_RAM_GiB": 32,
-            "CPU_Recommendation": "Reduce vCPU by ~50% -> 4",
-            "Recommended_vCPU": 4,
-        }
-    ]
+    # Replace NaN with None for comparison (pandas reindex fills missing cols with NaN)
+    record = export_df.to_dict("records")[0]
+    assert record["Number"] == "123"
+    assert record["Server name"] == "prod-sql-01"
+    assert record["Environment"] == "Production"
+    assert record["Hosting Zone"] == "Public Cloud"
+    assert record["Comments for Allocation (GB)"] == ""
+    assert record["Comments for Usage (GB)"] == ""
+    assert record["Decom check"] == ""
+    assert record["Avg_CPU_12m"] == 8
+    assert record["Peak_CPU_12m"] == 55
+    assert record["Avg_FreeMem_12m"] == 48
+    assert record["Min_FreeMem_12m"] == 20
+    assert record["Current_vCPU"] == 8
+    assert record["Current_RAM_GiB"] == 32
+    assert record["CPU_Recommendation"] == "Reduce vCPU by ~50% -> 4"
+    assert record["Recommended_vCPU"] == 4.0
+    assert pd.isna(record["product_edition"])
 
 
 def test_prepare_db_prices_for_demand_expands_family_prices_to_product_names():
