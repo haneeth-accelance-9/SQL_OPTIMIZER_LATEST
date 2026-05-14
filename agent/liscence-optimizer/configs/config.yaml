@@ -66,6 +66,23 @@ observability:
     headers: "${OTEL_EXPORTER_OTLP_HEADERS:}"
     timeout: 10
     max_log_message_bytes: 200000
+
+  # ── Distributed tracing / sampling strategy ──────────────────────────────
+  # This agent runs low-volume, high-value jobs (one run per week or on-demand).
+  # Strategy: ParentBased(root=AlwaysOn) — sample 100% of root spans in all
+  # environments.  If volume grows, switch to TraceIdRatioBased by setting
+  # OTEL_TRACES_SAMPLER=traceidratio and OTEL_TRACES_SAMPLER_ARG=0.1 (10%).
+  #
+  # The sampler is controlled entirely via OTel SDK environment variables so
+  # no code change is needed to tune it per environment:
+  #   OTEL_TRACES_SAMPLER=parentbased_always_on   (default — 100 %)
+  #   OTEL_TRACES_SAMPLER=parentbased_traceidratio (use with SAMPLER_ARG)
+  #   OTEL_TRACES_SAMPLER_ARG=0.1                  (10 % when ratio-based)
+  #
+  # Propagator: W3C TraceContext + Baggage (OTel SDK default).
+  # No additional SDK config is required; the AgenticAI SDK honours the
+  # OTEL_TRACES_SAMPLER env var automatically via OpenLIT → opentelemetry-sdk.
+  # ─────────────────────────────────────────────────────────────────────────
  
 # ============================================================================
 # EXECUTOR CONFIGURATION
