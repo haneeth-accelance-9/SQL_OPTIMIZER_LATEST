@@ -1,4 +1,4 @@
-﻿"""
+"""
 MVP6 License Agent — Django Models
 ===================================
 Azure Database for PostgreSQL Flexible Server backend.
@@ -396,6 +396,9 @@ class AgentRun(TenantAwareModel):
     rules_evaluation    = models.JSONField(null=True, blank=True)
     started_at          = models.DateTimeField(auto_now_add=True)
     finished_at         = models.DateTimeField(null=True, blank=True)
+    # Guardrails fields
+    knowledge_sources   = models.JSONField(null=True, blank=True)   # which data sources were used
+    llm_cost_eur        = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
 
     class Meta:
         db_table = "agent_run"
