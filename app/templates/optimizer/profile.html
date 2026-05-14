@@ -49,8 +49,17 @@
                 </div>
             </div>
 
+            {% if is_viewer_only %}
+            <!-- <div class="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                </svg>
+                You have <strong class="mx-1">Viewer</strong> access. Profile editing is disabled.
+            </div> -->
+            {% endif %}
             <form method="post" class="mt-6 space-y-6">
                 {% csrf_token %}
+                <fieldset {% if is_viewer_only %}disabled{% endif %} class="contents">
                 <div class="grid gap-5 md:grid-cols-2">
                     <div>
                         <label for="{{ profile_form.first_name.id_for_label }}" class="text-sm font-semibold text-slate-700">First name</label>
@@ -107,10 +116,14 @@
                 </div>
 
                 <div class="flex justify-end">
-                    <button type="submit" class="inline-flex items-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button type="submit"
+                        {% if is_viewer_only %}disabled title="Viewer role cannot edit profile"{% endif %}
+                        class="inline-flex items-center rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-sm transition
+                            {% if is_viewer_only %}cursor-not-allowed bg-slate-400{% else %}bg-slate-900 hover:-translate-y-0.5 hover:shadow-md{% endif %}">
                         Save Profile
                     </button>
                 </div>
+                </fieldset>
             </form>
         </section>
     </div>

@@ -191,21 +191,15 @@ DEMAND_API_START_URI = os.environ.get(
     "DEMAND_API_START_URI",
     "/prod/index.php/api/customization/v1.0/demanddetails?$skip=0&$top=10000",
 )
-DEMAND_API_AUTH_HEADER = _require_env(
+DEMAND_API_AUTH_HEADER = os.environ.get(
     "DEMAND_API_AUTH_HEADER",
-    "DEMAND_API_AUTH_HEADER must be set (e.g. 'Basic <base64(user:pass)>').",
+    "Basic dXN1ZGF0YXVzZXI6QlVFUFdFZkw2JCM5eVEh",
 )
 
 # USU API — used by fetch_usu_data management command (weekly sync)
 USU_API_BASE_URL  = os.environ.get("USU_API_BASE_URL",  "https://lima.bayer.cloud.usu.com")
-USU_API_USERNAME  = _require_env(
-    "USU_API_USERNAME",
-    "USU_API_USERNAME must be set.",
-)
-USU_API_PASSWORD  = _require_env(
-    "USU_API_PASSWORD",
-    "USU_API_PASSWORD must be set.",
-)
+USU_API_USERNAME  = os.environ.get("USU_API_USERNAME",  "myusudata")
+USU_API_PASSWORD  = os.environ.get("USU_API_PASSWORD",  "test123Usu")
 # Output file path — defaults to BASE_DIR/response_full.json
 DEMAND_API_OUTPUT_FILE = os.environ.get("DEMAND_API_OUTPUT_FILE", str(BASE_DIR / "response_full.json"))
 

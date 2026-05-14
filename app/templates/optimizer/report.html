@@ -123,8 +123,9 @@
 
             <!-- Trigger agent run button -->
             <button type="button" id="btn-trigger-run"
-                    class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-sky-600 text-white text-sm font-semibold rounded-xl hover:bg-sky-700 transition-colors shadow-sm"
-                    title="Run the liscence-optimizer agent against live DB data">
+                    {% if is_viewer_only %}disabled title="Viewer role cannot run agent"{% else %}title="Run the liscence-optimizer agent against live DB data"{% endif %}
+                    class="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm
+                        {% if is_viewer_only %}bg-slate-400 cursor-not-allowed{% else %}bg-sky-600 hover:bg-sky-700{% endif %}">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
@@ -337,7 +338,9 @@
             <p class="text-lg font-semibold text-slate-700">No agent runs found</p>
             <p class="text-sm text-slate-400 mt-1 mb-5">Click <strong>Run Agent</strong> to trigger the liscence-optimizer agent against live database data.</p>
             <button type="button" id="btn-trigger-run-empty"
-                    class="inline-flex items-center gap-2 px-6 py-3 bg-sky-600 text-white text-sm font-semibold rounded-xl hover:bg-sky-700 transition">
+                    {% if is_viewer_only %}disabled title="Viewer role cannot run agent"{% endif %}
+                    class="inline-flex items-center gap-2 px-6 py-3 text-white text-sm font-semibold rounded-xl transition
+                        {% if is_viewer_only %}bg-slate-400 cursor-not-allowed{% else %}bg-sky-600 hover:bg-sky-700{% endif %}">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>

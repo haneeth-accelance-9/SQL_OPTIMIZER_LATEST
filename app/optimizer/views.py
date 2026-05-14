@@ -126,6 +126,7 @@ def _build_profile_context(user, profile, form=None):
         "profile_image_url": profile.image_url or "",
         "profile_first_name": user.first_name or "Not provided",
         "profile_last_name": user.last_name or "Not provided",
+        "is_viewer_only": profile.is_viewer_only,
     }
 
 
@@ -135,8 +136,12 @@ def _get_or_create_user_profile(user):
     return profile
 
 
-def _build_post_login_redirect_url() -> str:
+def _build_post_login_redirect_url(user=None) -> str:
     """Return the default authenticated landing page for login flows."""
+    if user is not None and user.is_authenticated:
+        profile = _get_or_create_user_profile(user)
+        if profile.is_viewer_only:
+            return reverse("optimizer:dashboard")
     return reverse("optimizer:home")
 
 
@@ -1187,7 +1192,7 @@ class OptimizerLoginView(LoginView):
         return self.get_redirect_url() or self.get_default_redirect_url()
 
     def get_default_redirect_url(self):
-        return _build_post_login_redirect_url()
+        return _build_post_login_redirect_url(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1262,7 +1267,10 @@ def ready(request):
 @login_required
 def home(request):
     """File upload landing page shown after login."""
-    return render(request, "optimizer/home.html")
+    profile = _get_or_create_user_profile(request.user)
+    if profile.is_viewer_only:
+        return redirect("optimizer:dashboard")
+    return render(request, "optimizer/home.html", {"is_viewer_only": False})
 
 
 @require_http_methods(["POST"])
@@ -1878,7 +1886,7 @@ def dashboard(request):
 def profile_page(request):
     """Display and update the logged-in user's profile details."""
     profile = _get_or_create_user_profile(request.user)
-    if request.method == "POST":
+    if request.method == "POST" and not profile.is_viewer_only:
         form = UserProfileForm(request.POST, instance=profile, user=request.user)
         if form.is_valid():
             form.save()
@@ -2004,6 +2012,8 @@ def report_page(request):
         context["report_text"] = _resolve_report_markdown(context, agentic=agentic)
     context["agentic"] = agentic
     context["has_agentic_data"] = agentic.get("has_agentic_data", False)
+    profile = _get_or_create_user_profile(request.user)
+    context["is_viewer_only"] = profile.is_viewer_only
 
     return render(request, "optimizer/report.html", context)
 

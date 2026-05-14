@@ -68,10 +68,11 @@
 
                         <form id="upload-form" action="{% url 'optimizer:upload' %}" method="post" enctype="multipart/form-data" class="space-y-4">
                             {% csrf_token %}
-                            <div class="border-2 border-dashed border-slate-300 rounded-[1.75rem] p-7 text-center transition-all duration-200 group upload-drop-zone"
+                            <fieldset {% if is_viewer_only %}disabled{% endif %} class="contents">
+                            <div class="border-2 border-dashed border-slate-300 rounded-[1.75rem] p-7 text-center transition-all duration-200 group upload-drop-zone {% if is_viewer_only %}opacity-50{% endif %}"
                                 id="drop-zone">
                                 <input type="file" name="excel_file" id="excel_file" accept=".xlsx,.xls" class="hidden" required>
-                                <label for="excel_file" class="cursor-pointer block relative">
+                                <label for="excel_file" class="{% if is_viewer_only %}cursor-not-allowed{% else %}cursor-pointer{% endif %} block relative">
                                     <div class="bg-gradient-to-br from-cyan-100 to-lime-100 w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-105 transition-transform">
                                         <svg class="h-8 w-8 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -98,12 +99,15 @@
                             </div>
 
                             <button type="submit" id="submit-btn" disabled
-                                class="w-full py-3.5 px-4 bg-slate-900 text-white text-base font-semibold rounded-2xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 flex justify-center items-center gap-2">
+                                {% if is_viewer_only %}title="Viewer role cannot upload files"{% endif %}
+                                class="w-full py-3.5 px-4 text-white text-base font-semibold rounded-2xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 flex justify-center items-center gap-2
+                                    {% if is_viewer_only %}bg-slate-400 cursor-not-allowed opacity-60{% else %}bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl{% endif %}">
                                 Analyze Asset Data
                                 <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                                 </svg>
                             </button>
+                            </fieldset>
                         </form>
 
                         <div class="mt-6 grid gap-3 sm:grid-cols-3">
