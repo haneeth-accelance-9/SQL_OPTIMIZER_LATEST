@@ -297,6 +297,58 @@ Use only the numbers provided. Be specific and practical. Keep each section to a
         return None
 
 
+def _detect_knowledge_sources(
+    records: list,
+    strategy_results: dict[str, Any] | None,
+    rules_file_path: "Path",
+) -> dict[str, Any]:
+    """
+    Inspect the inputs to infer which data sources were used in this run.
+
+    Returns a dict suitable for AgentRun.knowledge_sources.
+    """
+    from pathlib import Path as _Path
+    import hashlib
+
+    sources: dict[str, Any] = {
+        "rules_file": str(rules_file_path),
+        "rules_file_exists": rules_file_path.exists() if isinstance(rules_file_path, _Path) else False,
+        "usu_records_count": len(records) if isinstance(records, list) else 0,
+        "grafana_data_present": False,
+        "boones_data_present": False,
+        "prompt_version": PROMPT_VERSION,
+    }
+
+    # Detect rules file hash for reproducibility
+    if sources["rules_file_exists"]:
+        try:
+            rules_bytes = rules_file_path.read_bytes()
+            sources["rules_file_sha256"] = hashlib.sha256(rules_bytes).hexdigest()[:16]
+        except Exception:
+            pass
+
+    # Detect CPU/RAM utilisation data presence (comes from Boone's or Grafana)
+    s3 = (strategy_results or {}).get("strategy_3_rightsizing") or {}
+    if (
+        s3.get("cpu_candidates")
+        or s3.get("ram_candidates")
+        or s3.get("cpu_candidate_count", 0)
+        or s3.get("ram_candidate_count", 0)
+    ):
+        # Distinguish Boone's vs Grafana based on which source provided utilisation rows.
+        # The source field on CPUUtilisation rows is "boones_public" / "boones_private" / "grafana".
+        sources["boones_data_present"] = True  # Boone's is the default; override below if grafana found
+
+    # Walk sample records looking for Grafana-specific fields
+    _grafana_fields = {"grafana_snapshot", "metric_name", "metric_value", "dashboard"}
+    for rec in (records or [])[:20]:
+        if isinstance(rec, dict) and _grafana_fields.intersection(rec.keys()):
+            sources["grafana_data_present"] = True
+            break
+
+    return sources
+
+
 def _normalize_agent_storage_rule_code(rule_code: Any) -> str:
     normalized = str(rule_code or "").strip()
     if not normalized:
@@ -1299,7 +1351,7 @@ def generate_and_store_agentic_report(
     llm_model = (llm_meta.get("model") if isinstance(llm_meta, dict) else "") or (
         getattr(_s, "AZURE_OPENAI_DEPLOYMENT", "") if llm_used else ""
     )
-    llm_tokens = llm_meta.get("tokens_used")
+    llm_tokens = llm_meta.get("tokens_used") or llm_meta.get("total_tokens")
     run.agent_endpoint = result.get("agent_endpoint_used") or endpoint
 
     # Build OptimizationCandidate rows from rules_evaluation.per_rule
@@ -1386,10 +1438,31 @@ def generate_and_store_agentic_report(
         "prompt_version": PROMPT_VERSION,
         "phase_timings": _pt,
     }
+
+    # Knowledge source references (task: knowledge_sources captured)
+    run.knowledge_sources = _detect_knowledge_sources(
+        records=records,
+        strategy_results=strategy_results,
+        rules_file_path=AGENT_RULES_CONFIG_PATH,
+    )
+
+    # Cost per agent interaction (task: cost_per_agent_interaction)
+    run.llm_cost_eur = _calculate_llm_cost_eur(llm_meta) if llm_used else None
+
+    logger.info(
+        "agent_run_cost run_id=%s llm_used=%s prompt_tokens=%s completion_tokens=%s llm_cost_eur=%s",
+        run.id,
+        llm_used,
+        llm_meta.get("prompt_tokens") if llm_used else None,
+        llm_meta.get("completion_tokens") if llm_used else None,
+        run.llm_cost_eur,
+    )
+
     run.save(update_fields=[
         "status", "report_markdown", "llm_model", "llm_used", "llm_tokens_used",
         "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",
         "rules_evaluation", "finished_at", "input_file_versions",
+        "knowledge_sources", "llm_cost_eur",
     ])
 
     record_run_timings(str(run.id))
@@ -1402,6 +1475,46 @@ def generate_and_store_agentic_report(
         "candidates_created": candidate_rows_created,
         "rules_evaluation": rules_eval,
     }
+
+
+def _calculate_llm_cost_eur(llm_meta: dict[str, Any]) -> float | None:
+    """
+    Estimate EUR cost for a single LLM call from its token counts.
+
+    Rates are configurable via Django settings (with env-var fallback):
+      LLM_INPUT_TOKEN_COST_PER_1K_USD  — default 0.0025  ($2.50 / 1M, GPT-4o input)
+      LLM_OUTPUT_TOKEN_COST_PER_1K_USD — default 0.010   ($10.00 / 1M, GPT-4o output)
+      USD_TO_EUR_RATE                  — default 0.92
+
+    Returns None when token counts are unavailable.
+    """
+    if not isinstance(llm_meta, dict):
+        return None
+
+    prompt_tokens = llm_meta.get("prompt_tokens")
+    completion_tokens = llm_meta.get("completion_tokens")
+    if prompt_tokens is None and completion_tokens is None:
+        return None
+
+    try:
+        from django.conf import settings as _s
+    except ImportError:
+        _s = None  # type: ignore
+
+    def _rate(attr: str, default: float) -> float:
+        if _s is not None and hasattr(_s, attr):
+            return float(getattr(_s, attr))
+        return float(os.environ.get(attr, default))
+
+    input_rate = _rate("LLM_INPUT_TOKEN_COST_PER_1K_USD", 0.0025)
+    output_rate = _rate("LLM_OUTPUT_TOKEN_COST_PER_1K_USD", 0.010)
+    usd_to_eur = _rate("USD_TO_EUR_RATE", 0.92)
+
+    cost_usd = (
+        ((prompt_tokens or 0) * input_rate / 1000)
+        + ((completion_tokens or 0) * output_rate / 1000)
+    )
+    return round(cost_usd * usd_to_eur, 6)
 
 
 def get_fallback_report(context: Dict[str, Any]) -> str:
