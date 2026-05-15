@@ -1,4 +1,4 @@
-﻿"""
+"""
 MVP6 License Agent — Django Models
 ===================================
 Azure Database for PostgreSQL Flexible Server backend.

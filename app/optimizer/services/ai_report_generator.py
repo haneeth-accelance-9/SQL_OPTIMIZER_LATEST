@@ -297,6 +297,58 @@ Use only the numbers provided. Be specific and practical. Keep each section to a
         return None
 
 
+def _detect_knowledge_sources(
+    records: list,
+    strategy_results: dict[str, Any] | None,
+    rules_file_path: "Path",
+) -> dict[str, Any]:
+    """
+    Inspect the inputs to infer which data sources were used in this run.
+
+    Returns a dict suitable for AgentRun.knowledge_sources.
+    """
+    from pathlib import Path as _Path
+    import hashlib
+
+    sources: dict[str, Any] = {
+        "rules_file": str(rules_file_path),
+        "rules_file_exists": rules_file_path.exists() if isinstance(rules_file_path, _Path) else False,
+        "usu_records_count": len(records) if isinstance(records, list) else 0,
+        "grafana_data_present": False,
+        "boones_data_present": False,
+        "prompt_version": PROMPT_VERSION,
+    }
+
+    # Detect rules file hash for reproducibility
+    if sources["rules_file_exists"]:
+        try:
+            rules_bytes = rules_file_path.read_bytes()
+            sources["rules_file_sha256"] = hashlib.sha256(rules_bytes).hexdigest()[:16]
+        except Exception:
+            pass
+
+    # Detect CPU/RAM utilisation data presence (comes from Boone's or Grafana)
+    s3 = (strategy_results or {}).get("strategy_3_rightsizing") or {}
+    if (
+        s3.get("cpu_candidates")
+        or s3.get("ram_candidates")
+        or s3.get("cpu_candidate_count", 0)
+        or s3.get("ram_candidate_count", 0)
+    ):
+        # Distinguish Boone's vs Grafana based on which source provided utilisation rows.
+        # The source field on CPUUtilisation rows is "boones_public" / "boones_private" / "grafana".
+        sources["boones_data_present"] = True  # Boone's is the default; override below if grafana found
+
+    # Walk sample records looking for Grafana-specific fields
+    _grafana_fields = {"grafana_snapshot", "metric_name", "metric_value", "dashboard"}
+    for rec in (records or [])[:20]:
+        if isinstance(rec, dict) and _grafana_fields.intersection(rec.keys()):
+            sources["grafana_data_present"] = True
+            break
+
+    return sources
+
+
 def _normalize_agent_storage_rule_code(rule_code: Any) -> str:
     normalized = str(rule_code or "").strip()
     if not normalized:
@@ -1299,7 +1351,7 @@ def generate_and_store_agentic_report(
     llm_model = (llm_meta.get("model") if isinstance(llm_meta, dict) else "") or (
         getattr(_s, "AZURE_OPENAI_DEPLOYMENT", "") if llm_used else ""
     )
-    llm_tokens = llm_meta.get("tokens_used")
+    llm_tokens = llm_meta.get("tokens_used") or llm_meta.get("total_tokens")
     run.agent_endpoint = result.get("agent_endpoint_used") or endpoint
 
     # Build OptimizationCandidate rows from rules_evaluation.per_rule
@@ -1386,6 +1438,7 @@ def generate_and_store_agentic_report(
         "prompt_version": PROMPT_VERSION,
         "phase_timings": _pt,
     }
+
     # Knowledge source references (task: knowledge_sources captured)
     run.knowledge_sources = _detect_knowledge_sources(
         records=records,
@@ -1402,6 +1455,7 @@ def generate_and_store_agentic_report(
         llm_meta.get("completion_tokens") if llm_used else None,
         run.llm_cost_eur,
     )
+
     run.save(update_fields=[
         "status", "report_markdown", "llm_model", "llm_used", "llm_tokens_used",
         "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",

@@ -191,7 +191,11 @@
                 </a>
                 <div class="flex items-center gap-5 lg:gap-8">
                     {% if user.is_authenticated %}
+                    {% if is_viewer_only %}
+                    <span class="appbar-link text-sm rounded px-1 py-0.5 opacity-40 cursor-not-allowed select-none" title="Viewer role cannot upload">UPLOAD</span>
+                    {% else %}
                     <a href="{% url 'optimizer:home' %}" class="appbar-link {% if request.resolver_match.url_name == 'home' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">UPLOAD</a>
+                    {% endif %}
                     <a href="{% url 'optimizer:dashboard' %}" class="appbar-link {% if request.resolver_match.url_name == 'dashboard' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">DASHBOARD</a>
                     {% if request.session.optimizer_analysis_id %}
                     <a href="{% url 'optimizer:results' %}" class="appbar-link {% if request.resolver_match.url_name == 'results' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">RESULTS</a>

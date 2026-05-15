@@ -21,6 +21,12 @@ from typing import Any, Optional
 # Increment this constant every time the system/user prompt in _llm_write_report() is changed.
 PROMPT_VERSION = "1.0.0"
 
+# Guardrails (prompt injection protection + output filtering)
+try:
+    from .guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output
+except ImportError:
+    from guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output  # type: ignore
+
 
 # Import AgenticAI SDK
 from agenticai.a2a import A2AFactory
@@ -142,6 +148,7 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
         content = msg.get("content")
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("LLM returned empty content.")
+        usage = data.get("usage") or {}
         meta = {
             "http_status": status,
             "elapsed_ms": elapsed_ms,
@@ -150,13 +157,20 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
             or resp_headers.get("x-ms-request-id")
             or resp_headers.get("apim-request-id"),
             "model": deployment,
+            # Token counts for cost tracking
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "completion_tokens": usage.get("completion_tokens"),
+            "total_tokens": usage.get("total_tokens"),
         }
         logger.info(
-            "Azure OpenAI chat completions succeeded (status=%s elapsed_ms=%s request_id=%s deployment=%s)",
+            "Azure OpenAI chat completions succeeded (status=%s elapsed_ms=%s request_id=%s deployment=%s "
+            "prompt_tokens=%s completion_tokens=%s)",
             status,
             elapsed_ms,
             meta["request_id"],
             deployment,
+            meta["prompt_tokens"],
+            meta["completion_tokens"],
         )
         return content.strip() + "\n", meta
 
@@ -201,17 +215,22 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
         - if llm_first=true: attempts to have the LLM write the final report, else uses deterministic markdown
         - always returns a report_markdown (unless evaluation itself fails)
         """
-        eval_json_str = evaluate_optimization_rules(records_json=json.dumps(req.records))
+        # ── Prompt injection protection ──────────────────────────────────────
+        safe_usecase_id = sanitize_prompt_input(req.usecase_id, field_name="usecase_id")
+        safe_notes = sanitize_prompt_input(req.notes, field_name="notes") if req.notes else req.notes
+        safe_records = validate_and_sanitize_records(req.records)
+
+        eval_json_str = evaluate_optimization_rules(records_json=json.dumps(safe_records))
         eval_obj = json.loads(eval_json_str) if eval_json_str else {"success": False, "error": "Empty evaluation"}
 
         if not eval_obj or not eval_obj.get("success", False):
             return {"success": False, "error": eval_obj.get("error") or "Rules evaluation failed", "rules_evaluation": eval_obj}
 
         report_json_str = report_generator(
-            usecase_id=req.usecase_id,
+            usecase_id=safe_usecase_id,
             strategy_results_json=json.dumps(req.strategy_results or {}),
             rules_evaluation_json=json.dumps(eval_obj),
-            notes=req.notes,
+            notes=safe_notes,
         )
         report_obj = json.loads(report_json_str) if report_json_str else {"success": False, "error": "Empty report"}
 
@@ -233,14 +252,16 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
             # Retry on 429/5xx with small exponential backoff; then fall back.
             for attempt in range(max(0, int(req.llm_max_retries)) + 1):
                 try:
-                    final_md, llm_meta = _llm_write_report(
-                        usecase_id=req.usecase_id,
+                    raw_md, llm_meta = _llm_write_report(
+                        usecase_id=safe_usecase_id,
                         rules_yaml=rules_yaml,
                         rules_evaluation=eval_obj,
                         strategy_results=req.strategy_results or {},
                         deterministic_markdown=deterministic_md,
                         timeout_seconds=int(req.llm_timeout_seconds),
                     )
+                    # ── Output filtering ─────────────────────────────────────
+                    final_md = filter_llm_output(raw_md)
                     llm_used = True
                     llm_error = None
                     break
