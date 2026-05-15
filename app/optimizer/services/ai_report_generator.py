@@ -1386,10 +1386,27 @@ def generate_and_store_agentic_report(
         "prompt_version": PROMPT_VERSION,
         "phase_timings": _pt,
     }
+    # Knowledge source references (task: knowledge_sources captured)
+    run.knowledge_sources = _detect_knowledge_sources(
+        records=records,
+        strategy_results=strategy_results,
+        rules_file_path=AGENT_RULES_CONFIG_PATH,
+    )
+    # Cost per agent interaction (task: cost_per_agent_interaction)
+    run.llm_cost_eur = _calculate_llm_cost_eur(llm_meta) if llm_used else None
+    logger.info(
+        "agent_run_cost run_id=%s llm_used=%s prompt_tokens=%s completion_tokens=%s llm_cost_eur=%s",
+        run.id,
+        llm_used,
+        llm_meta.get("prompt_tokens") if llm_used else None,
+        llm_meta.get("completion_tokens") if llm_used else None,
+        run.llm_cost_eur,
+    )
     run.save(update_fields=[
         "status", "report_markdown", "llm_model", "llm_used", "llm_tokens_used",
         "run_duration_sec", "servers_evaluated", "candidates_found", "agent_endpoint",
         "rules_evaluation", "finished_at", "input_file_versions",
+        "knowledge_sources", "llm_cost_eur",
     ])
 
     record_run_timings(str(run.id))
@@ -1402,6 +1419,72 @@ def generate_and_store_agentic_report(
         "candidates_created": candidate_rows_created,
         "rules_evaluation": rules_eval,
     }
+
+
+def _detect_knowledge_sources(
+    records: list,
+    strategy_results: "dict[str, Any] | None",
+    rules_file_path: "Path",
+) -> "dict[str, Any]":
+    """
+    Inspect the inputs to infer which data sources were used in this run.
+    Returns a dict suitable for AgentRun.knowledge_sources.
+    """
+    from pathlib import Path as _Path
+    import hashlib
+
+    sources: Dict[str, Any] = {
+        "rules_file": str(rules_file_path),
+        "rules_file_exists": rules_file_path.exists() if isinstance(rules_file_path, _Path) else False,
+        "usu_records_count": len(records) if isinstance(records, list) else 0,
+        "grafana_data_present": False,
+        "boones_data_present": False,
+        "prompt_version": PROMPT_VERSION,
+    }
+
+    if sources["rules_file_exists"]:
+        try:
+            rules_bytes = rules_file_path.read_bytes()
+            sources["rules_file_sha256"] = hashlib.sha256(rules_bytes).hexdigest()[:16]
+        except Exception:
+            pass
+
+    s3 = (strategy_results or {}).get("strategy_3_rightsizing") or {}
+    if (
+        s3.get("cpu_candidates")
+        or s3.get("ram_candidates")
+        or s3.get("cpu_candidate_count", 0)
+        or s3.get("ram_candidate_count", 0)
+    ):
+        sources["boones_data_present"] = True
+
+    _grafana_fields = {"grafana_snapshot", "metric_name", "metric_value", "dashboard"}
+    for rec in (records or [])[:20]:
+        if isinstance(rec, dict) and _grafana_fields.intersection(rec.keys()):
+            sources["grafana_data_present"] = True
+            break
+
+    return sources
+
+
+def _calculate_llm_cost_eur(llm_meta: "dict[str, Any]") -> "float | None":
+    """Estimate EUR cost for a single LLM call from its token counts."""
+    from django.conf import settings as _s
+
+    if not isinstance(llm_meta, dict):
+        return None
+
+    prompt_tokens = llm_meta.get("prompt_tokens") or 0
+    completion_tokens = llm_meta.get("completion_tokens") or 0
+    if not prompt_tokens and not completion_tokens:
+        return None
+
+    usd_per_1k_input = getattr(_s, "LLM_INPUT_TOKEN_COST_PER_1K_USD", 0.0025)
+    usd_per_1k_output = getattr(_s, "LLM_OUTPUT_TOKEN_COST_PER_1K_USD", 0.01)
+    usd_to_eur = getattr(_s, "USD_TO_EUR_RATE", 0.92)
+
+    cost_usd = (prompt_tokens / 1000 * usd_per_1k_input) + (completion_tokens / 1000 * usd_per_1k_output)
+    return round(cost_usd * usd_to_eur, 6)
 
 
 def get_fallback_report(context: Dict[str, Any]) -> str:

@@ -1449,13 +1449,12 @@
             <!-- Grafana Sub-panel -->
             <div id="dq-panel-grafana" class="dq-sub-panel flex flex-col gap-4 hidden">
 
-                {% if dq_grafana_kpis.total_records %}
                 <!-- Charts row 1: Avg by Metric  +  Timeline -->
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
                         <h3 class="text-sm font-bold text-slate-800 mb-1">Average Value by Metric</h3>
                         <p class="text-xs text-slate-500 mb-4">Avg reading across all servers and time periods per metric type.</p>
-                        <div id="dq-grafana-chart-avg" class="w-full" style="height:280px;"></div>
+                        <div id="dq-grafana-chart-avg" class="w-full" style="height:280px;min-height:280px;"></div>
                     </div>
                     <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
                         <h3 class="text-sm font-bold text-slate-800 mb-1">Trend Analysis Over Time</h3>
@@ -1467,28 +1466,9 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div id="dq-grafana-chart-timeline" class="w-full" style="height:240px;"></div>
+                        <div id="dq-grafana-chart-timeline" class="w-full" style="height:240px;min-height:240px;"></div>
                     </div>
                 </div>
-
-                <!--
-                Charts row 2: Metric by server
-                <div class="grid grid-cols-1 gap-4">
-                    <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] p-5">
-                        <h3 class="text-sm font-bold text-slate-800 mb-1">Trend Analysis by Metric</h3>
-                        <p class="text-xs text-slate-500 mb-2">Select a metric to view the graph across all available servers.</p>
-                        <div class="mb-3">
-                            <select id="dq-grafana-server-select" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-400">
-                                {% for option in dq_grafana_metric_options %}
-                                <option value="{{ option.value }}" {% if option.value == 'connections' %}selected{% endif %}>{{ option.label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div id="dq-grafana-chart-servers" class="w-full" style="height:340px;"></div>
-                    </div>
-                </div>
-                -->
-                {% endif %}
 
                 <!-- Tabular view -->
                 <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col overflow-hidden">
@@ -1540,10 +1520,10 @@
                     <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
                         <h3 class="text-sm font-bold text-slate-800">Flat File Ingestion</h3>
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span id="dq-flatfiles-total-badge" class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold">Total: {{ dq_flatfile_rows|length }}</span>
+                            <span id="dq-flatfiles-total-badge" class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-semibold">Total: 0</span>
                             <nav class="flex items-center gap-1" id="dq-flatfiles-nav" style="display:none;">
                                 <button id="dq-flatfiles-prev" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Prev</button>
-                                <span id="dq-flatfiles-page-label" class="px-2 text-[10px] font-medium text-slate-600">Page 1</span>
+                                <span id="dq-flatfiles-page-label" class="px-2 text-[10px] font-medium text-slate-600">Page 1 of 1</span>
                                 <button id="dq-flatfiles-next" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100">Next</button>
                             </nav>
                             <button id="dq-flatfiles-col-toggle-btn" type="button"
@@ -1554,7 +1534,7 @@
                         </div>
                     </div>
                     <div class="overflow-x-auto p-0 relative bg-white">
-                        <table id="dq-flatfiles-table" class="min-w-full divide-y divide-slate-200 text-left">
+                        <table id="dq-flatfiles-table" class="hidden min-w-full divide-y divide-slate-200 text-left">
                             <thead class="bg-slate-50">
                                 <tr id="dq-flatfiles-head-row"></tr>
                             </thead>
@@ -1562,7 +1542,10 @@
                         </table>
                         <div id="dq-flatfiles-empty" class="hidden p-8 text-center text-slate-400">
                             <p class="text-sm font-semibold text-slate-500">No flat file data available.</p>
-                            <p class="text-xs text-slate-400 mt-1">Upload a flat file to populate CPU utilisation records.</p>
+                            <p class="text-xs text-slate-400 mt-1">Upload a Boone's flat file to populate records.</p>
+                        </div>
+                        <div id="dq-flatfiles-loading" class="p-8 text-center text-slate-400">
+                            <p class="text-sm font-semibold text-slate-500">Loading…</p>
                         </div>
                     </div>
                 </div>
@@ -1654,7 +1637,9 @@
     window.rs3RightsizingApiUrl = "{% url 'optimizer:api_strategy3_rightsizing' %}";
     window.rule1DataApiUrl      = "{% url 'optimizer:api_rule1_data' %}";
     window.rule2DataApiUrl      = "{% url 'optimizer:api_rule2_data' %}";
-    window.usuDataApiUrl        = "{% url 'optimizer:api_oracle_data' %}";
+    window.usuDataApiUrl        = "{% url 'optimizer:api_dq_usu_data' %}";
+    window.grafanaDataApiUrl    = "{% url 'optimizer:api_dq_grafana_data' %}";
+    window.flatfilesApiUrl      = "{% url 'optimizer:api_boones_raw_data' %}";
 </script>
 {{ chart_specs|json_script:"chart-specs-data" }}
 {{ dq_usu_rows|json_script:"dq-usu-data" }}
@@ -1667,8 +1652,7 @@
 {{ dq_grafana_connections_by_server|json_script:"dq-grafana-connections-by-server" }}
 {{ dq_grafana_rollup_summary|json_script:"dq-grafana-rollup-summary" }}
 {{ dq_grafana_metric_names|json_script:"dq-grafana-metric-names" }}
-{{ dq_flatfile_rows|json_script:"dq-flatfile-data" }}
-{{ dq_flatfile_keys|json_script:"dq-flatfile-keys" }}
+{# dq-flatfile-data now fetched via /api/boones-raw-data/ #}
 
 <style>
     .tab-content-panel {
@@ -4632,8 +4616,7 @@
     (function () {
         var DQ_PER_PAGE = 10;
         var dqState = {
-            grafana:  { page: 1, data: [], keys: [] },
-            flatfiles:{ page: 1, data: [], keys: [] },
+            grafana: { page: 1, data: [], keys: [] },
         };
 
         function loadDqJson(dataId, keysId) {
@@ -4645,18 +4628,13 @@
             };
         }
 
-        var grafanaLoad  = loadDqJson('dq-grafana-data',  'dq-grafana-keys');
-        var ffLoad       = loadDqJson('dq-flatfile-data', 'dq-flatfile-keys');
+        var grafanaLoad = loadDqJson('dq-grafana-data', 'dq-grafana-keys');
+        dqState.grafana.data = grafanaLoad.data; dqState.grafana.keys = grafanaLoad.keys;
 
-        dqState.grafana.data  = grafanaLoad.data;  dqState.grafana.keys  = grafanaLoad.keys;
-        dqState.flatfiles.data= ffLoad.data;       dqState.flatfiles.keys= ffLoad.keys;
-
-        // ── Per-table sort + column-visibility state ──────────────────────────
+        // ── Per-table sort + column-visibility state (grafana legacy only) ────
         var dqTableState = {
-            grafana:   { sortColIdx: -1, sortOrder: 'asc', sortedData: dqState.grafana.data.slice(),
-                         hiddenCols: (function(){ try { var a=JSON.parse(localStorage.getItem('dqHiddenCols_grafana')||'[]'); return new Set(Array.isArray(a)?a:[]); } catch(e){ return new Set(); } }()) },
-            flatfiles: { sortColIdx: -1, sortOrder: 'asc', sortedData: dqState.flatfiles.data.slice(),
-                         hiddenCols: (function(){ try { var a=JSON.parse(localStorage.getItem('dqHiddenCols_flatfiles')||'[]'); return new Set(Array.isArray(a)?a:[]); } catch(e){ return new Set(); } }()) },
+            grafana: { sortColIdx: -1, sortOrder: 'asc', sortedData: dqState.grafana.data.slice(),
+                       hiddenCols: (function(){ try { var a=JSON.parse(localStorage.getItem('dqHiddenCols_grafana')||'[]'); return new Set(Array.isArray(a)?a:[]); } catch(e){ return new Set(); } }()) },
         };
 
         function saveDqHiddenCols(name) {
@@ -4814,11 +4792,12 @@
                 }
             });
             if (name === 'usu') { if (!usuState.loaded) fetchUsuData(); return; }
+            if (name === 'flatfiles') { return; }
             dqRenderTable(name);
         };
 
-        // ── Grafana + Flatfiles: sort, prev/next, column visibility ───────────
-        ['grafana', 'flatfiles'].forEach(function (name) {
+        // ── Grafana (legacy shared sort/col loop — flatfiles now API-driven) ──
+        ['grafana'].forEach(function (name) {
             var headRow   = document.getElementById('dq-' + name + '-head-row');
             var prevBtn   = document.getElementById('dq-' + name + '-prev');
             var nextBtn   = document.getElementById('dq-' + name + '-next');
@@ -4906,7 +4885,7 @@
             { key: 'product_description', label: 'Product Description', sortable: true },
             { key: 'product_edition',     label: 'Product Edition',    sortable: true },
             { key: 'manufacturer',        label: 'Manufacturer',       sortable: true },
-            { key: 'install_status',      label: 'Device Status',      sortable: true },
+            { key: 'device_status',       label: 'Device Status',      sortable: true },
             { key: 'inv_status_std_name', label: 'Inventory Status',   sortable: true },
             { key: 'cpu_core_count',      label: 'CPU Cores',          sortable: true },
             { key: 'hosting_zone',        label: 'Hosting Zone',       sortable: true },
@@ -5051,28 +5030,20 @@
             if (usuState.loading) return;
             usuState.loading = true;
 
-            var loadEl = document.getElementById('dq-usu-loading');
+            var loadEl  = document.getElementById('dq-usu-loading');
             var tableEl = document.getElementById('dq-usu-table');
             var emptyEl = document.getElementById('dq-usu-empty');
-            if (loadEl) { loadEl.classList.remove('hidden'); }
+            if (loadEl)  loadEl.classList.remove('hidden');
             if (tableEl) tableEl.classList.add('hidden');
             if (emptyEl) emptyEl.classList.add('hidden');
 
             var url = new URL(usuApiUrl, window.location.origin);
             url.searchParams.set('family', usuState.family);
-            url.searchParams.set('type', 'installations');
-
-            if (usuState.family === 'all') {
-                // Fetch all items in one shot; paginate client-side
-                url.searchParams.set('page', 1);
-                url.searchParams.set('page_size', 500);
-            } else {
-                url.searchParams.set('page', usuState.page);
-                url.searchParams.set('page_size', USU_PER_PAGE);
-                if (usuState.sortField) {
-                    url.searchParams.set('sort_field', usuState.sortField);
-                    url.searchParams.set('sort_order', usuState.sortOrder);
-                }
+            url.searchParams.set('page', 1);
+            url.searchParams.set('page_size', 500);
+            if (usuState.sortField) {
+                url.searchParams.set('sort_field', usuState.sortField);
+                url.searchParams.set('sort_order', usuState.sortOrder);
             }
 
             fetch(url.toString(), {
@@ -5083,20 +5054,19 @@
             .then(function (r) { if (!r.ok) throw new Error('bad'); return r.json(); })
             .then(function (payload) {
                 usuState.loading = false;
-                usuState.loaded = true;
+                usuState.loaded  = true;
                 if (loadEl) loadEl.classList.add('hidden');
 
-                var instData = ((payload.result || {}).installations) || {};
-                var items = instData.items || [];
+                var items = payload.results || [];
 
                 if (usuState.family === 'all') {
                     usuState._allCachedItems = items;
                     usuApplyClientPage();
-                    usuState.total = Number(instData.total || items.length);
+                    usuState.total      = Number(payload.total || items.length);
                     usuState.totalPages = Math.max(1, Math.ceil(usuState.total / USU_PER_PAGE));
                 } else {
                     usuState._allCachedItems = [];
-                    usuState.total      = Number(instData.total || 0);
+                    usuState.total      = Number(payload.total || 0);
                     usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
                     usuState.page       = Number(instData.page || usuState.page);
                     usuState._cachedItems = items;
@@ -5213,11 +5183,526 @@
         // Initial fetch for USU
         fetchUsuData();
 
-        // Initial render
-        dqRenderTable('grafana');
-        dqRenderTable('flatfiles');
+        // ── Grafana API-driven table ──────────────────────────────────────────
+        var GRAFANA_PER_PAGE = 10;
+        var grafanaApiUrl    = window.grafanaDataApiUrl || '';
 
-        // ── Grafana Charts ────────────────────────────────────────────────────
+        var grafanaColDefsSnapshot = [
+            { key: 'server',              label: 'Server',              sortable: true  },
+            { key: 'product_family',      label: 'Product Family',      sortable: false },
+            { key: 'product_name',        label: 'Product Name',        sortable: false },
+            { key: 'product_description', label: 'Product Description', sortable: false },
+            { key: 'dashboard',           label: 'Dashboard',           sortable: true  },
+            { key: 'metric',              label: 'Metric',              sortable: true  },
+            { key: 'value',               label: 'Value',               sortable: true  },
+            { key: 'unit',                label: 'Unit',                sortable: false },
+            { key: 'timestamp',           label: 'Timestamp',           sortable: true  },
+            { key: 'fetched_at',          label: 'Fetched At',          sortable: true  },
+        ];
+        var grafanaColDefsRollup = [
+            { key: 'server',  label: 'Server', sortable: true },
+            { key: 'metric',  label: 'Metric', sortable: true },
+            { key: 'unit',    label: 'Unit',   sortable: false },
+            { key: 'period',  label: 'Period', sortable: true },
+            { key: 'avg',     label: 'Avg',    sortable: true },
+            { key: 'max',     label: 'Max',    sortable: true },
+            { key: 'min',     label: 'Min',    sortable: true },
+            { key: 'samples', label: 'Samples',sortable: true },
+        ];
+        var grafanaColDefs = grafanaColDefsSnapshot;
+
+        var grafanaState = {
+            loaded: false, loading: false,
+            page: 1, total: 0, totalPages: 1,
+            sortField: '', sortOrder: 'desc',
+            _allCachedItems: [], _cachedItems: [],
+            dataType: 'snapshot',
+            hiddenCols: (function () {
+                try { var a = JSON.parse(localStorage.getItem('grafanaHiddenCols') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); }
+            }()),
+        };
+
+        function saveGrafanaHiddenCols() {
+            try { localStorage.setItem('grafanaHiddenCols', JSON.stringify(Array.from(grafanaState.hiddenCols))); } catch (e) {}
+        }
+
+        function grafanaSortIcon(colKey) {
+            if (grafanaState.sortField !== colKey) return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            if (grafanaState.sortOrder === 'asc') return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
+        function renderGrafanaHead() {
+            var headRow = document.getElementById('dq-grafana-head-row');
+            if (!headRow) return;
+            var html = '';
+            for (var i = 0; i < grafanaColDefs.length; i++) {
+                if (grafanaState.hiddenCols.has(i)) continue;
+                var col = grafanaColDefs[i];
+                if (col.sortable) {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50 cursor-pointer">'
+                          + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 grafana-sort-btn" data-sort-key="' + col.key + '">'
+                          + col.label + grafanaSortIcon(col.key) + '</button></th>';
+                } else {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">' + col.label + '</th>';
+                }
+            }
+            headRow.innerHTML = html;
+        }
+
+        function renderGrafanaBody(items) {
+            var tbody   = document.getElementById('dq-grafana-tbody');
+            var tableEl = document.getElementById('dq-grafana-table');
+            var emptyEl = document.getElementById('dq-grafana-empty');
+            var badge   = document.getElementById('dq-grafana-total-badge');
+            var nav     = document.getElementById('dq-grafana-nav');
+            var label   = document.getElementById('dq-grafana-page-label');
+            var prevBtn = document.getElementById('dq-grafana-prev');
+            var nextBtn = document.getElementById('dq-grafana-next');
+            if (!tbody) return;
+
+            var hasRows = items && items.length > 0;
+            if (tableEl) tableEl.classList.toggle('hidden', !hasRows);
+            if (emptyEl) emptyEl.classList.toggle('hidden', hasRows);
+            if (badge)   badge.textContent = 'Total: ' + grafanaState.total;
+            if (nav)     nav.style.display = grafanaState.total > GRAFANA_PER_PAGE ? 'flex' : 'none';
+            if (label)   label.textContent = 'Page ' + grafanaState.page + ' of ' + grafanaState.totalPages;
+            if (prevBtn) { prevBtn.classList.toggle('text-slate-300', grafanaState.page <= 1); prevBtn.classList.toggle('text-slate-700', grafanaState.page > 1); }
+            if (nextBtn) { nextBtn.classList.toggle('text-slate-300', grafanaState.page >= grafanaState.totalPages); nextBtn.classList.toggle('text-slate-700', grafanaState.page < grafanaState.totalPages); }
+
+            if (!hasRows) { tbody.innerHTML = ''; return; }
+            var html = '';
+            for (var i = 0; i < items.length; i++) {
+                var row = items[i];
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
+                for (var j = 0; j < grafanaColDefs.length; j++) {
+                    if (grafanaState.hiddenCols.has(j)) continue;
+                    var val = row[grafanaColDefs[j].key];
+                    var txt = (val == null || val === '') ? '—' : String(val);
+                    var d = document.createElement('div'); d.textContent = txt;
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + d.innerHTML + '</td>';
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        function buildGrafanaColPanel() {
+            var cbsEl = document.getElementById('dq-grafana-col-checkboxes');
+            if (!cbsEl) return;
+            var html = '';
+            for (var i = 0; i < grafanaColDefs.length; i++) {
+                var checked = !grafanaState.hiddenCols.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="grafana-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-col-idx="' + i + '" ' + checked + '>'
+                      + grafanaColDefs[i].label + '</label>';
+            }
+            cbsEl.innerHTML = html;
+        }
+
+        function grafanaApplyClientPage() {
+            grafanaState.totalPages = Math.max(1, Math.ceil(grafanaState._allCachedItems.length / GRAFANA_PER_PAGE));
+            if (grafanaState.page > grafanaState.totalPages) grafanaState.page = grafanaState.totalPages;
+            var start = (grafanaState.page - 1) * GRAFANA_PER_PAGE;
+            grafanaState._cachedItems = grafanaState._allCachedItems.slice(start, start + GRAFANA_PER_PAGE);
+        }
+
+        function fetchGrafanaData() {
+            if (!grafanaApiUrl || typeof fetch !== 'function') return;
+            if (grafanaState.loading) return;
+            grafanaState.loading = true;
+
+            var url = new URL(grafanaApiUrl, window.location.origin);
+            url.searchParams.set('page', 1);
+            url.searchParams.set('page_size', 500);
+            if (grafanaState.sortField) {
+                url.searchParams.set('sort_field', grafanaState.sortField);
+                url.searchParams.set('sort_order', grafanaState.sortOrder);
+            }
+
+            fetch(url.toString(), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+            .then(function (r) { if (!r.ok) throw new Error('bad'); return r.json(); })
+            .then(function (payload) {
+                grafanaState.loading = false;
+                grafanaState.loaded  = true;
+                grafanaState.dataType = payload.data_type || 'snapshot';
+                grafanaColDefs = grafanaState.dataType === 'rollup' ? grafanaColDefsRollup : grafanaColDefsSnapshot;
+
+                grafanaState._allCachedItems = payload.results || [];
+                grafanaState.total = Number(payload.total || grafanaState._allCachedItems.length);
+                grafanaApplyClientPage();
+                renderGrafanaHead();
+                renderGrafanaBody(grafanaState._cachedItems);
+
+                // Rebuild and render charts from the live API data
+                if (typeof window.refreshGrafanaCharts === 'function') {
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () {
+                            window.refreshGrafanaCharts(grafanaState._allCachedItems);
+                        });
+                    });
+                }
+            })
+            .catch(function () {
+                grafanaState.loading = false;
+                var tbody = document.getElementById('dq-grafana-tbody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="' + grafanaColDefs.length + '" class="px-6 py-8 text-center text-sm text-red-400">Failed to load data. Please try again.</td></tr>';
+                var tableEl = document.getElementById('dq-grafana-table');
+                if (tableEl) tableEl.classList.remove('hidden');
+            });
+        }
+
+        // Grafana sort + prev/next + column visibility listeners
+        var grafanaHeadRow = document.getElementById('dq-grafana-head-row');
+        if (grafanaHeadRow) {
+            grafanaHeadRow.addEventListener('click', function (e) {
+                var btn = e.target.closest('.grafana-sort-btn');
+                if (!btn) return;
+                var key = btn.getAttribute('data-sort-key');
+                if (!key) return;
+                if (grafanaState.sortField === key) grafanaState.sortOrder = grafanaState.sortOrder === 'asc' ? 'desc' : 'asc';
+                else { grafanaState.sortField = key; grafanaState.sortOrder = 'asc'; }
+                grafanaState.page = 1;
+                grafanaState._allCachedItems.sort(function (a, b) {
+                    var av = a[key]; var bv = b[key];
+                    if (av == null) return 1; if (bv == null) return -1;
+                    var an = Number(av); var bn = Number(bv);
+                    var dir = grafanaState.sortOrder === 'asc' ? 1 : -1;
+                    if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+                    return String(av).localeCompare(String(bv)) * dir;
+                });
+                grafanaApplyClientPage();
+                renderGrafanaHead();
+                renderGrafanaBody(grafanaState._cachedItems);
+            });
+        }
+        var grafanaPrevBtn = document.getElementById('dq-grafana-prev');
+        var grafanaNextBtn = document.getElementById('dq-grafana-next');
+        if (grafanaPrevBtn) grafanaPrevBtn.addEventListener('click', function () {
+            if (grafanaState.page <= 1) return;
+            grafanaState.page--; grafanaApplyClientPage(); renderGrafanaHead(); renderGrafanaBody(grafanaState._cachedItems);
+        });
+        if (grafanaNextBtn) grafanaNextBtn.addEventListener('click', function () {
+            if (grafanaState.page >= grafanaState.totalPages) return;
+            grafanaState.page++; grafanaApplyClientPage(); renderGrafanaHead(); renderGrafanaBody(grafanaState._cachedItems);
+        });
+        var grafanaColToggleBtn = document.getElementById('dq-grafana-col-toggle-btn');
+        var grafanaColPanel     = document.getElementById('dq-grafana-col-panel');
+        var grafanaColClose     = document.getElementById('dq-grafana-col-panel-close');
+        var grafanaColCbsEl     = document.getElementById('dq-grafana-col-checkboxes');
+        if (grafanaColToggleBtn && grafanaColPanel) {
+            grafanaColToggleBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var opening = grafanaColPanel.classList.contains('hidden');
+                grafanaColPanel.classList.toggle('hidden');
+                if (opening) {
+                    buildGrafanaColPanel();
+                    var rect = grafanaColToggleBtn.getBoundingClientRect();
+                    grafanaColPanel.style.top  = (rect.bottom + 6) + 'px';
+                    grafanaColPanel.style.left  = Math.max(8, rect.right - 228) + 'px';
+                    grafanaColPanel.style.right = 'auto';
+                }
+            });
+        }
+        if (grafanaColClose && grafanaColPanel) grafanaColClose.addEventListener('click', function () { grafanaColPanel.classList.add('hidden'); });
+        if (grafanaColCbsEl) {
+            grafanaColCbsEl.addEventListener('change', function (e) {
+                var cb = e.target.closest('.grafana-col-cb');
+                if (!cb) return;
+                var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                if (isNaN(idx)) return;
+                if (cb.checked) grafanaState.hiddenCols.delete(idx); else grafanaState.hiddenCols.add(idx);
+                saveGrafanaHiddenCols();
+                renderGrafanaHead(); renderGrafanaBody(grafanaState._cachedItems || []); buildGrafanaColPanel();
+            });
+        }
+
+        // ── Flat Files API-driven table ───────────────────────────────────────
+        var FF_PER_PAGE     = 10;
+        var flatfilesApiUrl = window.flatfilesApiUrl || '';
+
+        var ffColDefs = [
+            { key: 'Server Name',      label: 'Server Name',      sortable: true  },
+            { key: 'Platform / Class', label: 'Platform / Class', sortable: true  },
+            { key: 'Hosting Zone',     label: 'Hosting Zone',     sortable: true  },
+            { key: 'Environment type', label: 'Environment',      sortable: true  },
+            { key: 'Location',         label: 'Location',         sortable: true  },
+            { key: 'Criticality',      label: 'Criticality',      sortable: true  },
+            { key: 'Installed Status', label: 'Installed Status', sortable: true  },
+            { key: 'Is Virtual?',      label: 'Is Virtual',       sortable: false },
+            { key: '__ingested_at',    label: 'Ingested At',      sortable: true  },
+        ];
+
+        var ffState = {
+            loaded: false, loading: false,
+            page: 1, total: 0, totalPages: 1,
+            sortField: '', sortOrder: 'desc',
+            _allCachedItems: [], _cachedItems: [],
+            hiddenCols: (function () {
+                try { var a = JSON.parse(localStorage.getItem('ffHiddenCols') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); }
+            }()),
+        };
+
+        function saveFfHiddenCols() {
+            try { localStorage.setItem('ffHiddenCols', JSON.stringify(Array.from(ffState.hiddenCols))); } catch (e) {}
+        }
+
+        function ffEsc(s) {
+            var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML;
+        }
+
+        function ffSortIcon(colKey) {
+            if (ffState.sortField !== colKey) return '<svg class="w-3 h-3 text-slate-300 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4zm0 12L2 9h6l-3 4z"/></svg>';
+            if (ffState.sortOrder === 'asc') return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z"/><path d="M5 13L2 9h6l-3 4z" opacity=".3"/></svg>';
+            return '<svg class="w-3 h-3 text-teal-500 flex-shrink-0" viewBox="0 0 10 14" fill="currentColor"><path d="M5 1l3 4H2l3-4z" opacity=".3"/><path d="M5 13L2 9h6l-3 4z"/></svg>';
+        }
+
+        function ffApplyClientPage() {
+            var items = ffState._allCachedItems;
+            if (ffState.sortField) {
+                var key = ffState.sortField;
+                var dir = ffState.sortOrder === 'asc' ? 1 : -1;
+                items = items.slice().sort(function (a, b) {
+                    var av = a[key]; var bv = b[key];
+                    if (av == null) return 1; if (bv == null) return -1;
+                    var an = Number(av); var bn = Number(bv);
+                    if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+                    return String(av).localeCompare(String(bv)) * dir;
+                });
+            }
+            ffState.total      = items.length;
+            ffState.totalPages = Math.max(1, Math.ceil(items.length / FF_PER_PAGE));
+            if (ffState.page > ffState.totalPages) ffState.page = ffState.totalPages;
+            var start = (ffState.page - 1) * FF_PER_PAGE;
+            ffState._cachedItems = items.slice(start, start + FF_PER_PAGE);
+        }
+
+        function renderFfHead() {
+            var headRow = document.getElementById('dq-flatfiles-head-row');
+            if (!headRow) return;
+            var html = '';
+            for (var i = 0; i < ffColDefs.length; i++) {
+                if (ffState.hiddenCols.has(i)) continue;
+                var col = ffColDefs[i];
+                if (col.sortable) {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50 cursor-pointer">'
+                          + '<button type="button" class="inline-flex items-center gap-1 hover:text-slate-700 ff-sort-btn" data-sort-key="' + ffEsc(col.key) + '">'
+                          + ffEsc(col.label) + ffSortIcon(col.key)
+                          + '</button></th>';
+                } else {
+                    html += '<th class="px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.12em] whitespace-nowrap bg-slate-50">'
+                          + ffEsc(col.label) + '</th>';
+                }
+            }
+            headRow.innerHTML = html;
+        }
+
+        function renderFfBody(items) {
+            var tbody  = document.getElementById('dq-flatfiles-tbody');
+            var tableEl = document.getElementById('dq-flatfiles-table');
+            var emptyEl = document.getElementById('dq-flatfiles-empty');
+            var badge  = document.getElementById('dq-flatfiles-total-badge');
+            var nav    = document.getElementById('dq-flatfiles-nav');
+            var label  = document.getElementById('dq-flatfiles-page-label');
+            var prevBtn = document.getElementById('dq-flatfiles-prev');
+            var nextBtn = document.getElementById('dq-flatfiles-next');
+            if (!tbody) return;
+
+            if (badge) badge.textContent = 'Total: ' + ffState.total;
+            if (nav)   nav.style.display = ffState.total > FF_PER_PAGE ? 'flex' : 'none';
+            if (label) label.textContent = 'Page ' + ffState.page + ' of ' + ffState.totalPages;
+            if (prevBtn) { prevBtn.classList.toggle('opacity-40', ffState.page <= 1); prevBtn.classList.toggle('pointer-events-none', ffState.page <= 1); }
+            if (nextBtn) { nextBtn.classList.toggle('opacity-40', ffState.page >= ffState.totalPages); nextBtn.classList.toggle('pointer-events-none', ffState.page >= ffState.totalPages); }
+
+            if (tableEl) tableEl.classList.toggle('hidden', items.length === 0);
+            if (emptyEl) emptyEl.classList.toggle('hidden', items.length > 0);
+
+            var visibleCols = ffColDefs.filter(function (_, i) { return !ffState.hiddenCols.has(i); });
+            var html = '';
+            for (var i = 0; i < items.length; i++) {
+                var row = items[i];
+                html += '<tr class="hover:bg-sky-50/60 transition-colors">';
+                for (var j = 0; j < ffColDefs.length; j++) {
+                    if (ffState.hiddenCols.has(j)) continue;
+                    var v = row[ffColDefs[j].key];
+                    var txt;
+                    if (v === null || v === undefined || v === '') {
+                        txt = '—';
+                    } else if (ffColDefs[j].key === '__ingested_at') {
+                        txt = String(v).replace('T', ' ').substring(0, 16);
+                    } else {
+                        txt = String(v);
+                    }
+                    var d = document.createElement('div'); d.textContent = txt;
+                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + d.innerHTML + '</td>';
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html || '<tr><td colspan="' + visibleCols.length + '" class="px-6 py-8 text-center text-sm text-slate-400">No data available.</td></tr>';
+        }
+
+        function buildFfColPanel() {
+            var cbsEl = document.getElementById('dq-flatfiles-col-checkboxes');
+            if (!cbsEl) return;
+            var html = '';
+            for (var i = 0; i < ffColDefs.length; i++) {
+                var checked = !ffState.hiddenCols.has(i) ? 'checked' : '';
+                html += '<label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-50 cursor-pointer text-xs text-slate-700">'
+                      + '<input type="checkbox" class="ff-col-cb rounded border-slate-300 text-teal-600 focus:ring-teal-500" data-col-idx="' + i + '" ' + checked + '>'
+                      + ffEsc(ffColDefs[i].label) + '</label>';
+            }
+            cbsEl.innerHTML = html || '<p class="px-2 text-xs text-slate-400">No columns</p>';
+        }
+
+        function updateFfPaginationUI() {
+            var badge  = document.getElementById('dq-flatfiles-total-badge');
+            var nav    = document.getElementById('dq-flatfiles-nav');
+            var label  = document.getElementById('dq-flatfiles-page-label');
+            var prevBtn = document.getElementById('dq-flatfiles-prev');
+            var nextBtn = document.getElementById('dq-flatfiles-next');
+            if (badge) badge.textContent = 'Total: ' + ffState.total;
+            if (nav)   nav.style.display = ffState.total > FF_PER_PAGE ? 'flex' : 'none';
+            if (label) label.textContent = 'Page ' + ffState.page + ' of ' + ffState.totalPages;
+            if (prevBtn) { prevBtn.classList.toggle('opacity-40', ffState.page <= 1); prevBtn.classList.toggle('pointer-events-none', ffState.page <= 1); }
+            if (nextBtn) { nextBtn.classList.toggle('opacity-40', ffState.page >= ffState.totalPages); nextBtn.classList.toggle('pointer-events-none', ffState.page >= ffState.totalPages); }
+        }
+
+        function fetchFlatfilesData() {
+            if (!flatfilesApiUrl || typeof fetch !== 'function') return;
+            if (ffState.loading) return;
+            ffState.loading = true;
+
+            var loadEl  = document.getElementById('dq-flatfiles-loading');
+            var tableEl = document.getElementById('dq-flatfiles-table');
+            var emptyEl = document.getElementById('dq-flatfiles-empty');
+            if (loadEl)  loadEl.classList.remove('hidden');
+            if (tableEl) tableEl.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
+
+            var url = new URL(flatfilesApiUrl, window.location.origin);
+            url.searchParams.set('page', 1);
+            url.searchParams.set('page_size', 500);
+
+            fetch(url.toString(), {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+            .then(function (r) { if (!r.ok) throw new Error('bad'); return r.json(); })
+            .then(function (payload) {
+                ffState.loading = false;
+                ffState.loaded  = true;
+                if (loadEl) loadEl.classList.add('hidden');
+
+                // Flatten row_data into each item so ffColDefs keys resolve directly
+                ffState._allCachedItems = (payload.results || []).map(function (r) {
+                    var flat = Object.assign({}, r.row_data || {});
+                    flat.__ingested_at = r.ingested_at || '';
+                    flat.__id          = r.id || '';
+                    return flat;
+                });
+                ffApplyClientPage();
+                renderFfHead();
+                renderFfBody(ffState._cachedItems);
+                updateFfPaginationUI();
+            })
+            .catch(function () {
+                ffState.loading = false;
+                if (loadEl) loadEl.classList.add('hidden');
+                var tbody = document.getElementById('dq-flatfiles-tbody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="' + ffColDefs.length + '" class="px-6 py-8 text-center text-sm text-red-400">Failed to load data. Please try again.</td></tr>';
+                var tableEl2 = document.getElementById('dq-flatfiles-table');
+                if (tableEl2) tableEl2.classList.remove('hidden');
+            });
+        }
+
+        // ── Flat Files event listeners ─────────────────────────────────────────
+        var ffHeadRow = document.getElementById('dq-flatfiles-head-row');
+        if (ffHeadRow) {
+            ffHeadRow.addEventListener('click', function (e) {
+                var btn = e.target.closest('.ff-sort-btn');
+                if (!btn) return;
+                var key = btn.getAttribute('data-sort-key');
+                if (!key) return;
+                if (ffState.sortField === key) ffState.sortOrder = ffState.sortOrder === 'asc' ? 'desc' : 'asc';
+                else { ffState.sortField = key; ffState.sortOrder = 'asc'; }
+                ffState.page = 1;
+                ffApplyClientPage();
+                renderFfHead();
+                renderFfBody(ffState._cachedItems);
+                updateFfPaginationUI();
+            });
+        }
+
+        var ffPrevBtn = document.getElementById('dq-flatfiles-prev');
+        var ffNextBtn = document.getElementById('dq-flatfiles-next');
+        if (ffPrevBtn) ffPrevBtn.addEventListener('click', function () {
+            if (ffState.page <= 1) return;
+            ffState.page--;
+            ffApplyClientPage();
+            renderFfHead();
+            renderFfBody(ffState._cachedItems);
+            updateFfPaginationUI();
+        });
+        if (ffNextBtn) ffNextBtn.addEventListener('click', function () {
+            if (ffState.page >= ffState.totalPages) return;
+            ffState.page++;
+            ffApplyClientPage();
+            renderFfHead();
+            renderFfBody(ffState._cachedItems);
+            updateFfPaginationUI();
+        });
+
+        var ffColToggleBtn  = document.getElementById('dq-flatfiles-col-toggle-btn');
+        var ffColPanel      = document.getElementById('dq-flatfiles-col-panel');
+        var ffColPanelClose = document.getElementById('dq-flatfiles-col-panel-close');
+        var ffColCbsEl      = document.getElementById('dq-flatfiles-col-checkboxes');
+
+        if (ffColToggleBtn && ffColPanel) {
+            ffColToggleBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var opening = ffColPanel.classList.contains('hidden');
+                ffColPanel.classList.toggle('hidden');
+                if (opening) {
+                    buildFfColPanel();
+                    var rect   = ffColToggleBtn.getBoundingClientRect();
+                    var panelW = 228;
+                    var topVal  = rect.bottom + 6;
+                    var leftVal = rect.right - panelW;
+                    if (leftVal < 8) leftVal = 8;
+                    if (leftVal + panelW > window.innerWidth - 8) leftVal = window.innerWidth - panelW - 8;
+                    ffColPanel.style.top  = topVal + 'px';
+                    ffColPanel.style.left = leftVal + 'px';
+                    ffColPanel.style.right = 'auto';
+                }
+            });
+        }
+        if (ffColPanelClose && ffColPanel) ffColPanelClose.addEventListener('click', function () { ffColPanel.classList.add('hidden'); });
+        document.addEventListener('click', function (e) {
+            if (!ffColPanel || ffColPanel.classList.contains('hidden')) return;
+            if (!ffColPanel.contains(e.target) && (!ffColToggleBtn || !ffColToggleBtn.contains(e.target))) ffColPanel.classList.add('hidden');
+        });
+        if (ffColCbsEl) {
+            ffColCbsEl.addEventListener('change', function (e) {
+                var cb = e.target.closest('.ff-col-cb');
+                if (!cb) return;
+                var idx = parseInt(cb.getAttribute('data-col-idx'), 10);
+                if (isNaN(idx)) return;
+                if (cb.checked) ffState.hiddenCols.delete(idx); else ffState.hiddenCols.add(idx);
+                saveFfHiddenCols();
+                renderFfHead();
+                renderFfBody(ffState._cachedItems || []);
+                buildFfColPanel();
+            });
+        }
+
+        // ── Grafana Charts (lazy-init on first sub-tab activation) ───────────
+        var grafanaChartsInited = false;
+
         (function () {
             if (typeof Plotly === 'undefined') return;
 
@@ -5228,22 +5713,16 @@
 
             function formatMetricLabel(metric) {
                 if (!metric) return '';
-                if (metric === 'database_size_mib') return 'Database Size Mmib';
-                return String(metric)
-                    .split('_')
-                    .filter(Boolean)
-                    .map(function(part) {
-                        return part.charAt(0).toUpperCase() + part.slice(1);
-                    })
+                if (metric === 'database_size_mib') return 'Database Size MiB';
+                return String(metric).split('_').filter(Boolean)
+                    .map(function (p) { return p.charAt(0).toUpperCase() + p.slice(1); })
                     .join(' ');
             }
 
-            var metricAvg    = parseEl('dq-grafana-metric-avg')    || [];
-            var timeline     = parseEl('dq-grafana-timeline')       || {};
-            var topServers   = parseEl('dq-grafana-top-servers')    || {};
-            var connectionsByServer = parseEl('dq-grafana-connections-by-server') || [];
-            var rollupSumm   = parseEl('dq-grafana-rollup-summary') || [];
-            var metricNames  = parseEl('dq-grafana-metric-names')   || [];
+            var metricAvg   = parseEl('dq-grafana-metric-avg')              || [];
+            var timeline    = parseEl('dq-grafana-timeline')                 || {};
+            var topServers  = parseEl('dq-grafana-top-servers')              || {};
+            var metricNames = parseEl('dq-grafana-metric-names')             || [];
 
             var baseLayout = {
                 paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
@@ -5251,45 +5730,48 @@
                 margin: { l: 52, r: 20, t: 36, b: 80 },
                 xaxis: { automargin: true, tickfont: { size: 10 }, gridcolor: '#f1f5f9', linecolor: '#e2e8f0', zeroline: false, tickangle: -30 },
                 yaxis: { automargin: true, tickfont: { size: 10 }, gridcolor: '#f1f5f9', linecolor: '#e2e8f0', zeroline: false },
-                legend: { orientation: 'h', y: 1.12, x: 0, font: { size: 10 }, bgcolor: 'rgba(0,0,0,0)' },
-                showlegend: true,
+                showlegend: false,
             };
             var cfg = { responsive: true, displayModeBar: false, displaylogo: false, staticPlot: true };
 
-            // Chart 1 — Avg value per metric (bar, log scale, peak highlighted)
-            var avgEl = document.getElementById('dq-grafana-chart-avg');
-            if (avgEl && metricAvg.length) {
-                var labels  = metricAvg.map(function(d) { return d.metric; });
-                var vals    = metricAvg.map(function(d) { return d.avg || d.avg_value || 0; });
-                var maxAvg  = Math.max.apply(null, vals);
-                var barColors = vals.map(function(v) { return v === maxAvg ? '#84CC16' : '#0EA5E9'; });
+            var timelineEl  = document.getElementById('dq-grafana-chart-timeline');
+            var timelineSel = document.getElementById('dq-grafana-timeline-select');
+            var serverChartEl = document.getElementById('dq-grafana-chart-servers');
+            var serverSel   = document.getElementById('dq-grafana-server-select');
+
+            function renderAvgChart() {
+                var avgEl = document.getElementById('dq-grafana-chart-avg');
+                if (!avgEl) return;
+                if (!metricAvg.length) {
+                    Plotly.newPlot(avgEl, [], Object.assign({}, baseLayout, {
+                        title: { text: 'No metric data available', font: { size: 12, color: '#94a3b8' } },
+                        annotations: [{ text: 'No Grafana metric data ingested yet.', showarrow: false, font: { size: 13, color: '#94a3b8' }, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5 }],
+                    }), cfg);
+                    return;
+                }
+                var labels = metricAvg.map(function (d) { return d.metric; });
+                var vals   = metricAvg.map(function (d) { return d.avg || d.avg_value || 0; });
+                var maxAvg = Math.max.apply(null, vals);
                 Plotly.newPlot(avgEl, [{
                     x: labels, y: vals, type: 'bar', name: 'Avg Value',
-                    marker: { color: barColors },
+                    marker: { color: vals.map(function (v) { return v === maxAvg ? '#84CC16' : '#0EA5E9'; }) },
                     hovertemplate: '<b>%{x}</b><br>Avg: %{y:.4f}<extra></extra>',
                 }], Object.assign({}, baseLayout, {
                     title: { text: 'Average Value per Metric', font: { size: 12, color: '#0f172a' } },
                     bargap: 0.6,
                     yaxis: { type: 'log', automargin: true, tickfont: { size: 10 }, gridcolor: '#f1f5f9', linecolor: '#e2e8f0', zeroline: false },
-                    showlegend: false,
                 }), cfg);
             }
 
-            // Chart 2 — Timeline (line chart per selected metric)
-            var timelineEl = document.getElementById('dq-grafana-chart-timeline');
-            var timelineSel = document.getElementById('dq-grafana-timeline-select');
-            
-
-            var timelineCfg = { responsive: true, displayModeBar: false, displaylogo: false, staticPlot: true };
-
             function renderTimeline(metric) {
                 if (!timelineEl) return;
-                var d = timeline[metric];
+                var d = metric ? timeline[metric] : null;
                 if (!d || !d.x || !d.x.length) {
                     Plotly.newPlot(timelineEl, [], Object.assign({}, baseLayout, {
-                        title: { text: 'No data for: ' + formatMetricLabel(metric), font: { size: 12, color: '#64748b' } },
+                        title: { text: metric ? 'No data for: ' + formatMetricLabel(metric) : 'No metric data available', font: { size: 12, color: '#94a3b8' } },
+                        annotations: metric ? [] : [{ text: 'No Grafana metric data ingested yet.', showarrow: false, font: { size: 13, color: '#94a3b8' }, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5 }],
                         margin: { l: 52, r: 20, t: 36, b: 60 },
-                    }), timelineCfg);
+                    }), cfg);
                     return;
                 }
                 Plotly.newPlot(timelineEl, [{
@@ -5298,93 +5780,164 @@
                     marker: { size: 5, color: '#0EA5E9' },
                     hovertemplate: '<b>%{x}</b><br>Value: %{y:.4f}<extra></extra>',
                 }], Object.assign({}, baseLayout, {
-                    title: { text: formatMetricLabel(metric) + ' - Over Time', font: { size: 12, color: '#0f172a' } },
+                    title: { text: formatMetricLabel(metric) + ' — Over Time', font: { size: 12, color: '#0f172a' } },
                     margin: { l: 52, r: 20, t: 36, b: 60 },
-                    showlegend: false,
-                }), timelineCfg);
-            }
-
-            if (metricNames.length) {
-                renderTimeline(metricNames[0]);
-                if (timelineSel) {
-                    timelineSel.addEventListener('change', function () { renderTimeline(this.value); });
-                }
-            }
-
-            // Chart 3 — Top servers horizontal bar
-
-            var serverChartEl = document.getElementById('dq-grafana-chart-servers');
-            var serverSel = document.getElementById('dq-grafana-server-select');
-
-            function renderServersByMetric(metric) {
-                if (!serverChartEl) return;
-                var rows = topServers[metric] || [];
-                if (!rows.length) {
-                    Plotly.newPlot(serverChartEl, [], Object.assign({}, baseLayout, {
-                        title: { text: 'No server data available for ' + formatMetricLabel(metric), font: { size: 12, color: '#64748b' } },
-                        margin: { l: 140, r: 20, t: 36, b: 40 },
-                    }), cfg);
-                    return;
-                }
-                var servers = rows.map(function(r){ return r.server || 'Unknown'; });
-                var avgs = rows.map(function(r){
-                    var value = Number(r.avg);
-                    return isNaN(value) ? 0 : value;
-                });
-                var barColors = ['#0ea5e9','#14b8a6','#84CC16','#38bdf8','#34d399','#10b981','#06b6d4','#4ade80','#0284c7','#16a34a'];
-                Plotly.newPlot(serverChartEl, [{
-                    x: servers, y: avgs, type: 'bar', name: 'Avg',
-                    marker: {
-                        color: servers.map(function(_, i){ return barColors[i % barColors.length]; }),
-                        line: { color: '#ffffff', width: 1.2 }
-                    },
-                    text: avgs.map(function(v){ return v.toFixed(4); }),
-                    textposition: 'outside',
-                    cliponaxis: false,
-                    hovertemplate: '<b>%{x}</b><br>Avg: %{y:.4f}<extra></extra>',
-                }], Object.assign({}, baseLayout, {
-                    title: { text: 'Trend Analysis - ' + formatMetricLabel(metric) + ' by Server', font: { size: 12, color: '#0f172a' } },
-                    margin: { l: 60, r: 20, t: 44, b: 110 },
-                    xaxis: Object.assign({}, baseLayout.xaxis, {
-                        type: 'category',
-                        tickangle: -25,
-                        title: { text: 'Server' },
-                        categoryorder: 'array',
-                        categoryarray: servers
-                    }),
-                    yaxis: Object.assign({}, baseLayout.yaxis, {
-                        automargin: true,
-                        title: { text: metric === 'connections' ? 'Connections Count' : 'Avg Value' }
-                    }),
-                    showlegend: false,
                 }), cfg);
             }
 
-            var defaultServerMetric = topServers.connections ? 'connections' : (metricNames[0] || null);
-            if (defaultServerMetric) {
-                renderServersByMetric(defaultServerMetric);
-                if (serverSel) {
-                    serverSel.value = defaultServerMetric;
-                    serverSel.addEventListener('change', function () { renderServersByMetric(this.value); });
+            function renderServersByMetric(metric) {
+                if (!serverChartEl) return;
+                var rows = metric ? (topServers[metric] || []) : [];
+                if (!rows.length) {
+                    Plotly.newPlot(serverChartEl, [], Object.assign({}, baseLayout, {
+                        title: { text: metric ? 'No server data for ' + formatMetricLabel(metric) : 'No metric data available', font: { size: 12, color: '#94a3b8' } },
+                        annotations: metric ? [] : [{ text: 'No Grafana metric data ingested yet.', showarrow: false, font: { size: 13, color: '#94a3b8' }, xref: 'paper', yref: 'paper', x: 0.5, y: 0.5 }],
+                        margin: { l: 60, r: 20, t: 36, b: 40 },
+                    }), cfg);
+                    return;
                 }
+                var servers = rows.map(function (r) { return r.server || 'Unknown'; });
+                var avgs    = rows.map(function (r) { var v = Number(r.avg); return isNaN(v) ? 0 : v; });
+                var palette = ['#0ea5e9','#14b8a6','#84CC16','#38bdf8','#34d399','#10b981','#06b6d4','#4ade80','#0284c7','#16a34a'];
+                Plotly.newPlot(serverChartEl, [{
+                    x: servers, y: avgs, type: 'bar', name: 'Avg',
+                    marker: { color: servers.map(function (_, i) { return palette[i % palette.length]; }), line: { color: '#fff', width: 1.2 } },
+                    text: avgs.map(function (v) { return v.toFixed(4); }),
+                    textposition: 'outside', cliponaxis: false,
+                    hovertemplate: '<b>%{x}</b><br>Avg: %{y:.4f}<extra></extra>',
+                }], Object.assign({}, baseLayout, {
+                    title: { text: 'Trend Analysis — ' + formatMetricLabel(metric) + ' by Server', font: { size: 12, color: '#0f172a' } },
+                    margin: { l: 60, r: 20, t: 44, b: 110 },
+                    xaxis: Object.assign({}, baseLayout.xaxis, { type: 'category', tickangle: -25, title: { text: 'Server' }, categoryorder: 'array', categoryarray: servers }),
+                    yaxis: Object.assign({}, baseLayout.yaxis, { automargin: true, title: { text: metric === 'connections' ? 'Connections Count' : 'Avg Value' } }),
+                }), cfg);
             }
 
-            // Chart 4 — Avg/Max/Min grouped bar (rollup) or value spread (snapshot)
+            // Attach dropdown listeners once (safe to call before/after init)
+            if (timelineSel) {
+                timelineSel.addEventListener('change', function () { renderTimeline(this.value); });
+            }
+            if (serverSel) {
+                serverSel.addEventListener('change', function () { renderServersByMetric(this.value); });
+            }
 
-            // Re-render charts when the dataquality tab becomes active
-            var origSetTab = window.setOptimizerTab;
-            window.setOptimizerTab = function(tabId) {
-                origSetTab(tabId);
-                if (tabId === 'dataquality') {
-                    setTimeout(function() {
-                        ['dq-grafana-chart-avg','dq-grafana-chart-timeline','dq-grafana-chart-servers'].forEach(function(id) {
+            var CHART_IDS = ['dq-grafana-chart-avg', 'dq-grafana-chart-timeline', 'dq-grafana-chart-servers'];
+
+            // Called on first Grafana sub-tab activation — panel is now visible
+            window.initGrafanaCharts = function () {
+                if (grafanaChartsInited) {
+                    // Already plotted — just resize to fit the now-visible container
+                    CHART_IDS.forEach(function (id) {
+                        var el = document.getElementById(id);
+                        if (el && el.data) Plotly.Plots.resize(el);
+                    });
+                    return;
+                }
+                // Data fetch in progress — refreshGrafanaCharts will render once it completes
+                if (typeof grafanaState !== 'undefined' && grafanaState.loading) return;
+                grafanaChartsInited = true;
+
+                renderAvgChart();
+
+                var firstMetric = metricNames.length ? metricNames[0] : null;
+                // Always render timeline — shows "no data" placeholder when metric list is empty
+                renderTimeline(firstMetric || '');
+                if (firstMetric && timelineSel && !timelineSel.value) timelineSel.value = firstMetric;
+
+                var defaultServerMetric = topServers['connections'] ? 'connections' : firstMetric;
+                if (defaultServerMetric) {
+                    renderServersByMetric(defaultServerMetric);
+                    if (serverSel) serverSel.value = defaultServerMetric;
+                } else {
+                    renderServersByMetric('');
+                }
+            };
+
+            // Recompute chart data from API rows and re-render all charts
+            window.refreshGrafanaCharts = function (rows) {
+                var sumMap = {}, countMap = {}, unitMap = {}, tlMap = {}, srvMap = {};
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    var mn = r.metric || 'unknown';
+                    var v  = parseFloat(r.value);
+                    if (isNaN(v)) continue;
+                    sumMap[mn]   = (sumMap[mn]   || 0) + v;
+                    countMap[mn] = (countMap[mn] || 0) + 1;
+                    if (r.unit) unitMap[mn] = r.unit;
+                    var ts = r.timestamp || '';
+                    if (!tlMap[mn])       tlMap[mn] = {};
+                    if (!tlMap[mn][ts])   tlMap[mn][ts] = [];
+                    tlMap[mn][ts].push(v);
+                    var sn = r.server || 'Unknown';
+                    if (!srvMap[mn])      srvMap[mn] = {};
+                    if (!srvMap[mn][sn])  srvMap[mn][sn] = [];
+                    srvMap[mn][sn].push(v);
+                }
+
+                metricAvg = Object.keys(sumMap).sort().map(function (mn) {
+                    return { metric: mn, avg: Math.round(sumMap[mn] / countMap[mn] * 10000) / 10000, unit: unitMap[mn] || '' };
+                });
+
+                timeline = {};
+                Object.keys(tlMap).forEach(function (mn) {
+                    var pts = Object.keys(tlMap[mn]).sort().map(function (ts) {
+                        var vals = tlMap[mn][ts];
+                        return [ts, Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length * 10000) / 10000];
+                    });
+                    timeline[mn] = { x: pts.map(function (p) { return p[0]; }), y: pts.map(function (p) { return p[1]; }) };
+                });
+
+                topServers = {};
+                Object.keys(srvMap).forEach(function (mn) {
+                    topServers[mn] = Object.keys(srvMap[mn]).map(function (sn) {
+                        var vals = srvMap[mn][sn];
+                        return { server: sn, avg: Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length * 10000) / 10000 };
+                    }).sort(function (a, b) { return b.avg - a.avg; });
+                });
+
+                metricNames = Object.keys(topServers).sort();
+
+                // Repopulate the timeline dropdown with computed metric names
+                if (timelineSel) {
+                    timelineSel.innerHTML = metricNames.map(function (mn) {
+                        return '<option value="' + mn + '">' + formatMetricLabel(mn) + '</option>';
+                    }).join('') || '<option value="">No metrics</option>';
+                }
+
+                grafanaChartsInited = false;
+                window.initGrafanaCharts();
+            };
+
+            // Re-resize when the top-level Data Quality tab is shown
+            var origSetOptimizerTab = window.setOptimizerTab;
+            window.setOptimizerTab = function (tabId) {
+                origSetOptimizerTab(tabId);
+                if (tabId === 'dataquality' && grafanaChartsInited) {
+                    setTimeout(function () {
+                        CHART_IDS.forEach(function (id) {
                             var el = document.getElementById(id);
                             if (el && el.data) Plotly.Plots.resize(el);
                         });
-                    }, 100);
+                    }, 120);
                 }
             };
-        })();
+        }());
+
+        // Override setDqTab to lazy-load table data AND init charts on first activation
+        var _origSetDqTab = window.setDqTab;
+        window.setDqTab = function (name) {
+            _origSetDqTab(name);
+            if (name === 'grafana') {
+                if (!grafanaState.loaded) fetchGrafanaData();
+                // Defer chart init until browser has fully painted the now-visible panel
+                requestAnimationFrame(function () {
+                    requestAnimationFrame(function () {
+                        if (typeof window.initGrafanaCharts === 'function') window.initGrafanaCharts();
+                    });
+                });
+            }
+            if (name === 'flatfiles' && !ffState.loaded) fetchFlatfilesData();
+        };
     })();
 
     /* ── Fixed-position orange tooltip (escapes overflow:hidden parents) ── */

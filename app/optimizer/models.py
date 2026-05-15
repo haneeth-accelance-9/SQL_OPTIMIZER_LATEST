@@ -273,6 +273,176 @@ class CPUUtilisation(TenantAwareModel):
 
 
 # ─────────────────────────────────────────────────────────────────
+# 6. Boone's Raw Row  (complete flat-file snapshot, one row per server per upload)
+# ─────────────────────────────────────────────────────────────────
+
+class BoonesRawRow(models.Model):
+    """
+    Stores one complete row from a Boone's file upload.
+    All file columns (headers as keys, cell values as values) are stored in
+    row_data JSON exactly as they appear in the file — no schema change needed
+    when the file format evolves.
+
+    row_data JSON keys (xx = last two digits of year, dynamic):
+    {
+      # Fixed metadata (10)
+      "Number": "1234",
+      "Server Name": "SRV-001",
+      "Is Virtual?": "Yes",
+      "Cluster Name": "CLUSTER-A",
+      "Criticality": "High",
+      "Environment type": "Production",
+      "Hosting Zone": "Zone-1",
+      "Installed Status": "Active",
+      "Location": "Frankfurt",
+      "Platform / Class": "Physical",
+
+      # Logical CPU — Apr-xx to Mar-xx (12 months)
+      "Logical CPU Apr-xx": 8, "Logical CPU May-xx": 8, "Logical CPU June-xx": 8,
+      "Logical CPU July-xx": 8, "Logical CPU Aug-xx": 8, "Logical CPU Sept-xx": 8,
+      "Logical CPU Oct-xx": 8, "Logical CPU Nov-xx": 8, "Logical CPU Dec-xx": 8,
+      "Logical CPU Jan -xx": 8, "Logical CPU Feb -xx": 8, "Logical CPU Mar -xx": 8,
+
+      # Average CPU Utilisation (%) — Apr-xx to Mar-xx (12 months)
+      "Average CPU Utilisation (%) - Apr-xx": 12.5, "Average CPU Utilisation (%) - May-xx": 13.0,
+      "Average CPU Utilisation (%) - June-xx": 11.2, "Average CPU Utilisation (%) - July-xx": 14.1,
+      "Average CPU Utilisation (%) - Aug-xx": 15.3, "Average CPU Utilisation (%) - Sept-xx": 10.8,
+      "Average CPU Utilisation (%) - Oct-xx": 12.0, "Average CPU Utilisation (%) - Nov-xx": 11.5,
+      "Average CPU Utilisation (%) - Dec-xx": 13.7, "Average CPU Utilisation (%) - Jan-xx": 9.9,
+      "Average CPU Utilisation (%) - Feb-xx": 10.2, "Average CPU Utilisation (%) - Mar-xx": 11.0,
+
+      # Maximum CPU Utilisation (%) — Apr-xx to Mar-xx (12 months)
+      "Maximum CPU Utilisation (%) - Apr-xx": 45.2, "Maximum CPU Utilisation (%) - May-xx": 48.0,
+      "Maximum CPU Utilisation (%) - June-xx": 43.1, "Maximum CPU Utilisation (%) - July-xx": 50.3,
+      "Maximum CPU Utilisation (%) - Aug-xx": 55.0, "Maximum CPU Utilisation (%) - Sept-xx": 40.5,
+      "Maximum CPU Utilisation (%) - Oct-xx": 44.0, "Maximum CPU Utilisation (%) - Nov-xx": 42.8,
+      "Maximum CPU Utilisation (%) - Dec-xx": 47.6, "Maximum CPU Utilisation (%) -Jan-xx": 38.9,
+      "Maximum CPU Utilisation (%) -Feb-xx": 39.4, "Maximum CPU Utilisation (%) -Mar-xx": 41.0,
+
+      # Physical RAM (GiB) — Apr-xx to Mar-xx (12 months)
+      "Physical RAM (GiB) - Apr-xx": 64.0, "Physical RAM (GiB) - May-xx": 64.0,
+      "Physical RAM (GiB) - June-xx": 64.0, "Physical RAM (GiB) - July-xx": 64.0,
+      "Physical RAM (GiB) -Aug-xx": 64.0, "Physical RAM (GiB) -Sept-xx": 64.0,
+      "Physical RAM (GiB) -Oct-xx": 64.0, "Physical RAM (GiB) -Nov-xx": 64.0,
+      "Physical RAM (GiB) -Dec-xx": 64.0, "Physical RAM (GiB) -Jan-xx": 64.0,
+      "Physical RAM (GiB) -Feb-xx": 64.0, "Physical RAM (GiB) -Mar-xx": 64.0,
+
+      # Average free Memory (%) — Apr-xx to Mar-xx (12 months)
+      "Average free Memory (%) - Apr-xx": 78.3, "Average free Memory (%) - May-xx": 76.0,
+      "Average free Memory (%) - June-xx": 79.1, "Average free Memory (%) - July-xx": 74.5,
+      "Average free Memory (%) -Aug-xx": 72.0, "Average free Memory (%) -Sept-xx": 80.2,
+      "Average free Memory (%) -Oct-xx": 77.5, "Average free Memory (%) -Nov-xx": 78.9,
+      "Average free Memory (%) -Dec-xx": 75.3, "Average free Memory (%) -Jan-xx": 81.0,
+      "Average free Memory (%) -Feb-xx": 80.5, "Average free Memory (%) -Mar-xx": 79.8,
+
+      # Maximum free Memory (%) — Apr-xx to Mar-xx (12 months)
+      "Maximum free Memory (%) - Apr-xx": 91.0, "Maximum free Memory (%) - May-xx": 89.5,
+      "Maximum free Memory (%) - June-xx": 92.1, "Maximum free Memory (%) - July-xx": 88.0,
+      "Maximum free Memory (%) - Aug-xx": 86.3, "Maximum free Memory (%) - Sept-xx": 93.5,
+      "Maximum free Memory (%) - Oct-xx": 90.2, "Maximum free Memory (%) - Nov-xx": 91.8,
+      "Maximum free Memory (%) - Dec-xx": 88.7, "Maximum free Memory (%) - Jan-xx": 94.0,
+      "Maximum free Memory (%) - Feb-xx": 93.2, "Maximum free Memory (%) - Mar-xx": 92.5,
+
+      # Minimum free Memory (%) — Apr-xx to Mar-xx (12 months)
+      "Minimum free Memory (%) - Apr-xx": 55.1, "Minimum free Memory (%) - May-xx": 52.0,
+      "Minimum free Memory (%) - June-xx": 57.3, "Minimum free Memory (%) - July-xx": 50.8,
+      "Minimum free Memory (%) - Aug-xx": 48.5, "Minimum free Memory (%) - Sept-xx": 59.0,
+      "Minimum free Memory (%) - Oct-xx": 54.2, "Minimum free Memory (%) - Nov-xx": 56.7,
+      "Minimum free Memory (%) - Dec-xx": 51.3, "Minimum free Memory (%) -Jan-xx": 61.0,
+      "Minimum free Memory (%) -Feb-xx": 60.2, "Minimum free Memory (%) -Mar-xx": 58.9,
+
+      # Allocated Storage (GB) — Feb-xx, Mar-xx (2 months)
+      "Allocated Storage (GB) -Feb - xx": 500.0,
+      "Allocated Storage (GB) -Mar- xx": 500.0,
+
+      # Used Storage (GB) — Feb-xx, Mar-xx (2 months)
+      "Used Storage (GB) -Feb - xx": 320.0,
+      "Used Storage (GB) -Mar - xx": 325.0,
+
+      # Trailing fixed (4)
+      "Comments for Allocation (GB)": "Approved by infra team",
+      "Comments for Usage (GB)": "High usage in Q1",
+      "Utilisation %": 42.5,
+      "Decmmission Check": "No"
+    }
+    """
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ingested_at = models.DateTimeField(auto_now_add=True)
+    # Full Boone's file row stored as-is: all 102 named column headers as keys,
+    # cell values as values. Keys follow the exact Excel header names, e.g.:
+    #   "Number", "Server Name", "Is Virtual?", "Cluster Name", "Criticality",
+    #   "Environment type", "Hosting Zone", "Installed Status", "Location", "Platform / Class",
+    #   "Logical CPU <Month>-xx", "Average CPU Utilisation (%) - <Month>-xx",
+    #   "Maximum CPU Utilisation (%) - <Month>-xx", "Physical RAM (GiB) - <Month>-xx",
+    #   "Average free Memory (%) - <Month>-xx", "Maximum free Memory (%) - <Month>-xx",
+    #   "Minimum free Memory (%) - <Month>-xx", "Allocated Storage (GB) -<Month>-xx",
+    #   "Used Storage (GB) -<Month>-xx", "Comments for Allocation (GB)",
+    #   "Comments for Usage (GB)", "Utilisation %", "Decmmission Check"
+    # Empty separator columns from the Excel file are excluded.
+    # xx = last two digits of the year (dynamic — no schema change needed as years roll over).
+    row_data    = models.JSONField()
+
+    class Meta:
+        db_table = "boones_raw_row"
+        indexes = [
+            models.Index(fields=["-ingested_at"]),
+        ]
+
+    def __str__(self):
+        return f"BoonesRawRow {self.id} @ {self.ingested_at:%Y-%m-%d}"
+
+
+# ─────────────────────────────────────────────────────────────────
+# 6b. Boone File Upload  (registry of every uploaded flat file)
+# ─────────────────────────────────────────────────────────────────
+
+class BooneFileUpload(TenantAwareModel):
+    """
+    Registry of every Boone flat file uploaded.
+    One row per file. Status tracks the ingestion lifecycle.
+    """
+    SOURCE_PUBLIC  = "boones_public"
+    SOURCE_PRIVATE = "boones_private"
+    SOURCE_CHOICES = [
+        (SOURCE_PUBLIC,  "Boone's Public Cloud"),
+        (SOURCE_PRIVATE, "Boone's Private Cloud"),
+    ]
+    STATUS_CHOICES = [
+        ("uploaded",   "Uploaded"),
+        ("processing", "Processing"),
+        ("completed",  "Completed"),
+        ("failed",     "Failed"),
+    ]
+
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source        = models.CharField(max_length=40, choices=SOURCE_CHOICES)
+    file_name     = models.CharField(max_length=255)
+    file_path     = models.CharField(max_length=500, blank=True)   # Azure Blob path
+    latest_month  = models.DateField(null=True, blank=True)        # last month in file e.g. 2026-03-01
+    uploaded_by   = models.ForeignKey(
+                        settings.AUTH_USER_MODEL,
+                        on_delete=models.SET_NULL,
+                        null=True, blank=True,
+                        related_name="boone_uploads",
+                    )
+    uploaded_at   = models.DateTimeField(auto_now_add=True)
+    status        = models.CharField(max_length=20, choices=STATUS_CHOICES, default="uploaded")
+    rows_ingested = models.IntegerField(null=True)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "boone_file_upload"
+        indexes = [
+            models.Index(fields=["-uploaded_at"]),
+            models.Index(fields=["source", "-latest_month"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.source} | {self.status})"
+
+
+# ─────────────────────────────────────────────────────────────────
 # 6. Grafana Metric Snapshot  (raw, 90-day retention)
 # ─────────────────────────────────────────────────────────────────
 
@@ -396,6 +566,8 @@ class AgentRun(TenantAwareModel):
     rules_evaluation    = models.JSONField(null=True, blank=True)
     started_at          = models.DateTimeField(auto_now_add=True)
     finished_at         = models.DateTimeField(null=True, blank=True)
+    knowledge_sources   = models.JSONField(null=True, blank=True)
+    llm_cost_eur        = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
 
     class Meta:
         db_table = "agent_run"

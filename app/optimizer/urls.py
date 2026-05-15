@@ -58,4 +58,20 @@ urlpatterns = [
     path("api/agent-runs/trigger/", views.api_trigger_agent_run, name="api_trigger_agent_run"),
     path("api/agent-runs/<uuid:run_id>/", views.api_agent_run_detail, name="api_agent_run_detail"),
     path("api/candidates/<uuid:candidate_id>/decision/", views.api_candidate_decision, name="api_candidate_decision"),
+    # GET  /api/boones-raw-data/            → paginated raw Boone's flat file rows from BoonesRawRow table
+    #      ?page=1&page_size=100            pagination (max 500)
+    #      ?server=SRV-001                  filter by server name (contains)
+    #      ?sort_field=ingested_at          sort field: ingested_at | server_name
+    #      ?sort_order=desc                 sort direction: asc | desc
+    path("api/boones-raw-data/", views.api_boones_raw_data, name="api_boones_raw_data"),
+    # GET  /api/dq-usu-data/               → paginated USU installations for Data Quality table
+    #      ?family=mssql|oracle|all         filter by product family (default: all)
+    #      ?page=1&page_size=100            pagination (max 500)
+    #      ?sort_field=server_name          sortable fields (see view docstring)
+    #      ?sort_order=asc|desc
+    path("api/dq-usu-data/", views.api_dq_usu_data, name="api_dq_usu_data"),
+    # GET  /api/dq-grafana-data/            → paginated Grafana metrics for Data Quality table
+    #      Returns snapshot rows if available, rollup rows as fallback
+    #      ?page=1&page_size=100&sort_field=timestamp&sort_order=desc
+    path("api/dq-grafana-data/", views.api_dq_grafana_data, name="api_dq_grafana_data"),
 ]

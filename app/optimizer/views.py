@@ -1265,6 +1265,97 @@ def home(request):
     return render(request, "optimizer/home.html")
 
 
+def _track_boone_upload(excel_file, source, user, proc):
+    """
+    After successful validation + processing:
+    1. Create a BooneFileUpload registry record.
+    2. Read every data row from the Excel file and bulk-insert into BoonesRawRow
+       with the full row stored as {column_header: cell_value} JSON.
+    Empty separator columns (blank header) are skipped.
+    """
+    import openpyxl
+    from optimizer.models import BooneFileUpload, BoonesRawRow, Tenant
+    from optimizer.services.cpu_utilisation_processor import PERIOD_MONTHS
+
+    tenant = Tenant.objects.filter(is_active=True).order_by("created_at").first()
+    if tenant is None:
+        logger.warning("_track_boone_upload: no active tenant — skipping upload tracking")
+        return
+
+    status    = "failed" if proc.errors else "completed"
+    error_msg = "; ".join(proc.errors[:3]) if proc.errors else ""
+
+    BooneFileUpload.objects.create(
+        tenant=tenant,
+        source=source,
+        file_name=getattr(excel_file, "name", "unknown"),
+        file_path="",                          # populated later when Azure Blob path is known
+        latest_month=PERIOD_MONTHS[-1] if PERIOD_MONTHS else None,
+        uploaded_by=user,
+        status=status,
+        rows_ingested=proc.servers_updated,
+        error_message=error_msg,
+    )
+
+    # Store raw data rows into BoonesRawRow — only for servers that appear in
+    # USUDemandDetail or USUInstallation as SQL Server (same filter as
+    # process_cpu_utilisation). Rows with no Server Name are always skipped.
+    try:
+        from optimizer.services.upload_validator import EXPECTED_HEADERS
+        from optimizer.models import USUDemandDetail, USUInstallation
+        from django.db.models import Q
+
+        # Build set of SQL Server server names (case-insensitive) for fast lookup
+        sql_server_ids = (
+            USUDemandDetail.objects.filter(product_family="SQL Server").values("server_id")
+        )
+        sql_install_ids = (
+            USUInstallation.objects.filter(product_family="SQL Server").values("server_id")
+        )
+        from optimizer.models import Server as _Server
+        sql_server_names: set[str] = set(
+            _Server.objects.filter(
+                Q(id__in=sql_server_ids) | Q(id__in=sql_install_ids)
+            ).values_list("server_name", flat=True)
+        )
+        sql_server_names_lower = {n.strip().lower() for n in sql_server_names}
+
+        excel_file.seek(0)
+        wb = openpyxl.load_workbook(excel_file, read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        next(rows_iter)   # skip header row — we use EXPECTED_HEADERS instead
+
+        raw_rows = []
+        for row in rows_iter:
+            row_dict = {
+                header: val
+                for header, val in zip(EXPECTED_HEADERS, row)
+                if header                          # skip empty separator columns ('')
+            }
+            # Require a valid Server Name — skips blank/footer rows (+39 extra rows bug)
+            server_name_val = row_dict.get("Server Name")
+            if not server_name_val or str(server_name_val).strip() == "":
+                continue
+            server_name_key = str(server_name_val).strip().lower()
+            # Apply SQL Server filter — only store rows for SQL Server servers
+            if sql_server_names_lower and server_name_key not in sql_server_names_lower:
+                continue
+            raw_rows.append(BoonesRawRow(row_data=row_dict))
+
+        wb.close()
+        BoonesRawRow.objects.bulk_create(raw_rows, batch_size=500)
+        logger.info(
+            "_track_boone_upload: file=%s source=%s raw_rows_stored=%d (sql_server_filter=%d names)",
+            getattr(excel_file, "name", "unknown"), source, len(raw_rows), len(sql_server_names_lower),
+        )
+    except Exception:
+        logger.exception(
+            "_track_boone_upload: failed to store raw rows for file=%s",
+            getattr(excel_file, "name", "unknown"),
+        )
+
+
 @require_http_methods(["POST"])
 @login_required
 @csrf_protect
@@ -1277,6 +1368,7 @@ def upload_view(request):
     if not excel_file:
         return render(request, "optimizer/home.html", {"error": "Please select an Excel file to upload."})
 
+    # Step 1: validate file format
     try:
         result = validate_upload(excel_file)
     except Exception:
@@ -1290,8 +1382,7 @@ def upload_view(request):
     if not result.valid:
         return render(request, "optimizer/home.html", {"error": result.error})
 
-    # No separate tenant lookup — tenant is resolved inside the processor
-    # from the matched Server rows themselves.
+    # Step 2: ingest into cpu_utilisation / server tables
     try:
         proc = process_cpu_utilisation(excel_file, uploaded_by=request.user)
     except Exception:
@@ -1307,6 +1398,11 @@ def upload_view(request):
             "upload_view: cpu_utilisation processing completed with %d error(s): %s",
             len(proc.errors), proc.errors[:5],
         )
+
+    # Step 3: track upload registry + store raw rows — only after validation and
+    # processing both pass so only clean, processed data is recorded.
+    source = request.POST.get("source", "boones_public")
+    _track_boone_upload(excel_file, source, request.user, proc)
 
     return redirect("optimizer:results")
 
@@ -1783,26 +1879,40 @@ def results(request):
                 "unique_dashboards": 0,
             }
 
-        flatfile_qs = (
-            CPUUtilisation.objects
-            .select_related("server")
-            .filter(source__in=["boones_public", "boones_private"])
-            .order_by("-period_month")[:300]
-        )
-        dq_flatfile_rows = [
-            {
-                "Server": f.server.server_name if f.server else "",
-                "Source": f.get_source_display(),
-                "Period": str(f.period_month) if f.period_month else "",
-                "Avg CPU%": str(round(float(f.avg_cpu_pct), 2)) if f.avg_cpu_pct is not None else "",
-                "Max CPU%": str(round(float(f.max_cpu_pct), 2)) if f.max_cpu_pct is not None else "",
-                "Logical CPUs": str(f.logical_cpu_count) if f.logical_cpu_count is not None else "",
-                "RAM (GiB)": str(round(float(f.physical_ram_gib), 2)) if f.physical_ram_gib is not None else "",
-                "Avg Free Mem%": str(round(float(f.avg_free_memory_pct), 2)) if f.avg_free_memory_pct is not None else "",
-                "Min_FreeMem_12m": str(round(float(f.min_free_memory_pct), 2)) if f.min_free_memory_pct is not None else "",
-            }
-            for f in flatfile_qs
-        ]
+        from optimizer.models import BoonesRawRow
+
+        def _latest_metric(row_data: dict, prefix: str):
+            # Iterates columns in insertion order (chronological per EXPECTED_HEADERS)
+            # and returns the last non-None value for columns starting with prefix —
+            # i.e. the most recent month available, dynamically regardless of year.
+            val = None
+            for key, v in row_data.items():
+                if key.startswith(prefix) and v is not None:
+                    val = v
+            return val
+
+        def _fmt(v, decimals=2):
+            try:
+                return str(round(float(v), decimals)) if v is not None else ""
+            except (TypeError, ValueError):
+                return ""
+
+        flatfile_qs = BoonesRawRow.objects.order_by("-ingested_at")[:300]
+
+        dq_flatfile_rows = []
+        for row in flatfile_qs:
+            rd = row.row_data or {}
+            dq_flatfile_rows.append({
+                "Server":         rd.get("Server Name", ""),
+                "Source":         "Boone's File",
+                "Period":         str(row.ingested_at.date()),
+                "Avg CPU%":       _fmt(_latest_metric(rd, "Average CPU Utilisation")),
+                "Max CPU%":       _fmt(_latest_metric(rd, "Maximum CPU Utilisation")),
+                "Logical CPUs":   _fmt(_latest_metric(rd, "Logical CPU"), 0),
+                "RAM (GiB)":      _fmt(_latest_metric(rd, "Physical RAM")),
+                "Avg Free Mem%":  _fmt(_latest_metric(rd, "Average free Memory")),
+                "Min_FreeMem_12m":_fmt(_latest_metric(rd, "Minimum free Memory")),
+            })
     except Exception as _dq_exc:
         logger.warning("Data Quality fetch failed: %s", _dq_exc)
         dq_usu_rows, dq_grafana_rows, dq_flatfile_rows = [], [], []
@@ -2793,6 +2903,353 @@ def api_candidate_decision(request, candidate_id):
         "candidate_id": str(candidate.id),
         "decision": decision_value,
         "server_name": candidate.server.server_name if candidate.server else "",
+    })
+
+
+@require_GET
+@login_required
+def api_boones_raw_data(request):
+    """
+    GET /api/boones-raw-data/
+      ?page=1&page_size=500   (max 500 per page)
+
+    Returns paginated raw rows from BoonesRawRow, each row as stored.
+    """
+    from math import ceil
+    from optimizer.models import BoonesRawRow
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+
+    try:
+        page_size = min(500, max(1, int(request.GET.get("page_size", 100))))
+    except (ValueError, TypeError):
+        page_size = 100
+
+    def _empty_response():
+        return JsonResponse({
+            "status": "completed", "total": 0, "page": 1,
+            "page_size": page_size, "total_pages": 1, "results": [],
+        })
+
+    try:
+        qs    = BoonesRawRow.objects.order_by("-ingested_at")
+        total = qs.count()
+    except Exception as exc:
+        logger.warning("api_boones_raw_data: DB query failed (%s)", exc)
+        return _empty_response()
+
+    total_pages = max(1, ceil(total / page_size))
+    page        = min(page, total_pages)
+    offset      = (page - 1) * page_size
+
+    try:
+        rows = list(qs[offset: offset + page_size])
+    except Exception as exc:
+        logger.warning("api_boones_raw_data: row fetch failed (%s)", exc)
+        return _empty_response()
+
+    results = [
+        {
+            "id":         str(row.id),
+            "ingested_at": row.ingested_at.isoformat() if row.ingested_at else None,
+            "row_data":   row.row_data or {},
+        }
+        for row in rows
+    ]
+
+    return JsonResponse({
+        "status":      "completed",
+        "total":       total,
+        "page":        page,
+        "page_size":   page_size,
+        "total_pages": total_pages,
+        "results":     results,
+    })
+
+
+@require_GET
+@login_required
+def api_dq_usu_data(request):
+    """
+    API: USU Installations for Data Quality table.
+
+    GET /api/dq-usu-data/
+
+    Query params (all optional):
+      page        — 1-based page number (default: 1)
+      page_size   — rows per page, max 500 (default: 100)
+      family      — "mssql" | "oracle" | "all" (default: "all")
+      sort_field  — server_name | product_family | product_description |
+                    product_edition | manufacturer | install_status |
+                    inv_status_std_name | cpu_core_count | hosting_zone |
+                    environment | inventory_date  (default: server_name)
+      sort_order  — "asc" | "desc" (default: "asc")
+
+    Response:
+    {
+      "status": "completed",
+      "total": 300,
+      "page": 1,
+      "page_size": 100,
+      "total_pages": 3,
+      "results": [
+        {
+          "server_name": "SRV-001",
+          "product_family": "SQL Server",
+          "product_description": "Microsoft SQL Server 2017 Standard Core",
+          "product_edition": "Standard Core",
+          "manufacturer": "Microsoft",
+          "install_status": "Installed",
+          "inv_status_std_name": "Active",
+          "cpu_core_count": 8,
+          "hosting_zone": "Public Cloud",
+          "environment": "Production",
+          "inventory_date": "2026-05-01"
+        }
+      ]
+    }
+    """
+    from math import ceil
+    from optimizer.models import USUInstallation
+
+    # Maps API sort key → ORM field path (related fields use __ notation)
+    SORT_FIELD_MAP = {
+        "server_name":         "server__server_name",
+        "product_family":      "product_family",
+        "product_description": "product_description",
+        "product_edition":     "product_edition",
+        "manufacturer":        "manufacturer",
+        "device_status":       "device_status",
+        "inv_status_std_name": "inv_status_std_name",
+        "cpu_core_count":      "cpu_core_count",
+        "hosting_zone":        "server__hosting_zone",
+        "environment":         "server__environment",
+        "inventory_date":      "inventory_date",
+    }
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+
+    try:
+        page_size = min(500, max(1, int(request.GET.get("page_size", 100))))
+    except (ValueError, TypeError):
+        page_size = 100
+
+    family     = request.GET.get("family", "all").lower().strip()
+    sort_key   = request.GET.get("sort_field", "server_name").strip()
+    sort_order = request.GET.get("sort_order", "asc").strip().lower()
+
+    orm_sort   = SORT_FIELD_MAP.get(sort_key, "server__server_name")
+    order_prefix = "-" if sort_order == "desc" else ""
+
+    qs = USUInstallation.objects.select_related("server").order_by(f"{order_prefix}{orm_sort}")
+
+    FAMILY_FILTER = {"mssql": "SQL Server", "oracle": "Java"}
+    if family in FAMILY_FILTER:
+        qs = qs.filter(product_family=FAMILY_FILTER[family])
+
+    total       = qs.count()
+    total_pages = max(1, ceil(total / page_size))
+    page        = min(page, total_pages)
+    rows        = qs[(page - 1) * page_size: page * page_size]
+
+    results = []
+    for i in rows:
+        srv = i.server
+        results.append({
+            "server_name":         srv.server_name if srv else "",
+            "product_family":      i.product_family or "",
+            "product_description": i.product_description or "",
+            "product_edition":     i.product_edition or "",
+            "manufacturer":        i.manufacturer or "",
+            "device_status":       i.device_status or "",
+            "inv_status_std_name": i.inv_status_std_name or "",
+            "cpu_core_count":      i.cpu_core_count,
+            "hosting_zone":        srv.hosting_zone if srv else "",
+            "environment":         srv.environment if srv else "",
+            "inventory_date":      i.inventory_date.isoformat() if i.inventory_date else "",
+        })
+
+    return JsonResponse({
+        "status":      "completed",
+        "total":       total,
+        "page":        page,
+        "page_size":   page_size,
+        "total_pages": total_pages,
+        "results":     results,
+    })
+
+
+@require_GET
+@login_required
+def api_dq_grafana_data(request):
+    """
+    API: Grafana metrics for Data Quality table.
+    Returns GrafanaMetricSnapshot rows (if available) or GrafanaMetricMonthlyRollup fallback.
+
+    GET /api/dq-grafana-data/
+
+    Query params (all optional):
+      page        — 1-based page number (default: 1)
+      page_size   — rows per page, max 500 (default: 100)
+      sort_field  — server | metric | value | unit | timestamp | fetched_at
+                    or for rollup: server | metric | period | avg | max | min | samples
+      sort_order  — "asc" | "desc" (default: "desc")
+
+    Response (snapshot):
+    {
+      "status": "completed",
+      "data_type": "snapshot",
+      "total": 500,
+      "page": 1,
+      "page_size": 100,
+      "total_pages": 5,
+      "results": [
+        {
+          "server": "SRV-001",
+          "dashboard": "SQL Dashboard",
+          "metric": "cpu_usage",
+          "value": 45.23,
+          "unit": "%",
+          "timestamp": "2026-05-15 10:00",
+          "fetched_at": "2026-05-15"
+        }
+      ]
+    }
+
+    Response (rollup — when no snapshot data exists):
+    {
+      "status": "completed",
+      "data_type": "rollup",
+      "total": 300,
+      ...
+      "results": [
+        {
+          "server": "SRV-001",
+          "metric": "cpu_usage",
+          "unit": "%",
+          "period": "2026-03-01",
+          "avg": 12.34,
+          "max": 45.23,
+          "min": 3.12,
+          "samples": 720
+        }
+      ]
+    }
+    """
+    from math import ceil
+    from optimizer.models import GrafanaMetricSnapshot, GrafanaMetricMonthlyRollup
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (ValueError, TypeError):
+        page = 1
+
+    try:
+        page_size = min(500, max(1, int(request.GET.get("page_size", 100))))
+    except (ValueError, TypeError):
+        page_size = 100
+
+    sort_order   = request.GET.get("sort_order", "desc").strip().lower()
+    order_prefix = "-" if sort_order == "desc" else ""
+
+    use_snapshot = GrafanaMetricSnapshot.objects.exists()
+
+    if use_snapshot:
+        ALLOWED_SORT = {"server", "metric", "value", "unit", "timestamp", "fetched_at"}
+        sort_field   = request.GET.get("sort_field", "timestamp").strip()
+        if sort_field not in ALLOWED_SORT:
+            sort_field = "metric_ts"
+        db_sort = {"server": "server__server_name", "metric": "metric_name",
+                   "value": "metric_value", "unit": "metric_unit",
+                   "timestamp": "metric_ts", "fetched_at": "fetched_at"}.get(sort_field, "metric_ts")
+
+        qs    = GrafanaMetricSnapshot.objects.select_related("server").order_by(f"{order_prefix}{db_sort}")
+        total = qs.count()
+        total_pages = max(1, ceil(total / page_size))
+        page  = min(page, total_pages)
+        rows  = list(qs[(page - 1) * page_size: page * page_size])
+
+        # Bulk-fetch USU product data keyed by server_name (not server_id) because
+        # Grafana and USU ingestion may create separate Server records for the same
+        # physical machine, so UUIDs don't always match across the two sources.
+        from optimizer.models import USUInstallation
+        server_names = {r.server.server_name for r in rows if r.server and r.server.server_name}
+        usu_by_name = {}
+        if server_names:
+            usu_qs = (
+                USUInstallation.objects
+                .filter(server__server_name__in=server_names)
+                .select_related("server")
+                .values("server__server_name", "product_family", "product_description")
+                .order_by("server__server_name", "-fetched_at")
+            )
+            seen_names = set()
+            for u in usu_qs:
+                sname = u["server__server_name"]
+                if sname not in seen_names:
+                    usu_by_name[sname] = u
+                    seen_names.add(sname)
+
+        results = []
+        for r in rows:
+            sname = r.server.server_name if r.server else ""
+            usu   = usu_by_name.get(sname, {})
+            results.append({
+                "server":              sname,
+                "product_family":      usu.get("product_family") or "",
+                "product_name":        usu.get("product_description") or "",
+                "product_description": usu.get("product_description") or "",
+                "dashboard":           r.dashboard or "",
+                "metric":              r.metric_name or "",
+                "value":               round(float(r.metric_value), 4) if r.metric_value is not None else None,
+                "unit":                r.metric_unit or "",
+                "timestamp":           r.metric_ts.strftime("%Y-%m-%d %H:%M") if r.metric_ts else "",
+                "fetched_at":          r.fetched_at.strftime("%Y-%m-%d") if r.fetched_at else "",
+            })
+
+        data_type = "snapshot"
+
+    else:
+        ALLOWED_SORT = {"server", "metric", "period", "avg", "max", "min", "samples"}
+        sort_field   = request.GET.get("sort_field", "period").strip()
+        db_sort = {"server": "server__server_name", "metric": "metric_name",
+                   "period": "period_month", "avg": "avg_value",
+                   "max": "max_value", "min": "min_value",
+                   "samples": "sample_count"}.get(sort_field, "period_month")
+
+        qs    = GrafanaMetricMonthlyRollup.objects.select_related("server").order_by(f"{order_prefix}{db_sort}")
+        total = qs.count()
+        total_pages = max(1, ceil(total / page_size))
+        page  = min(page, total_pages)
+        rows  = qs[(page - 1) * page_size: page * page_size]
+
+        results = [{
+            "server":  r.server.server_name if r.server else "",
+            "metric":  r.metric_name or "",
+            "unit":    r.metric_unit or "",
+            "period":  str(r.period_month) if r.period_month else "",
+            "avg":     round(float(r.avg_value), 4) if r.avg_value is not None else None,
+            "max":     round(float(r.max_value), 4) if r.max_value is not None else None,
+            "min":     round(float(r.min_value), 4) if r.min_value is not None else None,
+            "samples": r.sample_count,
+        } for r in rows]
+
+        data_type = "rollup"
+
+    return JsonResponse({
+        "status":      "completed",
+        "data_type":   data_type,
+        "total":       total,
+        "page":        page,
+        "page_size":   page_size,
+        "total_pages": total_pages,
+        "results":     results,
     })
 
 
