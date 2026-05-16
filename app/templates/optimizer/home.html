@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ title|default:"Enterprise SQL Optimizer" }}{% endblock %}
+{% block body_class %}app-shell text-slate-800 overflow-y-auto h-screen flex flex-col{% endblock %}
+{% block main_class %}flex-1 overflow-y-auto{% endblock %}
 {% block content %}
-<div class="min-h-full overflow-y-auto home-shell flex flex-col">
+<div class="min-h-full home-shell flex flex-col">
     <section class="relative overflow-hidden flex-1 flex flex-col">
         <div class="absolute inset-0 home-aurora pointer-events-none"></div>
         <div class="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-cyan-300/20 blur-3xl pointer-events-none"></div>

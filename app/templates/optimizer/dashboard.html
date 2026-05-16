@@ -5425,17 +5425,97 @@
         var FF_PER_PAGE     = 10;
         var flatfilesApiUrl = window.flatfilesApiUrl || '';
 
-        var ffColDefs = [
-            { key: 'Server Name',      label: 'Server Name',      sortable: true  },
-            { key: 'Platform / Class', label: 'Platform / Class', sortable: true  },
-            { key: 'Hosting Zone',     label: 'Hosting Zone',     sortable: true  },
-            { key: 'Environment type', label: 'Environment',      sortable: true  },
-            { key: 'Location',         label: 'Location',         sortable: true  },
-            { key: 'Criticality',      label: 'Criticality',      sortable: true  },
-            { key: 'Installed Status', label: 'Installed Status', sortable: true  },
-            { key: 'Is Virtual?',      label: 'Is Virtual',       sortable: false },
-            { key: '__ingested_at',    label: 'Ingested At',      sortable: true  },
+        // Built dynamically from loaded row_data keys; starts empty
+        var ffColDefs = [];
+
+        // Excel non-data strings — treated the same as null/blank in the UI
+        var FF_EMPTY_STRINGS = {
+            'N/A': true, 'n/a': true, 'NA': true,
+            '#N/A': true, '#REF!': true, '#VALUE!': true,
+            '#DIV/0!': true, '#NAME?': true, '#NUM!': true,
+            '#NULL!': true, '#ERROR!': true,
+        };
+
+        // All known columns in logical order — exact key strings as they appear in row_data
+        // (the source data has inconsistent spacing around month names; keys are preserved as-is)
+        var FF_KNOWN_COLS = [
+            // ── Fixed metadata ─────────────────────────────────────────────────
+            'Server Name', 'Cluster Name', 'Number', 'Platform / Class', 'Hosting Zone',
+            'Environment type', 'Location', 'Criticality', 'Installed Status', 'Is Virtual?',
+            'Utilisation %', 'Decmmission Check',
+            // ── Logical CPU (12 months) ────────────────────────────────────────
+            'Logical CPU Apr-25', 'Logical CPU May-25', 'Logical CPU June-25',
+            'Logical CPU July-25', 'Logical CPU Aug-25', 'Logical CPU Sept-25',
+            'Logical CPU Oct-25', 'Logical CPU Nov-25', 'Logical CPU Dec-25',
+            'Logical CPU Jan -26', 'Logical CPU Feb -26', 'Logical CPU Mar -26',
+            // ── Average CPU Utilisation % (12 months) ─────────────────────────
+            'Average CPU Utilisation (%) - Apr-25', 'Average CPU Utilisation (%) - May-25',
+            'Average CPU Utilisation (%) - June-25', 'Average CPU Utilisation (%) - July-25',
+            'Average CPU Utilisation (%) - Aug-25', 'Average CPU Utilisation (%) - Sept-25',
+            'Average CPU Utilisation (%) - Oct-25', 'Average CPU Utilisation (%) - Nov-25',
+            'Average CPU Utilisation (%) - Dec-25', 'Average CPU Utilisation (%) - Jan-26',
+            'Average CPU Utilisation (%) - Feb-26', 'Average CPU Utilisation (%) - Mar-26',
+            // ── Maximum CPU Utilisation % (12 months) ─────────────────────────
+            'Maximum CPU Utilisation (%) - Apr-25', 'Maximum CPU Utilisation (%) - May-25',
+            'Maximum CPU Utilisation (%) - June-25', 'Maximum CPU Utilisation (%) - July-25',
+            'Maximum CPU Utilisation (%) - Aug-25', 'Maximum CPU Utilisation (%) - Sept-25',
+            'Maximum CPU Utilisation (%) - Oct-25', 'Maximum CPU Utilisation (%) - Nov-25',
+            'Maximum CPU Utilisation (%) - Dec-25',
+            'Maximum CPU Utilisation (%) -Jan-26', 'Maximum CPU Utilisation (%) -Feb-26',
+            'Maximum CPU Utilisation (%) -Mar-26',
+            // ── Physical RAM GiB (12 months) ──────────────────────────────────
+            'Physical RAM (GiB) - Apr-25', 'Physical RAM (GiB) - May-25',
+            'Physical RAM (GiB) - June-25', 'Physical RAM (GiB) - July-25',
+            'Physical RAM (GiB) -Aug-25', 'Physical RAM (GiB) -Sept-25',
+            'Physical RAM (GiB) -Oct-25', 'Physical RAM (GiB) -Nov-25',
+            'Physical RAM (GiB) -Dec-25', 'Physical RAM (GiB) -Jan-26',
+            'Physical RAM (GiB) -Feb-26', 'Physical RAM (GiB) -Mar-26',
+            // ── Average free Memory % (12 months) ────────────────────────────
+            'Average free Memory (%) - Apr-25', 'Average free Memory (%) - May-25',
+            'Average free Memory (%) - June-25', 'Average free Memory (%) - July-25',
+            'Average free Memory (%) -Aug-25', 'Average free Memory (%) -Sept-25',
+            'Average free Memory (%) -Oct-25', 'Average free Memory (%) -Nov-25',
+            'Average free Memory (%) -Dec-25', 'Average free Memory (%) -Jan-26',
+            'Average free Memory (%) -Feb-26', 'Average free Memory (%) -Mar-26',
+            // ── Maximum free Memory % (12 months) ────────────────────────────
+            'Maximum free Memory (%) - Apr-25', 'Maximum free Memory (%) - May-25',
+            'Maximum free Memory (%) - June-25', 'Maximum free Memory (%) - July-25',
+            'Maximum free Memory (%) - Aug-25', 'Maximum free Memory (%) - Sept-25',
+            'Maximum free Memory (%) - Oct-25', 'Maximum free Memory (%) - Nov-25',
+            'Maximum free Memory (%) - Dec-25', 'Maximum free Memory (%) - Jan-26',
+            'Maximum free Memory (%) - Feb-26', 'Maximum free Memory (%) - Mar-26',
+            // ── Minimum free Memory % (12 months) ────────────────────────────
+            'Minimum free Memory (%) - Apr-25', 'Minimum free Memory (%) - May-25',
+            'Minimum free Memory (%) - June-25', 'Minimum free Memory (%) - July-25',
+            'Minimum free Memory (%) - Aug-25', 'Minimum free Memory (%) - Sept-25',
+            'Minimum free Memory (%) - Oct-25', 'Minimum free Memory (%) - Nov-25',
+            'Minimum free Memory (%) - Dec-25',
+            'Minimum free Memory (%) -Jan-26', 'Minimum free Memory (%) -Feb-26',
+            'Minimum free Memory (%) -Mar-26',
+            // ── Storage ───────────────────────────────────────────────────────
+            'Allocated Storage (GB) -Feb - 26', 'Allocated Storage (GB) -Mar- 26',
+            'Used Storage (GB) -Feb - 26', 'Used Storage (GB) -Mar - 26',
+            // ── Comments ──────────────────────────────────────────────────────
+            'Comments for Usage (GB)', 'Comments for Allocation (GB)',
         ];
+
+        function buildFfColDefs(items) {
+            var keyMap = {}, keyOrder = [];
+            // Seed with all known columns in logical order
+            FF_KNOWN_COLS.forEach(function (k) { keyMap[k] = true; keyOrder.push(k); });
+            // Append any additional keys that appear in the actual data but aren't in the known list
+            items.forEach(function (row) {
+                Object.keys(row).forEach(function (k) {
+                    if (!keyMap[k] && k !== '__ingested_at' && k !== '__id') {
+                        keyMap[k] = true; keyOrder.push(k);
+                    }
+                });
+            });
+            keyOrder.push('__ingested_at');
+            return keyOrder.map(function (k) {
+                return { key: k, label: k === '__ingested_at' ? 'Ingested At' : k, sortable: true };
+            });
+        }
 
         var ffState = {
             loaded: false, loading: false,
@@ -5468,7 +5548,11 @@
                 var dir = ffState.sortOrder === 'asc' ? 1 : -1;
                 items = items.slice().sort(function (a, b) {
                     var av = a[key]; var bv = b[key];
-                    if (av == null) return 1; if (bv == null) return -1;
+                    var ae = av == null || av === '' || (typeof av === 'string' && FF_EMPTY_STRINGS[String(av).trim()]);
+                    var be = bv == null || bv === '' || (typeof bv === 'string' && FF_EMPTY_STRINGS[String(bv).trim()]);
+                    if (ae && be) return 0;
+                    if (ae) return 1;   // empty always last
+                    if (be) return -1;
                     var an = Number(av); var bn = Number(bv);
                     if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
                     return String(av).localeCompare(String(bv)) * dir;
@@ -5529,16 +5613,18 @@
                 for (var j = 0; j < ffColDefs.length; j++) {
                     if (ffState.hiddenCols.has(j)) continue;
                     var v = row[ffColDefs[j].key];
-                    var txt;
+                    var txt, isEmpty = false;
                     if (v === null || v === undefined || v === '') {
-                        txt = '—';
+                        txt = '—'; isEmpty = true;
+                    } else if (typeof v === 'string' && FF_EMPTY_STRINGS[v.trim()]) {
+                        txt = '—'; isEmpty = true;
                     } else if (ffColDefs[j].key === '__ingested_at') {
                         txt = String(v).replace('T', ' ').substring(0, 16);
                     } else {
                         txt = String(v);
                     }
                     var d = document.createElement('div'); d.textContent = txt;
-                    html += '<td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">' + d.innerHTML + '</td>';
+                    html += '<td class="px-4 py-3 text-xs whitespace-nowrap ' + (isEmpty ? 'text-slate-300' : 'text-slate-700') + '">' + d.innerHTML + '</td>';
                 }
                 html += '</tr>';
             }
@@ -5605,9 +5691,14 @@
                     flat.__id          = r.id || '';
                     return flat;
                 });
+                // Rebuild column definitions from all keys found in loaded data
+                ffColDefs = buildFfColDefs(ffState._allCachedItems);
+                ffState.hiddenCols = new Set();
+                saveFfHiddenCols();
                 ffApplyClientPage();
                 renderFfHead();
                 renderFfBody(ffState._cachedItems);
+                buildFfColPanel();
                 updateFfPaginationUI();
             })
             .catch(function () {
