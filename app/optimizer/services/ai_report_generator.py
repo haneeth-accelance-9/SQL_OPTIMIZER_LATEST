@@ -952,11 +952,17 @@ def build_live_agent_report_preview(
     # Build authoritative count overrides so the Rule Coverage table matches the
     # filter-funnel / _count fields rather than the length of the candidate lists
     # (which may differ when lists are truncated or computed via a different path).
+    # Prefer strategy_results counts (the final merged payload, same source as the
+    # evidence section) so the Rule Coverage table is always consistent with what
+    # is actually displayed. Fall back to rule_results only when strategy_results
+    # has no count.
     _mc_overrides: Dict[str, int] = {}
-    _uc1 = _safe_int(rule_results.get("azure_payg_count"))
+    _s1 = strategy_results.get("strategy_1_azure_byol_payg") or {}
+    _s2 = strategy_results.get("strategy_2_retired_devices") or {}
+    _uc1 = _safe_int(_s1.get("candidate_count")) or _safe_int(rule_results.get("azure_payg_count"))
     if _uc1:
         _mc_overrides["uc_1_1_azure_byol_to_payg"] = _uc1
-    _uc2 = _safe_int(rule_results.get("retired_count"))
+    _uc2 = _safe_int(_s2.get("candidate_count")) or _safe_int(len(_s2.get("candidates") or []))
     if _uc2:
         _mc_overrides["uc_1_2_retired_device_installs"] = _uc2
     _cpu = _safe_int(merged_rightsizing.get("cpu_count") or merged_rightsizing.get("cpu_candidate_count"))
