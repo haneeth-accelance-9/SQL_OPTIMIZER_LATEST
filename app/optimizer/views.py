@@ -2791,7 +2791,7 @@ def api_trigger_agent_run(request):
     import json as _json
     import time
 
-    from optimizer.services.db_analysis_service import _build_installations_df, compute_db_metrics
+    from optimizer.services.db_analysis_service import _build_installations_df, compute_live_db_metrics
     from optimizer.services.ai_report_generator import (
         build_agent_strategy_results_payload,
         generate_and_store_agentic_report,
@@ -2825,7 +2825,7 @@ def api_trigger_agent_run(request):
     # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing
     t0 = time.monotonic()
     try:
-        strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
+        strategy_results = build_agent_strategy_results_payload(compute_live_db_metrics())
     except Exception:
         strategy_results = {}
     rule_eval_sec = round(time.monotonic() - t0, 3)
