@@ -2993,9 +2993,9 @@ def api_dq_usu_data(request):
       page_size   — rows per page, max 500 (default: 100)
       family      — "mssql" | "oracle" | "all" (default: "all")
       sort_field  — server_name | product_family | product_description |
-                    product_edition | manufacturer | install_status |
-                    inv_status_std_name | cpu_core_count | hosting_zone |
-                    environment | inventory_date  (default: server_name)
+                    product_edition | manufacturer | device_status |
+                    inv_status_std_name | no_license_required | cpu_core_count |
+                    hosting_zone | environment | inventory_date  (default: server_name)
       sort_order  — "asc" | "desc" (default: "asc")
 
     Response:
@@ -3012,8 +3012,9 @@ def api_dq_usu_data(request):
           "product_description": "Microsoft SQL Server 2017 Standard Core",
           "product_edition": "Standard Core",
           "manufacturer": "Microsoft",
-          "install_status": "Installed",
+          "device_status": "Installed",
           "inv_status_std_name": "Active",
+          "no_license_required": true,   // true | false | null
           "cpu_core_count": 8,
           "hosting_zone": "Public Cloud",
           "environment": "Production",
@@ -3038,6 +3039,7 @@ def api_dq_usu_data(request):
         "hosting_zone":        "server__hosting_zone",
         "environment":         "server__environment",
         "inventory_date":      "inventory_date",
+        "no_license_required": "no_license_required",
     }
 
     try:
@@ -3071,6 +3073,7 @@ def api_dq_usu_data(request):
     results = []
     for i in rows:
         srv = i.server
+        nlr = i.no_license_required
         results.append({
             "server_name":         srv.server_name if srv else "",
             "product_family":      i.product_family or "",
@@ -3083,6 +3086,7 @@ def api_dq_usu_data(request):
             "hosting_zone":        srv.hosting_zone if srv else "",
             "environment":         srv.environment if srv else "",
             "inventory_date":      i.inventory_date.isoformat() if i.inventory_date else "",
+            "no_license_required": True if nlr is True else (False if nlr is False else None),
         })
 
     return JsonResponse({
