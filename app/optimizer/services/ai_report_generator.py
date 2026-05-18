@@ -925,18 +925,19 @@ def build_live_agent_report_preview(
     usecase_id: str = "uc_1_2_3",
     strategy_results_override: Optional[Dict[str, Any]] = None,
     notes: Optional[str] = None,
+    native_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    from optimizer.services.db_analysis_service import compute_live_db_metrics
-
-    try:
-        native_context = compute_live_db_metrics()
-    except Exception as exc:
-        logger.warning(
-            "compute_live_db_metrics() failed in build_live_agent_report_preview (%s); "
-            "generating report with empty context.",
-            exc,
-        )
-        native_context = {}
+    if native_context is None:
+        from optimizer.services.db_analysis_service import compute_live_db_metrics
+        try:
+            native_context = compute_live_db_metrics()
+        except Exception as exc:
+            logger.warning(
+                "compute_live_db_metrics() failed in build_live_agent_report_preview (%s); "
+                "generating report with empty context.",
+                exc,
+            )
+            native_context = {}
 
     rule_results = native_context.get("rule_results") or {}
     rightsizing = dict(native_context.get("rightsizing") or {})
@@ -1149,6 +1150,7 @@ def _build_local_agent_report_response(
     strategy_results: Optional[Dict[str, Any]] = None,
     notes: Optional[str] = None,
     llm_first: bool = True,
+    native_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     In-process fallback used when the external A2A server is unavailable or
@@ -1158,6 +1160,7 @@ def _build_local_agent_report_response(
         usecase_id=usecase_id,
         strategy_results_override=strategy_results,
         notes=notes,
+        native_context=native_context,
     )
     deterministic_md = preview.get("report_markdown") or ""
     rules_evaluation = preview.get("rules_evaluation") or {}
@@ -1187,6 +1190,7 @@ def call_agent_generate_report(
     strategy_results: Optional[Dict[str, Any]] = None,
     notes: Optional[str] = None,
     llm_first: bool = True,
+    native_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Call the liscence-optimizer A2A agent's /generate-report endpoint.
@@ -1229,6 +1233,7 @@ def call_agent_generate_report(
             strategy_results=strategy_results,
             notes=notes,
             llm_first=llm_first,
+            native_context=native_context,
         )
 
     payload = {
@@ -1264,6 +1269,7 @@ def call_agent_generate_report(
                 strategy_results=strategy_results,
                 notes=notes,
                 llm_first=llm_first,
+                native_context=native_context,
             )
         except Exception:
             logger.exception("In-process report fallback failed after A2A agent error.")
@@ -1277,6 +1283,7 @@ def generate_and_store_agentic_report(
     triggered_by: str = "system",
     tenant=None,
     phase_timings: Optional[Dict[str, Any]] = None,
+    native_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Full pipeline:
@@ -1325,6 +1332,7 @@ def generate_and_store_agentic_report(
             records=records,
             usecase_id=usecase_id,
             strategy_results=strategy_results,
+            native_context=native_context,
         )
     except Exception as exc:
         _timer.record("llm_gen", time.perf_counter() - _llm_gen_start)
