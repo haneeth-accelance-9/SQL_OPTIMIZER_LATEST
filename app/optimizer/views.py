@@ -2797,6 +2797,7 @@ def api_trigger_agent_run(request):
         generate_and_store_agentic_report,
     )
 
+
     # Parse optional body
     body = {}
     if request.content_type and "application/json" in request.content_type:
@@ -2821,13 +2822,19 @@ def api_trigger_agent_run(request):
         records = []
     data_load_sec = round(time.monotonic() - t0, 3)
 
-    # Also add the strategy outputs used by the agent report.
-    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing
+    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing.
+    # compute_live_db_metrics() is called ONCE here and passed all the way through to
+    # build_live_agent_report_preview so the report uses the exact same DB snapshot as
+    # the dashboard (which also calls compute_live_db_metrics()).
     t0 = time.monotonic()
+    live_context = {}
+    strategy_results = {}
     try:
-        strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
+
+        live_context = compute_live_db_metrics()
+        strategy_results = build_agent_strategy_results_payload(live_context)
     except Exception:
-        strategy_results = {}
+        pass
     rule_eval_sec = round(time.monotonic() - t0, 3)
 
     result = generate_and_store_agentic_report(
@@ -2836,6 +2843,7 @@ def api_trigger_agent_run(request):
         strategy_results=strategy_results,
         triggered_by=request.user.email or request.user.username,
         phase_timings={"data_load_sec": data_load_sec, "rule_eval_sec": rule_eval_sec},
+        native_context=live_context or None,
     )
 
     elapsed_ms = int((time.time() - started) * 1000)
