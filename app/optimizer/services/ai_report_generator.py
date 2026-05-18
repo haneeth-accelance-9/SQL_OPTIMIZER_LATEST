@@ -731,6 +731,32 @@ def _build_agent_report_summary_context(
     }
 
 
+_UC_LABEL_MAP = {
+    "uc_1_1_azure_byol_to_payg":             "UC 1.1 — Azure BYOL to PAYG",
+    "uc_1_2_retired_device_installs":         "UC 1.2 — Retired Device Installs",
+    "uc_3_1_cpu_rightsizing":                "UC 3.1 — CPU Rightsizing",
+    "uc_3_2_ram_rightsizing":                "UC 3.2 — RAM Rightsizing",
+    "uc_3_3_criticality_cpu_optimization":   "UC 3.3 — Criticality CPU Optimization",
+    "uc_3_4_criticality_ram_optimization":   "UC 3.4 — Criticality RAM Optimization",
+    "uc_3_5_lifecycle_risk_flags":           "UC 3.5 — Lifecycle Risk Flags",
+    "uc_3_6_physical_system_review":         "UC 3.6 — Physical System Review",
+}
+
+
+def _fmt_rule_heading(rule_id: str, meta: Optional[Dict[str, Any]] = None) -> str:
+    """Return a human-readable heading like 'UC 1.2 — Retired Device Installs'."""
+    desc = (meta or {}).get("description") if isinstance(meta, dict) else None
+    if desc:
+        rid_norm = rule_id.lower().strip()
+        # Prepend the UC prefix if available so description has context
+        for key, label in _UC_LABEL_MAP.items():
+            if rid_norm == key:
+                prefix = label.split(" — ")[0]  # e.g. "UC 1.2"
+                return f"{prefix} — {str(desc).strip()}"
+        return str(desc).strip()
+    return _UC_LABEL_MAP.get(rule_id.lower().strip(), rule_id)
+
+
 def _render_local_agent_report_markdown(
     *,
     usecase_id: str,
@@ -800,14 +826,13 @@ def _render_local_agent_report_markdown(
     lines.append("| Rule id | Matched count |")
     lines.append("|---|---:|")
     for rule_id in visible_rule_ids:
-        display_rule_id = rule_id.replace("_", " ").title()
-        lines.append(f"| {display_rule_id} | {matched_counts.get(rule_id, 0)} |")
+        lines.append(f"| {_fmt_rule_heading(rule_id, rules_meta.get(rule_id))} | {matched_counts.get(rule_id, 0)} |")
     lines.append("")
 
     lines.extend(["## Rule Results", ""])
     for rule_id in visible_rule_ids:
         meta = rules_meta.get(rule_id) or {}
-        lines.append(f"### {rule_id.replace('_', ' ').title()}")
+        lines.append(f"### {_fmt_rule_heading(rule_id, meta)}")
         lines.append("")
         if meta.get("description"):
             lines.append(f"- **Purpose**: {meta['description']}")
@@ -1002,7 +1027,12 @@ def build_live_agent_report_preview(
     )
     if not report_markdown:
         # Fall back to Django-native renderer (same content, slightly different heading style)
-        logger.info("Using Django-native agent report renderer as fallback.")
+        logger.error(
+            "AI agent NOT used — _try_agent_report_tool() returned no markdown. "
+            "Report generated via Django-native fallback renderer. "
+            "Check that the agent rules config and report_generator tool are accessible.",
+            exc_info=True,
+        )
         report_markdown = _render_local_agent_report_markdown(
             usecase_id=usecase_id,
             strategy_results=strategy_results,
@@ -1223,9 +1253,12 @@ def call_agent_generate_report(
     default_local_endpoints = {"http://localhost:8000", "http://127.0.0.1:8000"}
     endpoint_explicitly_configured = bool(os.environ.get("AGENT_A2A_ENDPOINT", "").strip())
     if not endpoint_explicitly_configured and endpoint in default_local_endpoints:
-        logger.info(
-            "AGENT_A2A_ENDPOINT is using the local Django default (%s); using in-process fallback instead of HTTP.",
+        logger.error(
+            "AI agent NOT used — AGENT_A2A_ENDPOINT is unset or pointing at the local Django server (%s). "
+            "Report generated via in-process Django fallback. "
+            "To use the real AI agent, set AGENT_A2A_ENDPOINT to the external A2A server URL.",
             endpoint,
+            exc_info=True,
         )
         return _build_local_agent_report_response(
             records=records,
@@ -1257,10 +1290,13 @@ def call_agent_generate_report(
             raw = resp.read().decode("utf-8")
         return _json.loads(raw)
     except Exception as exc:
-        logger.warning(
-            "A2A agent HTTP call failed for %s (%s). Falling back to in-process report generation.",
+        logger.error(
+            "AI agent NOT used — A2A agent HTTP call failed for %s (%s). "
+            "Report generated via in-process Django fallback. "
+            "Check that the A2A server is running and AGENT_A2A_ENDPOINT is reachable.",
             url,
             exc,
+            exc_info=True,
         )
         try:
             return _build_local_agent_report_response(
