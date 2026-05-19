@@ -592,11 +592,11 @@ def _build_retired_installations_df() -> pd.DataFrame:
             "product_description": r["product_description"] or "",
             "product_edition":  r["product_edition"] or "",
             "license_metric":   r["license_metric"] or "",
-            "no_license_required": nlr_num,
+            # "no_license_required": nlr_num,
             # UC2 uses Server.installed_status_usu directly — no fallback to device_status.
             # A device is retired only when USU explicitly marks it as such.
             "install_status": str(r["server__installed_status_usu"] or "").strip(),
-            "device_status":    r["device_status"] or "",
+            # "device_status":    r["device_status"] or "",
             "no_license_required_product": nlr_num,
             "environment":      r["server__environment"] or "",
             "u_hosting_zone":   _normalize_hosting_zone(r["server__hosting_zone"]),
