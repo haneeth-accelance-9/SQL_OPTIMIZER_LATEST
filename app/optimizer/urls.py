@@ -40,6 +40,8 @@ urlpatterns = [
     path("api/rule1-data/", views.api_rule1_data, name="api_rule1_data"),
     path("api/rule2-data/", views.api_rule2_data, name="api_rule2_data"),
     # ── Summary / BI API endpoints ────────────────────────────────────────────
+    # GET  /api/dashboard-summary/           → complete KPI summary for all dashboard tabs
+    path("api/dashboard-summary/", views.api_dashboard_summary, name="api_dashboard_summary"),
     # GET  /api/savings-summary/             → all three strategies + totals (PowerBI)
     path("api/savings-summary/", views.api_savings_summary, name="api_savings_summary"),
     # GET  /api/usu-data/                    → MySQL and/or Oracle (Java) installations + demand details

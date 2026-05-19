@@ -379,11 +379,12 @@
                 <table class="funnel-table">
                     <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
-                        <tr><td>Total active server installations (UC1 input)</td><td class="count">—</td><td>Active servers with SQL Server installations</td></tr>
+                        <tr><td>Total SQL Server installations (UC1 input)</td><td class="count">{{ rule_results.uc1_total_input|default:"—" }}</td><td>All SQL Server installations in inventory</td></tr>
                         <tr class="section-hdr"><td colspan="3">--- UC1 filter criteria ---</td></tr>
-                        <tr><td>Filter 1: Install Status = Installed (active only)</td><td class="count">—</td><td>Retired/unknown excluded</td></tr>
-                        <tr><td>Filter 2: Java product family excluded</td><td class="count">—</td><td>Non-Java SQL Server only</td></tr>
-                        <tr><td>Filter 3: Hosting Zone = Azure / Public Cloud</td><td class="count">—</td><td>Cloud-hosted servers</td></tr>
+                        <tr><td>Filter 1: Product Family = 'SQL Server'</td><td class="count">{{ rule_results.uc1_filter1_count|default:"—" }}</td><td>Pre-filtered at source</td></tr>
+                        <tr><td>Filter 2: Hosting Zone = Public Cloud or Private Cloud AVS</td><td class="count">{{ rule_results.uc1_filter2_count|default:"—" }}</td><td>Cloud-hosted servers only</td></tr>
+                        <tr><td>Filter 3: Inventory Status Standard ≠ 'License Included'</td><td class="count">{{ rule_results.uc1_filter3_count|default:"—" }}</td><td>Excludes already-included licenses</td></tr>
+                        <tr><td>Filter 4: No License Required = 0</td><td class="count">{{ rule_results.azure_payg_count|default:0 }}</td><td>Active license obligation confirmed</td></tr>
                         <tr class="final-row"><td>UC1 FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ rule_results.azure_payg_count|default:0 }}</td><td>Eligible for PAYG license swap</td></tr>
                     </tbody>
                 </table>
@@ -401,10 +402,11 @@
                 <table class="funnel-table">
                     <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
-                        <tr><td>Total server installations (UC2 input)</td><td class="count">—</td><td>All installations in inventory</td></tr>
+                        <tr><td>Total SQL Server installations (UC2 input)</td><td class="count">{{ rule_results.uc2_total_input|default:"—" }}</td><td>All SQL Server installations in inventory</td></tr>
                         <tr class="section-hdr"><td colspan="3">--- UC2 filter criteria ---</td></tr>
-                        <tr><td>Filter 1: Install Status = Retired</td><td class="count">—</td><td>Retired devices</td></tr>
-                        <tr><td>Filter 2: Active software installation still reported</td><td class="count">—</td><td>Discovery tool still reporting</td></tr>
+                        <tr><td>Filter 1: Product Family = 'SQL Server'</td><td class="count">{{ rule_results.uc2_filter1_count|default:"—" }}</td><td>Pre-filtered at source</td></tr>
+                        <tr><td>Filter 2: installed_status_usu = 'Retired'</td><td class="count">{{ rule_results.uc2_filter2_count|default:"—" }}</td><td>Server marked retired in USU</td></tr>
+                        <tr><td>Filter 3: No License Required = 0</td><td class="count">{{ rule_results.uc2_filter3_count|default:"—" }}</td><td>Active license obligation confirmed</td></tr>
                         <tr class="final-row"><td>UC2 FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ rule_results.retired_count|default:0 }}</td><td>Retired devices with active licenses — flag for cleanup</td></tr>
                     </tbody>
                 </table>
@@ -437,7 +439,7 @@
                         <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_prod_final|default:0 }}</td><td></td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
                         <tr class="section-hdr"><td>--- NON-PROD filters (Development, Test, QA, UAT, DR) ---</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 1: Avg_CPU_12m &lt; 25%</td><td class="count">{{ filter_funnel.cpu_nonprod_f1|default:0 }}</td><td></td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 1: Avg_CPU_12m &lt; 15%</td><td class="count">{{ filter_funnel.cpu_nonprod_f1|default:0 }}</td><td></td></tr>
                         <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 2: Peak_CPU_12m &lt;= 80%</td><td class="count">{{ filter_funnel.cpu_nonprod_f2|default:0 }}</td><td></td></tr>
                         <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 3: Current_vCPU &gt;= 4</td><td class="count">{{ filter_funnel.cpu_nonprod_f3|default:0 }}</td><td></td></tr>
                         <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_nonprod_final|default:0 }}</td><td></td></tr>
@@ -521,7 +523,7 @@
                         <tr><td>Total rows in DB (UC3.4 Crit RAM input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
                         <tr class="section-hdr"><td colspan="3">--- UC3.4a Downsize filters ---</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 1: Criticality = Business/Mission/Manufacturing Critical</td><td class="count">{{ filter_funnel.crit_all_count|default:0 }}</td><td>Values: Business Critical, Mission Critical, Manufacturing Critical</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
                         <tr><td>&nbsp;&nbsp;UC3.4a Filter 2: Avg_FreeMem_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_ram_dn_f2|default:0 }}</td><td></td></tr>
                         <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4a DOWNSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_dn_final|default:0 }}</td><td>Downsize RAM by ~25% — Human Intervention Required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>

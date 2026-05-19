@@ -956,7 +956,9 @@ def build_live_agent_report_preview(
     _uc1 = _safe_int(rule_results.get("azure_payg_count"))
     if _uc1:
         _mc_overrides["uc_1_1_azure_byol_to_payg"] = _uc1
-    _uc2 = _safe_int(rule_results.get("retired_count"))
+    _uc2 = _safe_int(rule_results.get("retired_count")) or _safe_int(
+        (strategy_results.get("strategy_2_retired_devices") or {}).get("candidate_count")
+    )
     if _uc2:
         _mc_overrides["uc_1_2_retired_device_installs"] = _uc2
     _cpu = _safe_int(merged_rightsizing.get("cpu_count") or merged_rightsizing.get("cpu_candidate_count"))

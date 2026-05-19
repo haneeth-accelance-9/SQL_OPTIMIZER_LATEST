@@ -97,15 +97,15 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[760px]">
                 <div class="results-kpi-item">
                     <span class="results-kpi-label">Total servers analyzed</span>
-                    <span class="results-kpi-value">{{ total_devices_analyzed|default:0 }}</span>
+                    <span class="results-kpi-value" id="kpi-total-servers">{{ total_devices_analyzed|default:0 }}</span>
                 </div>
                 <div class="results-kpi-item">
                     <span class="results-kpi-label">Total demand licenses</span>
-                    <span class="results-kpi-value">{{ total_demand_quantity }}</span>
+                    <span class="results-kpi-value" id="kpi-total-demand">{{ total_demand_quantity }}</span>
                 </div>
                 <div class="results-kpi-item">
                     <span class="results-kpi-label">Current Cost</span>
-                    <span class="results-kpi-value">{{ total_license_cost_eu }}</span>
+                    <span class="results-kpi-value" id="kpi-current-cost">{{ total_license_cost_eu }}</span>
                 </div>
             </div>
         </div>
@@ -171,28 +171,31 @@
                             <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">PAYG</span>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ azure_payg_savings_eu }}</p>
-                            <p class="mt-1 text-[11px] text-slate-400">= 80% of Current Cost: {{ azure_payg_total_cost_eu }}</p>
+                            <p id="payg-savings-eu" class="text-5xl font-extrabold tracking-tight text-slate-900">{{ azure_payg_savings_eu }}</p>
+                            <p id="payg-total-cost-label" class="mt-1 text-[11px] text-slate-400">= 80% of Current Cost: {{ azure_payg_total_cost_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4">
                             <div class="grid grid-cols-2 gap-3 border-b border-slate-200 pb-4">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Total demand licenses</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
+                                    <p id="payg-demand-qty" class="mt-1 text-xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Candidates</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                    <p id="payg-count" class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_count }}</p>
+                                    <p class="mt-1 text-[11px] text-slate-400">
+                                        Columns with effective quantity as '0' have no cost calculation
+                                    </p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Prod</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_prod_candidates_count }}</p>
+                                    <p id="payg-prod-count" class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_prod_candidates_count }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Non Prod</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_nonprod_candidates_count }}</p>
+                                    <p id="payg-nonprod-count" class="mt-1 text-xl font-bold text-slate-900">{{ azure_payg_nonprod_candidates_count }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
@@ -293,30 +296,27 @@
                 <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
                     <div class="flex items-center gap-2">
                         <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
-                        <div class="flex-shrink-0"
-                             onmouseenter="showFixedTooltip(this,'The data inconsistency between demand details and installations have not been considered in cost calculations.')"
-                             onmouseleave="hideFixedTooltip()">
-                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 cursor-pointer select-none">
-                                <span class="text-[9px] font-extrabold text-white leading-none">!</span>
-                            </div>
-                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <label for="rule1-hosting-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting Zone</label>
                         <select id="rule1-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
                             <option value="">All</option>
+                        </select>
+                        <label for="rule1-env-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Environment</label>
+                        <select id="rule1-env-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                            <option value="">All</option>
+                            <option value="prod">Prod</option>
+                            <option value="nonprod">Non Prod</option>
                         </select>
                         <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: <span id="rule1-filtered-count">{{ azure_payg_count }}</span></span>
                         <button id="rule1-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
                             Send Email
                         </button>
-                        {% if total_rule1_pages > 1 and rr.azure_payg %}
-                        <nav class="flex items-center gap-1" aria-label="Rule 1 pagination" data-rule="1" data-current-page="{{ rule1_page }}" data-total-pages="{{ total_rule1_pages }}" data-other-page="{{ rule2_page }}">
-                            <a id="rule1-prev" href="?rule1_page={{ rule1_prev }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
-                            <span id="rule1-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rule1_page }} of {{ total_rule1_pages }}</span>
-                            <a id="rule1-next" href="?rule1_page={{ rule1_next }}&rule2_page={{ rule2_page }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule1_page >= total_rule1_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
+                        <nav id="rule1-pager" class="hidden flex items-center gap-1" aria-label="Rule 1 pagination">
+                            <button id="rule1-prev" type="button" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed" disabled>Prev</button>
+                            <span id="rule1-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page 1 of 1</span>
+                            <button id="rule1-next" type="button" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed" disabled>Next</button>
                         </nav>
-                        {% endif %}
                         <button id="rule1-col-toggle-btn" type="button" title="Manage columns" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-all hover:bg-slate-100">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
                             Columns
@@ -334,54 +334,20 @@
                         </svg>
                         <p class="font-medium text-base">{{ rule_results.azure_error }}</p>
                     </div>
-                    {% elif rule1_keys %}
+                    {% else %}
+                    {# Table shell always rendered — headers and rows populated by loadRule1Data() JS #}
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white">
                             <tr id="rule1-thead-row">
                                 <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
                                     <input id="rule1-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
                                 </th>
-                                {% for key in rule1_keys %}
-                                <th data-col-index="{{ forloop.counter0 }}" data-col-key="{{ key }}"
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    {{ key|title }}</th>
-                                {% endfor %}
-                                <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    Actions</th>
                             </tr>
                         </thead>
                         <tbody id="rule1-tbody" class="bg-white divide-y divide-slate-100">
-                            {% for row in azure_payg_page %}
-                            <tr class="hover:bg-sky-50/60 transition-colors">
-                                <td class="px-4 py-3 text-center whitespace-nowrap">
-                                    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" disabled>
-                                </td>
-                                {% for val in row %}
-                                <td class="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
-                                {% endfor %}
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">
-                                        Send Trigger
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
+                            <tr><td colspan="99" class="px-4 py-8 text-center text-slate-400 text-sm">Loading data…</td></tr>
                         </tbody>
                     </table>
-                    {% else %}
-                    <div
-                        class="absolute inset-0 p-8 flex flex-col justify-center items-center text-slate-400 bg-slate-50/50">
-                        <svg class="w-12 h-12 mb-3 text-slate-300" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
-                            </path>
-                        </svg>
-                        <p class="text-base font-bold text-slate-500">No candidates identified for Rule 1</p>
-                        <p class="text-sm mt-1">All Azure environments currently comply with PAYG licensing strategy.
-                        </p>
-                    </div>
                     {% endif %}
                 </div>
                 <div class="flex justify-end px-4 py-2">
@@ -416,17 +382,21 @@
                             <!-- <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">1.1%</span> -->
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900">{{ retired_devices_savings_eu }}</p>
+                            <p id="retired-savings-main" class="text-5xl font-extrabold tracking-tight text-slate-900">{{ retired_devices_savings_eu }}</p>
                         </div>
                         <div class="mt-6 space-y-4 text-[11px]">
                             <div class="grid grid-cols-3 gap-2">
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Potential Savings</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
+                                    <p id="retired-savings-sub" class="mt-1 text-xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Retired Devices</p>
-                                    <p class="mt-1 text-xl font-bold text-slate-900">{{ retired_count }}</p>
+                                    <p id="retired-count-main" class="mt-1 text-xl font-bold text-slate-900">{{ retired_count }}</p>
+                                    <p class="mt-1 text-[11px] text-slate-400">
+                                        <span id="retired-demand-matched-count">{{ retired_demand_matched_count }}</span>
+                                        of <span id="retired-total-count">{{ retired_count }}</span> matched demand data
+                                    </p>
                                 </div>
                                 <div>
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Export</p>
@@ -465,22 +435,16 @@
             <div class="bg-white rounded-[22px] border border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.05)] flex flex-col mt-4 overflow-hidden flex-shrink-0 w-full">
                 <div class="px-4 py-4 border-b border-slate-200 bg-white flex justify-between items-center flex-wrap gap-3">
                     <h3 class="text-sm font-bold text-slate-800">Raw Candidate Data</h3>
-                    <div class="flex items-center gap-2">
-                        <label for="rule2-hosting-filter" class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Hosting Zone</label>
-                        <select id="rule2-hosting-filter" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
-                            <option value="">All</option>
-                        </select>
+                    <div class="flex items-center gap-2 flex-wrap">
                         <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">Total: <span id="rule2-filtered-count">{{ retired_count }}</span></span>
                         <button id="rule2-send-email-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300" disabled>
                             Send Email
                         </button>
-                        {% if total_rule2_pages > 1 and rr.retired_devices %}
-                        <nav class="flex items-center gap-1" aria-label="Rule 2 pagination" data-rule="2" data-current-page="{{ rule2_page }}" data-total-pages="{{ total_rule2_pages }}" data-other-page="{{ rule1_page }}">
-                            <a id="rule2-prev" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_prev }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page <= 1 %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Prev</a>
-                            <span id="rule2-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page {{ rule2_page }} of {{ total_rule2_pages }}</span>
-                            <a id="rule2-next" href="?rule1_page={{ rule1_page }}&rule2_page={{ rule2_next }}" class="optimizer-pagination-link px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold {% if rule2_page >= total_rule2_pages %}text-slate-300 pointer-events-none{% else %}text-slate-700 hover:bg-slate-100{% endif %}">Next</a>
+                        <nav id="rule2-pager" class="hidden flex items-center gap-1" aria-label="Rule 2 pagination">
+                            <button id="rule2-prev" type="button" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed" disabled>Prev</button>
+                            <span id="rule2-page-display" class="px-2 text-[10px] font-medium text-slate-600">Page 1 of 1</span>
+                            <button id="rule2-next" type="button" class="px-2 py-1 rounded border border-slate-200 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:cursor-not-allowed" disabled>Next</button>
                         </nav>
-                        {% endif %}
                         <button id="rule2-col-toggle-btn" type="button" title="Manage columns" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-all hover:bg-slate-100">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
                             Columns
@@ -498,53 +462,20 @@
                         </svg>
                         <p class="font-medium text-base">{{ rule_results.retired_error }}</p>
                     </div>
-                    {% elif rule2_keys %}
+                    {% else %}
+                    {# Table shell always rendered — headers and rows populated by loadRule2Data() JS #}
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-white">
                             <tr id="rule2-thead-row">
                                 <th class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50 w-14 min-w-[56px]">
                                     <input id="rule2-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 align-middle">
                                 </th>
-                                {% for key in rule2_keys %}
-                                <th data-col-index="{{ forloop.counter0 }}" data-col-key="{{ key }}"
-                                    class="px-4 py-3 text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    {{ key|title }}</th>
-                                {% endfor %}
-                                <th
-                                    class="px-4 py-3 text-center text-[10px] font-semibold text-slate-500 tracking-[0.12em] whitespace-nowrap bg-slate-50">
-                                    Actions</th>
                             </tr>
                         </thead>
                         <tbody id="rule2-tbody" class="bg-white divide-y divide-slate-100">
-                            {% for row in retired_devices_page %}
-                            <tr class="hover:bg-sky-50/60 transition-colors">
-                                <td class="px-4 py-3 text-center whitespace-nowrap">
-                                    <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" disabled>
-                                </td>
-                                {% for val in row %}
-                                <td class="px-6 py-3.5 text-sm text-slate-700 whitespace-nowrap">{{ val|default:"—" }}</td>
-                                {% endfor %}
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <button type="button" class="inline-flex items-center rounded-full px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2" style="background-color:#00BCFF;">
-                                        Send Trigger
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
+                            <tr><td colspan="99" class="px-4 py-8 text-center text-slate-400 text-sm">Loading data…</td></tr>
                         </tbody>
                     </table>
-                    {% else %}
-                    <div
-                        class="absolute inset-0 p-8 flex flex-col justify-center items-center text-slate-400 bg-slate-50/50">
-                        <svg class="w-12 h-12 mb-3 text-emerald-400" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <p class="text-base font-bold text-slate-500">No retired devices found with active
-                            installations.</p>
-                        <p class="text-sm mt-1 text-slate-400">Great job maintaining CMDB data quality!</p>
-                    </div>
                     {% endif %}
                 </div>
                 <div class="flex justify-end px-4 py-2">
@@ -570,7 +501,7 @@
                             </svg></div>
                         <h3 class="text-xs font-semibold text-blue-100 uppercase tracking-wider mb-2 relative z-10">Total License Demand</h3>
                         <div class="flex items-end justify-between relative z-10">
-                            <p class="text-4xl font-extrabold">{{ total_demand_quantity }}</p>
+                            <p id="tile-demand-qty" class="text-4xl font-extrabold">{{ total_demand_quantity }}</p>
                             <a href="{% url 'optimizer:download_demand_data' %}"
                                title="Export all demand rows with Actual Line Cost"
                                class="flex items-center gap-1 rounded-lg bg-white/20 hover:bg-white/35 px-3 py-1.5 text-xs font-semibold text-white transition-colors">
@@ -583,16 +514,16 @@
                     </div>
                     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
                         <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">PAYG Candidates</h3>
-                        <p class="text-4xl font-extrabold text-slate-800">{{ azure_payg_count }}</p>
+                        <p id="tile-payg-count" class="text-4xl font-extrabold text-slate-800">{{ azure_payg_count }}</p>
                     </div>
                     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
                         <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Retired Risks</h3>
-                        <p class="text-4xl font-extrabold text-slate-800">{{ retired_count }}</p>
+                        <p id="tile-retired-count" class="text-4xl font-extrabold text-slate-800">{{ retired_count }}</p>
                     </div>
                     <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm">
                         <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Analyzed Cost</h3>
-                        <p class="text-3xl font-extrabold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
-                        <p class="text-xs text-slate-500 font-medium mt-2">Potential savings from this analyzed file: {{ potential_savings_eu }}</p>
+                        <p id="tile-analyzed-cost" class="text-3xl font-extrabold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
+                        <p class="text-xs text-slate-500 font-medium mt-2">Potential savings from this analyzed file: <span id="tile-potential-savings">{{ potential_savings_eu }}</span></p>
                     </div>
                 </div>
 
@@ -659,13 +590,13 @@
                         <div class="mt-6 grid grid-cols-2 gap-3">
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">BYOL to PAYG</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ azure_payg_savings_eu }}</p>
-                                <p class="mt-2 text-base font-semibold text-slate-700">{{ azure_payg_count }} candidates</p>
+                                <p id="overview-payg-savings" class="mt-2 text-2xl font-bold text-slate-900">{{ azure_payg_savings_eu }}</p>
+                                <p id="overview-payg-count-label" class="mt-2 text-base font-semibold text-slate-700">{{ azure_payg_count }} candidates</p>
                             </div>
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Retired but reporting</p>
-                                <p class="mt-2 text-2xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
-                                <p class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
+                                <p id="overview-retired-savings" class="mt-2 text-2xl font-bold text-slate-900">{{ retired_devices_savings_eu }}</p>
+                                <p id="overview-retired-count-label" class="mt-2 text-base font-semibold text-slate-700">{{ retired_count }} devices</p>
                             </div>
                             <div class="rounded-2xl bg-white/80 px-5 py-4 ring-1 ring-slate-200">
                                 <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">CPU Estimate Savings</p>
@@ -703,18 +634,15 @@
                     <div class="xl:col-span-3 grid gap-3">
                         <div class="dashboard-kpi-card border-l-[6px] border-l-sky-500">
                             <span class="dashboard-section-label">Total demand licenses</span>
-                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
-                            <!-- <p class="mt-1 text-sm text-slate-500">New total</p> -->
+                            <p id="overview-demand" class="mt-3 text-3xl font-bold text-slate-900">{{ total_demand_quantity }}</p>
                         </div>
                         <div class="dashboard-kpi-card border-l-[6px] border-l-emerald-500">
                             <span class="dashboard-section-label">Devices Analyzed</span>
-                            <p class="mt-3 text-3xl font-bold text-slate-900">{{ total_devices_analyzed|default:0 }}</p>
-                            <!-- <p class="mt-1 text-sm text-slate-500">Current total</p> -->
+                            <p id="overview-devices" class="mt-3 text-3xl font-bold text-slate-900">{{ total_devices_analyzed|default:0 }}</p>
                         </div>
                         <div class="dashboard-kpi-card border-l-[6px] border-l-lime-500">
                             <span class="dashboard-section-label">Current Cost</span>
-                            <p class="mt-3 text-3xl font-bold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
-                            <!-- <p class="mt-1 text-sm text-slate-500">Observed SQL licensing spend.</p> -->
+                            <p id="overview-cost" class="mt-3 text-3xl font-bold text-slate-900" style="white-space:nowrap;">{{ total_license_cost_eu }}</p>
                         </div>
                     </div>
                 </div>
@@ -1618,10 +1546,7 @@
     </div>
 </div>
 
-{{ rule1_data_json|json_script:"rule1-data" }}
-{{ rule2_data_json|json_script:"rule2-data" }}
-{{ rule1_keys|json_script:"rule1-keys" }}
-{{ rule2_keys|json_script:"rule2-keys" }}
+{# rule1/rule2 table data loaded lazily via /api/rule1-data/ and /api/rule2-data/ #}
 {{ rightsizing_cpu_data_json|json_script:"rs3-cpu-data" }}
 {{ rightsizing_ram_data_json|json_script:"rs3-ram-data" }}
 {{ crit_cpu_data_json|json_script:"crit-cpu-data" }}
@@ -1633,6 +1558,7 @@
 {{ rightsizing.default_filter_by_workload|json_script:"rs3-default-filters" }}
 {{ rightsizing.screen_summaries|json_script:"rs3-screen-summaries" }}
 <script>
+    window.dashboardSummaryUrl  = "{% url 'optimizer:api_dashboard_summary' %}";
     window.rs3SavingsSummaryUrl = "{% url 'optimizer:api_savings_summary' %}";
     window.rs3RightsizingApiUrl = "{% url 'optimizer:api_strategy3_rightsizing' %}";
     window.rule1DataApiUrl      = "{% url 'optimizer:api_rule1_data' %}";
@@ -2354,6 +2280,9 @@
                 }
                 window.dispatchEvent(new Event('resize'));
             }, 80);
+            // Lazy-load tab-specific data on first activation
+            if (tabId === 'rule1') loadRule1Data();
+            else if (tabId === 'rule2') loadRule2Data();
         };
 
         var currentHash = (window.location.hash || '').replace('#', '');
@@ -2364,17 +2293,161 @@
             if (validTabs.includes(id)) window.setOptimizerTab(id);
         });
 
-        // Client-side pagination (no full page reload)
+        // ── Dashboard Summary API ──────────────────────────────────────────────
+        // Populates header KPIs and all tab summary cards from /api/dashboard-summary/
+        function fetchDashboardSummary() {
+            if (!window.dashboardSummaryUrl) return;
+            fetch(window.dashboardSummaryUrl, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                var d = json.result || {};
+                function setText(id, val) {
+                    var el = document.getElementById(id);
+                    if (el && val != null) el.textContent = val;
+                }
+                // Header KPI strip
+                setText('kpi-total-servers', d.total_devices_analyzed);
+                setText('kpi-total-demand',  d.total_demand_quantity);
+                setText('kpi-current-cost',  d.total_license_cost_eu);
+                // PAYG tab summary card
+                setText('payg-savings-eu',             d.azure_payg_savings_eu);
+                setText('payg-demand-qty',             d.total_demand_quantity);
+                setText('payg-count',                  d.azure_payg_count);
+                setText('payg-prod-count',             d.azure_payg_prod_candidates_count);
+                setText('payg-nonprod-count',          d.azure_payg_nonprod_candidates_count);
+                setText('payg-demand-matched-count',   d.azure_payg_demand_matched_count);
+                setText('payg-total-count',            d.azure_payg_count);
+                var tlabel = document.getElementById('payg-total-cost-label');
+                if (tlabel && d.azure_payg_total_cost_eu) {
+                    tlabel.textContent = '= 80% of Current Cost: ' + d.azure_payg_total_cost_eu;
+                }
+                // PAYG filter badge
+                if (!rule1Loaded) {
+                    setText('rule1-filtered-count', d.azure_payg_count);
+                }
+                // Retired Assets tab summary card
+                setText('retired-savings-main',          d.retired_devices_savings_eu);
+                setText('retired-savings-sub',           d.retired_devices_savings_eu);
+                setText('retired-count-main',            d.retired_count);
+                setText('retired-demand-matched-count',  d.retired_demand_matched_count);
+                setText('retired-total-count',           d.retired_count);
+                // Retired filter badge
+                if (!rule2Loaded) {
+                    setText('rule2-filtered-count', d.retired_count);
+                }
+                // Dashboard tab executive summary
+                setText('overview-potential-savings',   d.potential_savings_eu);
+                setText('overview-payg-savings',        d.azure_payg_savings_eu);
+                setText('overview-payg-count-label',    (d.azure_payg_count || 0) + ' candidates');
+                setText('overview-retired-savings',     d.retired_devices_savings_eu);
+                setText('overview-retired-count-label', (d.retired_count || 0) + ' devices');
+                setText('overview-cpu-savings',         d.rightsizing_cpu_savings_eu);
+                setText('overview-cpu-vcpu',            d.rightsizing_total_vcpu_reduction);
+                // Dashboard tab KPI tiles
+                setText('tile-demand-qty',       d.total_demand_quantity);
+                setText('tile-payg-count',       d.azure_payg_count);
+                setText('tile-retired-count',    d.retired_count);
+                setText('tile-analyzed-cost',    d.total_license_cost_eu);
+                setText('tile-potential-savings',d.potential_savings_eu);
+                // Dashboard tab right-column KPI cards
+                setText('overview-demand',  d.total_demand_quantity);
+                setText('overview-devices', d.total_devices_analyzed);
+                setText('overview-cost',    d.total_license_cost_eu);
+            })
+            .catch(function (err) { console.warn('Dashboard summary fetch failed', err); });
+        }
+
+        // ── Rule 1 (PAYG) API data loader ─────────────────────────────────────
+        var rule1Loaded  = false;
+        var rule1Loading = false;
+        function loadRule1Data() {
+            if (rule1Loaded || rule1Loading || !window.rule1DataApiUrl) return;
+            rule1Loading = true;
+            var tbody = document.getElementById('rule1-tbody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="99" class="px-4 py-8 text-center text-slate-400 text-sm">Loading data…</td></tr>';
+            fetch(window.rule1DataApiUrl + '?page_size=2000', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                rule1Keys         = data.keys  || [];
+                rule1Data         = data.rows  || [];
+                rule1SortedData   = rule1Data.slice();
+                rule1FilteredData = rule1Data.slice();
+                rule1HzIdx        = rule1Keys.indexOf('u_hosting_zone');
+                rule1EnvIdx       = rule1Keys.indexOf('environment');
+                totalRule1Pages   = Math.max(1, Math.ceil(rule1Data.length / PER_PAGE));
+                rule1Page         = 1;
+                rule1Loaded       = true;
+                rule1Loading      = false;
+                populateHostingFilter('rule1-hosting-filter', rule1Data, rule1HzIdx);
+                renderRule1Headers();
+                renderRule1Body();
+                updatePagination(1, rule1Page, totalRule1Pages);
+                var badge = document.getElementById('rule1-filtered-count');
+                if (badge) badge.textContent = rule1FilteredData.length;
+            })
+            .catch(function (err) {
+                rule1Loading = false;
+                console.error('Rule 1 data load failed', err);
+                var tbody2 = document.getElementById('rule1-tbody');
+                if (tbody2) tbody2.innerHTML = '<tr><td colspan="99" class="px-4 py-8 text-center text-rose-500 text-sm">Failed to load PAYG data. Please refresh.</td></tr>';
+            });
+        }
+
+        // ── Rule 2 (Retired Assets) API data loader ───────────────────────────
+        var rule2Loaded  = false;
+        var rule2Loading = false;
+        function loadRule2Data() {
+            if (rule2Loaded || rule2Loading || !window.rule2DataApiUrl) return;
+            rule2Loading = true;
+            var tbody = document.getElementById('rule2-tbody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="99" class="px-4 py-8 text-center text-slate-400 text-sm">Loading data…</td></tr>';
+            fetch(window.rule2DataApiUrl + '?page_size=2000', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                rule2Keys         = data.keys  || [];
+                rule2Data         = data.rows  || [];
+                rule2SortedData   = rule2Data.slice();
+                rule2FilteredData = rule2Data.slice();
+                rule2HzIdx        = rule2Keys.indexOf('u_hosting_zone');
+                rule2EnvIdx       = rule2Keys.indexOf('environment');
+                totalRule2Pages   = Math.max(1, Math.ceil(rule2Data.length / PER_PAGE));
+                rule2Page         = 1;
+                rule2Loaded       = true;
+                rule2Loading      = false;
+                populateHostingFilter('rule2-hosting-filter', rule2Data, rule2HzIdx);
+                renderRule2Headers();
+                renderRule2Body();
+                updatePagination(2, rule2Page, totalRule2Pages);
+                var badge = document.getElementById('rule2-filtered-count');
+                if (badge) badge.textContent = rule2FilteredData.length;
+            })
+            .catch(function (err) {
+                rule2Loading = false;
+                console.error('Rule 2 data load failed', err);
+                var tbody2 = document.getElementById('rule2-tbody');
+                if (tbody2) tbody2.innerHTML = '<tr><td colspan="99" class="px-4 py-8 text-center text-rose-500 text-sm">Failed to load Retired Assets data. Please refresh.</td></tr>';
+            });
+        }
+
+        // Kick off dashboard summary + initial tab data on load
+        fetchDashboardSummary();
+
+        // Client-side pagination — rule1/rule2 data loaded from API, not embedded HTML
         var PER_PAGE = 10;
         var RS3_PER_PAGE = 10;
-        var rule1DataEl = document.getElementById('rule1-data');
-        var rule2DataEl = document.getElementById('rule2-data');
-        var rule1KeysEl = document.getElementById('rule1-keys');
-        var rule2KeysEl = document.getElementById('rule2-keys');
-        var rule1Data = rule1DataEl ? JSON.parse(rule1DataEl.textContent) : [];
-        var rule2Data = rule2DataEl ? JSON.parse(rule2DataEl.textContent) : [];
-        var rule1Keys = rule1KeysEl ? JSON.parse(rule1KeysEl.textContent) : [];
-        var rule2Keys = rule2KeysEl ? JSON.parse(rule2KeysEl.textContent) : [];
+        var rule1Data = [];
+        var rule2Data = [];
+        var rule1Keys = [];
+        var rule2Keys = [];
         var nav1 = document.querySelector('nav[data-rule="1"]');
         var nav2 = document.querySelector('nav[data-rule="2"]');
         var rule1Page = nav1 ? parseInt(nav1.getAttribute('data-current-page'), 10) : 1;
@@ -2424,18 +2497,30 @@
             try { localStorage.setItem('rule2HiddenCols', JSON.stringify(Array.from(rule2HiddenCols))); } catch (e) {}
         }
 
-        // ── Rule 1 & 2: hosting zone filter state ─────────────────────────────
+        // ── Rule 1 & 2: filter state (hosting zone + environment) ─────────────
         var rule1HostingFilter = '';
         var rule2HostingFilter = '';
+        var rule1EnvFilter = '';
+        var rule2EnvFilter = '';
         var rule1FilteredData = rule1Data.slice();
         var rule2FilteredData = rule2Data.slice();
 
-        var rule1HzIdx = rule1Keys.indexOf('u_hosting_zone');
-        var rule2HzIdx = rule2Keys.indexOf('u_hosting_zone');
+        var rule1HzIdx  = rule1Keys.indexOf('u_hosting_zone');
+        var rule2HzIdx  = rule2Keys.indexOf('u_hosting_zone');
+        var rule1EnvIdx = rule1Keys.indexOf('environment');
+        var rule2EnvIdx = rule2Keys.indexOf('environment');
+
+        var _NON_PROD_ENVS = ['development', 'disaster recovery', 'test', 'qa', 'uat'];
+
+        function _isNonProd(envVal) {
+            return _NON_PROD_ENVS.indexOf(String(envVal || '').trim().toLowerCase()) !== -1;
+        }
 
         function populateHostingFilter(selectId, data, hzIdx) {
             var sel = document.getElementById(selectId);
             if (!sel || hzIdx < 0) return;
+            // Remove existing dynamic options (keep only the first "All" option)
+            while (sel.options.length > 1) sel.remove(1);
             var seen = {};
             for (var i = 0; i < data.length; i++) {
                 var v = data[i][hzIdx];
@@ -2451,45 +2536,58 @@
             }
         }
 
-        function applyRule1HostingFilter(zone) {
-            rule1HostingFilter = zone;
-            if (!zone) {
-                rule1FilteredData = rule1Data.slice();
-            } else {
-                rule1FilteredData = rule1Data.filter(function(row) {
-                    var v = rule1HzIdx >= 0 ? row[rule1HzIdx] : null;
-                    return String(v || '').trim() === zone;
-                });
-            }
+        function _applyRule1Filters() {
+            rule1FilteredData = rule1Data.filter(function(row) {
+                if (rule1HostingFilter) {
+                    var hz = rule1HzIdx >= 0 ? row[rule1HzIdx] : null;
+                    if (String(hz || '').trim() !== rule1HostingFilter) return false;
+                }
+                if (rule1EnvFilter) {
+                    var env = rule1EnvIdx >= 0 ? row[rule1EnvIdx] : null;
+                    var isNP = _isNonProd(env);
+                    if (rule1EnvFilter === 'prod' && isNP) return false;
+                    if (rule1EnvFilter === 'nonprod' && !isNP) return false;
+                }
+                return true;
+            });
             rule1SortedData = rule1FilteredData.slice();
             doSortRule1();
             rule1Page = 1;
             renderRule1Headers();
             renderRule1Body();
-            updatePagination(1, rule1Page, totalRule1Pages, rule2Page);
+            updatePagination(1, rule1Page, totalRule1Pages);
             var badge = document.getElementById('rule1-filtered-count');
             if (badge) badge.textContent = rule1FilteredData.length;
         }
 
-        function applyRule2HostingFilter(zone) {
-            rule2HostingFilter = zone;
-            if (!zone) {
-                rule2FilteredData = rule2Data.slice();
-            } else {
-                rule2FilteredData = rule2Data.filter(function(row) {
-                    var v = rule2HzIdx >= 0 ? row[rule2HzIdx] : null;
-                    return String(v || '').trim() === zone;
-                });
-            }
+        function _applyRule2Filters() {
+            rule2FilteredData = rule2Data.filter(function(row) {
+                if (rule2HostingFilter) {
+                    var hz = rule2HzIdx >= 0 ? row[rule2HzIdx] : null;
+                    if (String(hz || '').trim() !== rule2HostingFilter) return false;
+                }
+                if (rule2EnvFilter) {
+                    var env = rule2EnvIdx >= 0 ? row[rule2EnvIdx] : null;
+                    var isNP = _isNonProd(env);
+                    if (rule2EnvFilter === 'prod' && isNP) return false;
+                    if (rule2EnvFilter === 'nonprod' && !isNP) return false;
+                }
+                return true;
+            });
             rule2SortedData = rule2FilteredData.slice();
             doSortRule2();
             rule2Page = 1;
             renderRule2Headers();
             renderRule2Body();
-            updatePagination(2, rule2Page, totalRule2Pages, rule1Page);
+            updatePagination(2, rule2Page, totalRule2Pages);
             var badge = document.getElementById('rule2-filtered-count');
             if (badge) badge.textContent = rule2FilteredData.length;
         }
+
+        function applyRule1HostingFilter(zone) { rule1HostingFilter = zone; _applyRule1Filters(); }
+        function applyRule2HostingFilter(zone) { rule2HostingFilter = zone; _applyRule2Filters(); }
+        function applyRule1EnvFilter(env)     { rule1EnvFilter = env;     _applyRule1Filters(); }
+        function applyRule2EnvFilter(env)     { rule2EnvFilter = env;     _applyRule2Filters(); }
 
         // ── Rule 3: column-visibility state ───────────────────────────────────
         var rs3CpuHiddenCols = (function () {
@@ -2596,6 +2694,10 @@
             if (!tbody) return;
             var start = (rule1Page - 1) * PER_PAGE;
             var slice = rule1SortedData.slice(start, start + PER_PAGE);
+            if (slice.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="99" class="px-4 py-8 text-center text-slate-400 text-sm">No matching records for the selected filters.</td></tr>';
+                return;
+            }
             var costColIdx = rule1Keys.indexOf('Actual_Line_Cost');
             var html = '';
             for (var i = 0; i < slice.length; i++) {
@@ -2840,26 +2942,20 @@
             else { renderRule2Body(); }
         }
 
-        function updatePagination(rule, page, totalPages, otherPage) {
+        function updatePagination(rule, page, totalPages) {
             var prefix = rule === 1 ? 'rule1' : 'rule2';
+            var pager   = document.getElementById(prefix + '-pager');
             var display = document.getElementById(prefix + '-page-display');
-            var prevLink = document.getElementById(prefix + '-prev');
-            var nextLink = document.getElementById(prefix + '-next');
+            var prevBtn = document.getElementById(prefix + '-prev');
+            var nextBtn = document.getElementById(prefix + '-next');
+            // Show pager only when there are multiple pages
+            if (pager) {
+                if (totalPages > 1) pager.classList.remove('hidden');
+                else pager.classList.add('hidden');
+            }
             if (display) display.textContent = 'Page ' + page + ' of ' + totalPages;
-            if (prevLink) {
-                prevLink.href = basePath + (rule === 1 ? '?rule1_page=' + (page - 1) + '&rule2_page=' + otherPage : '?rule1_page=' + otherPage + '&rule2_page=' + (page - 1));
-                prevLink.classList.toggle('text-slate-300', page <= 1);
-                prevLink.classList.toggle('pointer-events-none', page <= 1);
-                prevLink.classList.toggle('text-slate-700', page > 1);
-                prevLink.classList.toggle('hover:bg-slate-100', page > 1);
-            }
-            if (nextLink) {
-                nextLink.href = basePath + (rule === 1 ? '?rule1_page=' + (page + 1) + '&rule2_page=' + otherPage : '?rule1_page=' + otherPage + '&rule2_page=' + (page + 1));
-                nextLink.classList.toggle('text-slate-300', page >= totalPages);
-                nextLink.classList.toggle('pointer-events-none', page >= totalPages);
-                nextLink.classList.toggle('text-slate-700', page < totalPages);
-                nextLink.classList.toggle('hover:bg-slate-100', page < totalPages);
-            }
+            if (prevBtn) prevBtn.disabled = (page <= 1);
+            if (nextBtn) nextBtn.disabled = (page >= totalPages);
         }
 
         function updateUrl() {
@@ -2943,10 +3039,10 @@
             return lines.join('\n');
         }
 
-        function onRule1Prev(e) { e.preventDefault(); if (rule1Page <= 1) return; rule1Page--; renderRule1Body(); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
-        function onRule1Next(e) { e.preventDefault(); if (rule1Page >= totalRule1Pages) return; rule1Page++; renderRule1Body(); updatePagination(1, rule1Page, totalRule1Pages, rule2Page); updateUrl(); }
-        function onRule2Prev(e) { e.preventDefault(); if (rule2Page <= 1) return; rule2Page--; renderRule2Body(); updatePagination(2, rule2Page, totalRule2Pages, rule1Page); updateUrl(); }
-        function onRule2Next(e) { e.preventDefault(); if (rule2Page >= totalRule2Pages) return; rule2Page++; renderRule2Body(); updatePagination(2, rule2Page, totalRule2Pages, rule1Page); updateUrl(); }
+        function onRule1Prev(e) { if (e) e.preventDefault(); if (rule1Page <= 1) return; rule1Page--; renderRule1Body(); updatePagination(1, rule1Page, totalRule1Pages); }
+        function onRule1Next(e) { if (e) e.preventDefault(); if (rule1Page >= totalRule1Pages) return; rule1Page++; renderRule1Body(); updatePagination(1, rule1Page, totalRule1Pages); }
+        function onRule2Prev(e) { if (e) e.preventDefault(); if (rule2Page <= 1) return; rule2Page--; renderRule2Body(); updatePagination(2, rule2Page, totalRule2Pages); }
+        function onRule2Next(e) { if (e) e.preventDefault(); if (rule2Page >= totalRule2Pages) return; rule2Page++; renderRule2Body(); updatePagination(2, rule2Page, totalRule2Pages); }
 
         // ── Strategy 3 pagination ─────────────────────────────────────────────
         var rs3FilterConfig = {
@@ -3728,7 +3824,7 @@
                 rule1Page = 1;
                 renderRule1Headers();
                 renderRule1Body();
-                updatePagination(1, rule1Page, totalRule1Pages, rule2Page);
+                updatePagination(1, rule1Page, totalRule1Pages);
             });
         }
 
@@ -3799,7 +3895,7 @@
                 rule2Page = 1;
                 renderRule2Headers();
                 renderRule2Body();
-                updatePagination(2, rule2Page, totalRule2Pages, rule1Page);
+                updatePagination(2, rule2Page, totalRule2Pages);
             });
         }
 
@@ -3999,6 +4095,7 @@
                 updateRuleSelectionUi(ruleKey);
             });
         });
+        // Hosting filters are populated after API load; these calls are no-ops when data is empty
         populateHostingFilter('rule1-hosting-filter', rule1Data, rule1HzIdx);
         populateHostingFilter('rule2-hosting-filter', rule2Data, rule2HzIdx);
         (function() {
@@ -4006,6 +4103,10 @@
             if (r1hf) r1hf.addEventListener('change', function(e) { applyRule1HostingFilter(e.target.value); });
             var r2hf = document.getElementById('rule2-hosting-filter');
             if (r2hf) r2hf.addEventListener('change', function(e) { applyRule2HostingFilter(e.target.value); });
+            var r1ef = document.getElementById('rule1-env-filter');
+            if (r1ef) r1ef.addEventListener('change', function(e) { applyRule1EnvFilter(e.target.value); });
+            var r2ef = document.getElementById('rule2-env-filter');
+            if (r2ef) r2ef.addEventListener('change', function(e) { applyRule2EnvFilter(e.target.value); });
         })();
         renderRule1Headers();
         buildRule1ColPanel();

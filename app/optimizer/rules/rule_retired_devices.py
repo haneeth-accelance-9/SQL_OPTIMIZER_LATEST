@@ -33,7 +33,7 @@ def find_retired_devices_with_installations(
     Identify installations on devices marked as retired (UC 1.2).
 
     Conditions:
-    - install_status equals "retired" (case-insensitive on value)
+    - Server.installed_status_usu == "retired" (case-insensitive)
     - no_license_required (product) == 0
     """
     status_col = None

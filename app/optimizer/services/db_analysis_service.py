@@ -220,17 +220,6 @@ def _normalize_hosting_zone(zone: Any) -> str:
     return str(zone or "").strip()
 
 
-def _normalize_install_status(device_status: Any, usu_status: Any, boones_status: Any) -> str:
-    """
-    Map DB status fields to the label the retired-devices rule expects: "retired".
-    Rule does case-insensitive match, so just pick the first non-empty value.
-    """
-    for val in (device_status, usu_status, boones_status):
-        s = str(val or "").strip()
-        if s:
-            return s  # rule lowercases, so any casing works
-    return ""
-
 
 def _build_installations_df() -> pd.DataFrame:
     """
@@ -295,11 +284,7 @@ def _build_installations_df() -> pd.DataFrame:
             "product_edition": r["product_edition"] or "",
             "license_metric":  r["license_metric"] or "",
             "no_license_required": nlr_num,
-            "install_status": _normalize_install_status(
-                r["device_status"],
-                r["server__installed_status_usu"],
-                r["server__installed_status_boones"],
-            ),
+            "install_status": str(r["server__installed_status_usu"] or "").strip(),
             "no_license_required_product": nlr_num,
             "server_name":     r["server__server_name"] or "",
             "environment":     r["server__environment"] or "",
@@ -428,30 +413,23 @@ def _build_raw_rule1_df() -> pd.DataFrame:
 
 def _build_payg_installations_df() -> pd.DataFrame:
     """
-    UC1 (PAYG) data source — mirrors:
+    UC1 (PAYG) data source.
 
-      SELECT ui.*, udd.product_edition AS demand_product_edition,
-             udd.eff_quantity, s.hosting_zone
-      FROM usu_installation ui
-      INNER JOIN usu_demand_detail udd ON ui.server_id = udd.server_id
-      LEFT JOIN server s ON ui.server_id = s.id
-      WHERE ui.product_family = 'SQL Server'
-        AND udd.product_family = 'SQL Server'
+    Step 1 — query USUInstallation + Server only (no INNER JOIN on demand details).
+             UC1 rule filtering uses only: u_hosting_zone, inventory_status_standard,
+             no_license_required (all come from USUInstallation + Server).
 
-    Active filters applied on top of the base SQL:
-      1. ui.product_family = 'SQL Server'          (matches SQL WHERE clause)
-      2. udd.product_family = 'SQL Server'         (matches SQL WHERE clause, drives INNER JOIN)
-      3. EXCLUDE product_family IN ('Java', ...)   (showcase-only families stripped)
-      — server__is_active filter intentionally NOT applied (not in base SQL)
+    Step 2 — enrich with demand detail data (product_edition, eff_quantity) for cost
+             calculation using existing helpers. Rows without demand details get
+             demand_product_edition="" and eff_quantity=0.0.
 
-    Cost calculation must use demand_product_edition (udd.product_edition)
-    and eff_quantity (udd.eff_quantity) — NOT installation's product_edition.
+    Cost calculation must use demand_product_edition and eff_quantity from demand
+    details where available — NOT installation's product_edition.
     """
     from optimizer.models import USUInstallation
 
     rows = USUInstallation.objects.filter(
         product_family="SQL Server",
-        server__usu_demand_details__product_family="SQL Server",
     ).exclude(
         product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
     ).select_related("server").order_by(
@@ -479,9 +457,6 @@ def _build_payg_installations_df() -> pd.DataFrame:
         "server__is_cloud_device",
         "server__installed_status_usu",
         "server__installed_status_boones",
-        # udd.* — demand detail fields (INNER JOIN via server__usu_demand_details)
-        "server__usu_demand_details__product_edition",  # udd.product_edition — for cost
-        "server__usu_demand_details__eff_quantity",     # udd.eff_quantity — for cost
     )
 
     if not rows:
@@ -504,11 +479,7 @@ def _build_payg_installations_df() -> pd.DataFrame:
             "product_edition":  r["product_edition"] or "",
             "license_metric":   r["license_metric"] or "",
             "no_license_required": nlr_num,
-            "install_status": _normalize_install_status(
-                r["device_status"],
-                r["server__installed_status_usu"],
-                r["server__installed_status_boones"],
-            ),
+            "install_status": str(r["server__installed_status_usu"] or "").strip(),
             "no_license_required_product": nlr_num,
             "environment":      r["server__environment"] or "",
             "u_hosting_zone":   _normalize_hosting_zone(r["server__hosting_zone"]),
@@ -516,37 +487,62 @@ def _build_payg_installations_df() -> pd.DataFrame:
             "is_cloud_device":  r["server__is_cloud_device"],
             "inventory_status_standard": r["inv_status_std_name"] or "",
             "product_name":     r["product_description"] or "",
-            # demand detail columns — cost uses these two, not installation columns
-            "demand_product_edition": r["server__usu_demand_details__product_edition"] or "",
-            "eff_quantity":     float(r["server__usu_demand_details__eff_quantity"] or 0),
+            # demand detail columns — populated in enrichment step below
+            "demand_product_edition": "",
+            "eff_quantity":     0.0,
         })
-    return pd.DataFrame(records)
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        return df
+
+    # Step 2 — single query on usu_demanddetails for the server_ids found in Step 1.
+    # Only servers that exist in usu_demanddetails get cost data; the rest stay at 0.
+    from optimizer.models import USUDemandDetail
+
+    unique_server_ids = list(dict.fromkeys(df["server_id"].tolist()))
+    demand_rows = (
+        USUDemandDetail.objects
+        .filter(server_id__in=unique_server_ids)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .order_by("server_id", "-fetched_at")
+        .values("server_id", "product_edition", "eff_quantity")
+    )
+
+    # Build edition + eff_quantity maps from that single query result.
+    # edition: prefer the row whose product_edition has a non-zero license price.
+    # eff_quantity: sum all rows for the same server_id.
+    demand_edition_map: dict[str, str] = {}
+    demand_qty_map: dict[str, float] = {}
+    for row in demand_rows:
+        sid = str(row["server_id"])
+        edition = str(row.get("product_edition") or "").strip()
+        qty = float(row.get("eff_quantity") or 0)
+        # Pick edition with a known price; fall back to any non-empty edition
+        if edition and sid not in demand_edition_map:
+            demand_edition_map[sid] = edition
+        elif edition and _get_rightsizing_cpu_license_cost_eur(edition) > 0 \
+                and _get_rightsizing_cpu_license_cost_eur(demand_edition_map.get(sid, "")) == 0:
+            demand_edition_map[sid] = edition
+        demand_qty_map[sid] = demand_qty_map.get(sid, 0.0) + qty
+
+    df["demand_product_edition"] = df["server_id"].map(lambda sid: demand_edition_map.get(sid, ""))
+    df["eff_quantity"] = df["server_id"].map(lambda sid: demand_qty_map.get(sid, 0.0))
+
+    return df
 
 
 def _build_retired_installations_df() -> pd.DataFrame:
     """
     UC2 (Retired Devices) data source.
 
-    Mirrors the UC2 SQL shape:
-
-      SELECT ui.*, udd.*, s.hosting_zone
-      FROM usu_installation ui
-      INNER JOIN usu_demand_detail udd ON ui.server_id = udd.server_id
-      LEFT JOIN server s ON ui.server_id = s.id
-      WHERE ui.product_family = 'SQL Server'
-        AND udd.product_family = 'SQL Server'
-
-    Active filters:
-      1. ui.product_family = 'SQL Server'
-      2. udd.product_family = 'SQL Server'
-      3. EXCLUDE product_family IN ('Java', ...)  (showcase-only stripped)
-      — server__is_active filter intentionally NOT applied (not in base SQL)
+    Queries USUInstallation + Server only — UC2 depends solely on installation
+    status and license flags, not demand detail data.
     """
     from optimizer.models import USUInstallation
 
     rows = USUInstallation.objects.filter(
         product_family="SQL Server",
-        server__usu_demand_details__product_family="SQL Server",
     ).exclude(
         product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES
     ).select_related("server").order_by(
@@ -574,23 +570,6 @@ def _build_retired_installations_df() -> pd.DataFrame:
         "server__is_cloud_device",
         "server__installed_status_usu",
         "server__installed_status_boones",
-        "server__usu_demand_details__id",
-        "server__usu_demand_details__tenant_id",
-        "server__usu_demand_details__manufacturer",
-        "server__usu_demand_details__product_description",
-        "server__usu_demand_details__product_edition",
-        "server__usu_demand_details__eff_quantity",
-        "server__usu_demand_details__no_license_required",
-        "server__usu_demand_details__device_purpose",
-        "server__usu_demand_details__topology_type",
-        "server__usu_demand_details__cpu_core_count",
-        "server__usu_demand_details__virt_type",
-        "server__usu_demand_details__is_cloud_device",
-        "server__usu_demand_details__cloud_provider",
-        "server__usu_demand_details__cpu_thread_count",
-        "server__usu_demand_details__hyper_threading_factor",
-        "server__usu_demand_details__fetched_at",
-        "server__usu_demand_details__product_group",
     )
 
     if not rows:
@@ -602,7 +581,6 @@ def _build_retired_installations_df() -> pd.DataFrame:
         nlr_num = (1 if nlr else 0) if nlr is not None else float("nan")
         records.append({
             "installation_id":  str(r["id"]) if r["id"] else "",
-            "installation_tenant_id": str(r["tenant_id"]) if r["tenant_id"] else "",
             "server_id":        str(r["server_id"]),
             "server_name":      r["server__server_name"] or "",
             "topology_type":    r["topology_type"] or "",
@@ -615,7 +593,9 @@ def _build_retired_installations_df() -> pd.DataFrame:
             "product_edition":  r["product_edition"] or "",
             "license_metric":   r["license_metric"] or "",
             "no_license_required": nlr_num,
-            "install_status":   r["device_status"] or "",
+            # UC2 uses Server.installed_status_usu directly — no fallback to device_status.
+            # A device is retired only when USU explicitly marks it as such.
+            "install_status": str(r["server__installed_status_usu"] or "").strip(),
             "device_status":    r["device_status"] or "",
             "no_license_required_product": nlr_num,
             "environment":      r["server__environment"] or "",
@@ -624,29 +604,48 @@ def _build_retired_installations_df() -> pd.DataFrame:
             "is_cloud_device":  r["server__is_cloud_device"],
             "inventory_status_standard": r["inv_status_std_name"] or "",
             "product_name":     r["product_description"] or "",
-            "demand_detail_id": str(r["server__usu_demand_details__id"]) if r["server__usu_demand_details__id"] else "",
-            "demand_tenant_id": str(r["server__usu_demand_details__tenant_id"]) if r["server__usu_demand_details__tenant_id"] else "",
-            "demand_manufacturer": r["server__usu_demand_details__manufacturer"] or "",
-            "demand_product_description": r["server__usu_demand_details__product_description"] or "",
-            "demand_product_edition": r["server__usu_demand_details__product_edition"] or "",
-            "eff_quantity":     float(r["server__usu_demand_details__eff_quantity"] or 0),
-            "demand_no_license_required": (
-                (1 if r["server__usu_demand_details__no_license_required"] else 0)
-                if r["server__usu_demand_details__no_license_required"] is not None
-                else float("nan")
-            ),
-            "device_purpose":   r["server__usu_demand_details__device_purpose"] or "",
-            "demand_topology_type": r["server__usu_demand_details__topology_type"] or "",
-            "demand_cpu_core_count": float(r["server__usu_demand_details__cpu_core_count"] or 0),
-            "virt_type":        r["server__usu_demand_details__virt_type"] or "",
-            "demand_is_cloud_device": r["server__usu_demand_details__is_cloud_device"],
-            "demand_cloud_provider": r["server__usu_demand_details__cloud_provider"] or "",
-            "cpu_thread_count": float(r["server__usu_demand_details__cpu_thread_count"] or 0),
-            "demand_hyper_threading_factor": float(r["server__usu_demand_details__hyper_threading_factor"] or 0),
-            "demand_fetched_at": r["server__usu_demand_details__fetched_at"],
-            "demand_product_group": r["server__usu_demand_details__product_group"] or "",
+            # demand detail columns — populated in enrichment step below
+            "demand_product_edition": "",
+            "eff_quantity":     0.0,
         })
-    return pd.DataFrame(records)
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        return df
+
+    # Step 2 — single query on usu_demanddetails for the server_ids found in Step 1.
+    # Only servers present in usu_demanddetails get cost data; the rest stay at 0.
+    from optimizer.models import USUDemandDetail
+
+    unique_server_ids = list(dict.fromkeys(df["server_id"].tolist()))
+    demand_rows = (
+        USUDemandDetail.objects
+        .filter(server_id__in=unique_server_ids)
+        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .order_by("server_id", "-fetched_at")
+        .values("server_id", "product_edition", "eff_quantity")
+    )
+
+    # Build edition + eff_quantity maps from that single query result.
+    # edition: prefer the row whose product_edition has a non-zero license price.
+    # eff_quantity: sum all rows for the same server_id.
+    demand_edition_map: dict[str, str] = {}
+    demand_qty_map: dict[str, float] = {}
+    for row in demand_rows:
+        sid = str(row["server_id"])
+        edition = str(row.get("product_edition") or "").strip()
+        qty = float(row.get("eff_quantity") or 0)
+        if edition and sid not in demand_edition_map:
+            demand_edition_map[sid] = edition
+        elif edition and _get_rightsizing_cpu_license_cost_eur(edition) > 0 \
+                and _get_rightsizing_cpu_license_cost_eur(demand_edition_map.get(sid, "")) == 0:
+            demand_edition_map[sid] = edition
+        demand_qty_map[sid] = demand_qty_map.get(sid, 0.0) + qty
+
+    df["demand_product_edition"] = df["server_id"].map(lambda sid: demand_edition_map.get(sid, ""))
+    df["eff_quantity"] = df["server_id"].map(lambda sid: demand_qty_map.get(sid, 0.0))
+
+    return df
 
 
 def _build_demand_df() -> pd.DataFrame:
@@ -977,8 +976,9 @@ def compute_retired_devices_extended_metrics(
         installed_count = 0
 
     # Step 3 — Actual_Line_Cost = (Price × eff_quantity) / 2 per row
-    # Uses demand_product_edition (udd) and eff_quantity (udd) from inner-joined df
+    # Uses demand_product_edition and eff_quantity enriched in _build_retired_installations_df()
     enriched_retired_df = pd.DataFrame()
+    retired_demand_matched_count = 0
     if not retired_df.empty and "server_id" in retired_df.columns:
         edition_col = "demand_product_edition" if "demand_product_edition" in retired_df.columns else "product_edition"
         enriched_retired_df = retired_df.copy()
@@ -993,6 +993,11 @@ def compute_retired_devices_extended_metrics(
             axis=1,
         )
         retired_savings = round(float(enriched_retired_df["Actual_Line_Cost"].sum()), 2)
+        # Rows with matching demand detail (eff_quantity > 0 means demand data was found)
+        if "eff_quantity" in enriched_retired_df.columns:
+            retired_demand_matched_count = int(
+                (enriched_retired_df["eff_quantity"].fillna(0).astype(float) > 0).sum()
+            )
     else:
         retired_savings = 0.0
 
@@ -1014,6 +1019,7 @@ def compute_retired_devices_extended_metrics(
         "installed_count": installed_count,
         "retired_devices_savings_eur": retired_savings,
         "installed_devices_cost_eur": installed_devices_cost,
+        "retired_demand_matched_count": retired_demand_matched_count,
         "_retired_enriched_df": enriched_retired_df,
     }
 
@@ -1022,10 +1028,9 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
     """
     UC1 PAYG cost metrics.
 
-    Data source is _build_payg_installations_df() which inner-joins
-    usu_installation and usu_demand_detail on server_id. The df already
-    carries demand_product_edition (udd.product_edition) and eff_quantity
-    (udd.eff_quantity) per row — no separate DB lookups needed.
+    Data source is _build_payg_installations_df() which queries USUInstallation +
+    Server and then enriches each row with demand detail data (demand_product_edition,
+    eff_quantity) where available. Rows without demand details have eff_quantity=0.
 
       Actual_Line_Cost per row = (Price[demand_product_edition] × eff_quantity) / 2
       Total_PAYG_Cost          = SUM(Actual_Line_Cost) across all rows
@@ -1037,6 +1042,7 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
             "azure_payg_savings_eur": 0.0,
             "azure_payg_prod_candidates_count": 0,
             "azure_payg_nonprod_candidates_count": 0,
+            "azure_payg_demand_matched_count": 0,
         }
 
     # Use udd.product_edition for price — falls back to ui.product_edition if column absent
@@ -1059,6 +1065,11 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
     total_cost = round(float(enriched_df["Actual_Line_Cost"].sum()), 2)
     payg_savings = round(total_cost * 0.80, 2)
 
+    # Rows with matching demand detail (eff_quantity > 0 means demand data was found)
+    demand_matched_count = int(
+        (enriched_df["eff_quantity"].fillna(0).astype(float) > 0).sum()
+    ) if "eff_quantity" in enriched_df.columns else 0
+
     # PROD / NON-PROD row counts — same data source as total candidate count
     _NON_PROD_ENVS_LOWER = {"development", "disaster recovery", "test", "qa", "uat"}
     prod_candidates_count = 0
@@ -1070,8 +1081,9 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
         nonprod_candidates_count = int(nonprod_mask.sum())
 
     logger.info(
-        "[UC1 PAYG] Per-row cost: %d rows | Total: %.2f EUR | Savings: %.2f EUR | PROD: %d | NON-PROD: %d",
+        "[UC1 PAYG] Per-row cost: %d rows | Demand-matched: %d | Total: %.2f EUR | Savings: %.2f EUR | PROD: %d | NON-PROD: %d",
         len(enriched_df),
+        demand_matched_count,
         total_cost,
         payg_savings,
         prod_candidates_count,
@@ -1083,6 +1095,7 @@ def compute_azure_payg_cost_metrics(azure_payg_df: pd.DataFrame) -> dict:
         "azure_payg_savings_eur": payg_savings,
         "azure_payg_prod_candidates_count": prod_candidates_count,
         "azure_payg_nonprod_candidates_count": nonprod_candidates_count,
+        "azure_payg_demand_matched_count": demand_matched_count,
         "_azure_payg_enriched_df": enriched_df,
     }
 
@@ -1223,7 +1236,13 @@ def compute_db_metrics() -> dict:
     # Flatten per-strategy savings — UC1 uses new formula (80% of total line cost)
     rws = context.get("rule_wise_savings") or {}
     context["azure_payg_savings"] = float(rule_results.get("azure_payg_savings_eur") or 0)
-    context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
+    # Prefer the actual per-row Actual_Line_Cost (from compute_retired_devices_extended_metrics)
+    # over the proportional estimate from _calculate_savings, which ignores eff_quantity.
+    actual_retired_eur = rule_results.get("retired_devices_savings_eur")
+    context["retired_devices_savings"] = (
+        float(actual_retired_eur) if actual_retired_eur is not None
+        else float(rws.get("retired_devices") or 0)
+    )
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
     context["rightsizing_cpu_savings"] = float(rws.get("rightsizing_cpu") or 0)
 
@@ -1685,10 +1704,14 @@ def compute_rightsizing_metrics() -> dict:
                 ram_df["Recommended_RAM_GiB"].notna() &
                 (ram_df["Recommended_RAM_GiB"] != ram_df["Current_RAM_GiB"])
             ]
-            # Filter 2: neither current nor recommended can be below 8
+            # Filter 2: minimum RAM floor differs by tier
+            #   PROD    -> never below 8 GiB
+            #   NON-PROD -> never below 4 GiB
+            is_prod = ram_df.get("Env_Type", pd.Series("PROD", index=ram_df.index)) == "PROD"
+            min_floor = is_prod.map({True: 8, False: 4})
             ram_df = ram_df[
-                (ram_df["Current_RAM_GiB"] >= 8) &
-                (ram_df["Recommended_RAM_GiB"] >= 8)
+                (ram_df["Current_RAM_GiB"] >= min_floor) &
+                (ram_df["Recommended_RAM_GiB"] >= min_floor)
             ]
             logger.info(
                 "[UC3 RAM] Post-rule filter: %d → %d rows (removed %d)",
@@ -2246,13 +2269,36 @@ def compute_live_db_metrics() -> dict:
     azure_df = pd.DataFrame()
     retired_df = pd.DataFrame()
     uc2_df = pd.DataFrame()
+    uc1_total_input = 0
+    uc1_filter1_count = 0
+    uc1_filter2_count = 0
+    uc1_filter3_count = 0
+    uc2_total_input = 0
+    uc2_filter2_count = 0
+
+    _UC1_TARGET_ZONES = frozenset({"Public Cloud", "Private Cloud AVS"})
 
     if not installations_df.empty:
         azure_error = None
         retired_error = None
 
         try:
-            uc1_payg_df = _filter_to_standard_enterprise_servers(_build_payg_installations_df())
+            raw_payg_df = _build_payg_installations_df()
+            # Filter 1: product_family = 'SQL Server' — pre-filtered at DB level
+            uc1_total_input = len(raw_payg_df)
+            uc1_filter1_count = uc1_total_input
+            if not raw_payg_df.empty:
+                # Filter 2: Hosting Zone = Public Cloud or Private Cloud AVS
+                hz_mask = raw_payg_df["u_hosting_zone"].isin(_UC1_TARGET_ZONES)
+                uc1_filter2_count = int(hz_mask.sum())
+                # Filter 3: Inventory Status Standard != 'License Included'
+                inv_mask = hz_mask & (
+                    raw_payg_df["inventory_status_standard"]
+                    .fillna("").astype(str).str.strip().str.lower() != "license included"
+                )
+                uc1_filter3_count = int(inv_mask.sum())
+                # Filter 4 (no_license_required = 0) applied by rule → azure_payg_count
+            uc1_payg_df = _filter_to_standard_enterprise_servers(raw_payg_df)
             azure_df = find_azure_payg_candidates_from_db(uc1_payg_df)
         except Exception as exc:
             logger.exception("Rule 1 (Azure PAYG) failed against DB-backed installation data.")
@@ -2260,6 +2306,15 @@ def compute_live_db_metrics() -> dict:
 
         try:
             uc2_df = _build_retired_installations_df()
+            # Filter 1: product_family = 'SQL Server' — pre-filtered at DB level
+            uc2_total_input = len(uc2_df)
+            uc2_filter1_count = uc2_total_input
+            if not uc2_df.empty and "install_status" in uc2_df.columns:
+                # Filter 2: installed_status_usu = 'Retired'
+                uc2_filter2_count = int(
+                    (uc2_df["install_status"].str.strip().str.lower() == "retired").sum()
+                )
+                # Filter 3 (no_license_required = 0) applied by rule → retired_count
             retired_df = find_retired_devices_with_installations_from_db(uc2_df)
         except Exception as exc:
             logger.exception("Rule 2 (Retired devices) failed against DB-backed installation data.")
@@ -2272,6 +2327,16 @@ def compute_live_db_metrics() -> dict:
             "retired_count": len(retired_df),
             "azure_error": azure_error,
             "retired_error": retired_error,
+            # UC1 filter funnel counts (report Live Metrics)
+            "uc1_total_input": uc1_total_input,
+            "uc1_filter1_count": uc1_filter1_count,   # product_family = SQL Server
+            "uc1_filter2_count": uc1_filter2_count,   # hosting zone filter
+            "uc1_filter3_count": uc1_filter3_count,   # inventory_status filter
+            # UC2 filter funnel counts (report Live Metrics)
+            "uc2_total_input": uc2_total_input,
+            "uc2_filter1_count": uc2_filter1_count,   # product_family = SQL Server
+            "uc2_filter2_count": uc2_filter2_count,   # installed_status_usu = Retired
+            "uc2_filter3_count": len(retired_df),     # no_license_required = 0
         }
         rule_results["payg_zone_breakdown"] = _build_payg_zone_breakdown(
             installations_df,
@@ -2291,6 +2356,14 @@ def compute_live_db_metrics() -> dict:
                 "current": [0, 0],
                 "estimated": [0, 0],
             },
+            "uc1_total_input": 0,
+            "uc1_filter1_count": 0,
+            "uc1_filter2_count": 0,
+            "uc1_filter3_count": 0,
+            "uc2_total_input": 0,
+            "uc2_filter1_count": 0,
+            "uc2_filter2_count": 0,
+            "uc2_filter3_count": 0,
         }
 
     _retired_metrics = compute_retired_devices_extended_metrics(uc2_df, retired_df)
@@ -2365,7 +2438,11 @@ def compute_live_db_metrics() -> dict:
     # Flatten per-strategy savings so build_agent_strategy_results_payload can read them
     rws = context.get("rule_wise_savings") or {}
     context["azure_payg_savings"] = float(rule_results.get("azure_payg_savings_eur") or 0)
-    context["retired_devices_savings"] = float(rws.get("retired_devices") or 0)
+    actual_retired_eur = rule_results.get("retired_devices_savings_eur")
+    context["retired_devices_savings"] = (
+        float(actual_retired_eur) if actual_retired_eur is not None
+        else float(rws.get("retired_devices") or 0)
+    )
     context["rightsizing_savings"] = float(rws.get("rightsizing") or 0)
     context["rightsizing_cpu_savings"] = float(rws.get("rightsizing_cpu") or 0)
 

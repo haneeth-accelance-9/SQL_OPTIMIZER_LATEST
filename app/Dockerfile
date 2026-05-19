@@ -36,4 +36,4 @@
   EXPOSE 8000
   # CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "sql_license_optimizer.wsgi:application"]
   # CMD ["sh", "-c", "python manage.py migrate --no-input && gunicorn --bind 0.0.0.0:8000 --workers 2 sql_license_optimizer.wsgi:application"]
-  CMD ["sh", "-c", "python manage.py migrate --no-input && python manage.py createsuperuser --no-input || true && gunicorn --bind 0.0.0.0:8000 --workers 2 sql_license_optimizer.wsgi:application"]
+  CMD ["sh", "-c", "python manage.py migrate --no-input && (python manage.py createsuperuser --no-input || true) && gunicorn --bind 0.0.0.0:8000 --workers 2 sql_license_optimizer.wsgi:application"]

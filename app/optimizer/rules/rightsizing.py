@@ -21,7 +21,7 @@ PROD eligibility (UC 3.1):
 - Current_vCPU >= 4   (was > 2; updated to match business rule)
 
 NON-PROD eligibility (UC 3.1):
-- Avg_CPU_12m  < 25%  (expanded to 25% so the 15-25% recommendation tier is reachable)
+- Avg_CPU_12m  < 15%
 - Peak_CPU_12m <= 80%
 - Current_vCPU >= 4   (was > 2; updated to match business rule)
 
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # CPU rightsizing eligibility thresholds — configurable via .env
 RS_PROD_AVG_CPU_THRESHOLD    = int(os.environ.get("RIGHTSIZING_PROD_AVG_CPU_THRESHOLD",    "15"))
 RS_PROD_PEAK_CPU_THRESHOLD   = int(os.environ.get("RIGHTSIZING_PROD_PEAK_CPU_THRESHOLD",   "70"))
-RS_NONPROD_AVG_CPU_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_AVG_CPU_THRESHOLD", "25"))
+RS_NONPROD_AVG_CPU_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_AVG_CPU_THRESHOLD", "15"))
 RS_NONPROD_PEAK_CPU_THRESHOLD= int(os.environ.get("RIGHTSIZING_NONPROD_PEAK_CPU_THRESHOLD","80"))
 
 # RAM rightsizing eligibility thresholds — configurable via .env
@@ -59,12 +59,16 @@ RS_NONPROD_MIN_FREEMEM_THRESHOLD = int(os.environ.get("RIGHTSIZING_NONPROD_MIN_F
 RS_NONPROD_MIN_RAM_GIB           = int(os.environ.get("RIGHTSIZING_NONPROD_MIN_RAM_GIB",           "4"))
 
 NON_PROD_ENVS: List[str] = [
-    "Development",
-    "Disaster recovery",
-    "Test",
-    "QA",
-    "UAT",
+    "development",
+    "disaster recovery",
+    "test",
+    "qa",
+    "uat",
 ]
+
+# PROD is defined explicitly: "Production", "Prod", or NULL/empty.
+# NON-PROD = everything NOT in this list.
+PROD_ENVS: List[str] = ["production", "prod", ""]
 
 PRACTICAL_RAM_SIZES: List[int] = [
     4, 6, 8, 10, 12, 16, 20, 24, 32, 48,
@@ -85,8 +89,8 @@ DETAIL_RECOMMENDATION = "Recommendation"
 COL_CRITICALITY   = "Criticality"
 COL_IS_VIRTUAL    = "Is Virtual?"
 
-CRITICAL_VALS:     List[str] = ["Business Critical", "Mission Critical"]
-MFG_CRITICAL_VALS: List[str] = ["Manufacturing Critical"]
+CRITICAL_VALS:     List[str] = ["business critical", "mission critical"]
+MFG_CRITICAL_VALS: List[str] = ["manufacturing critical"]
 ALL_CRITICAL_VALS: List[str] = CRITICAL_VALS + MFG_CRITICAL_VALS
 
 
@@ -165,7 +169,7 @@ def compute_utilisation_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
 def find_cpu_rightsizing_optimizations(
     df: pd.DataFrame,
-    non_prod_envs: List[str] = NON_PROD_ENVS,
+    prod_envs: List[str] = PROD_ENVS,
 ) -> pd.DataFrame:
     """
     Identify VMs eligible for CPU right-sizing (UC 3.1) across PROD and NON-PROD.
@@ -173,8 +177,8 @@ def find_cpu_rightsizing_optimizations(
     Returns a single DataFrame with an added 'Env_Type' column
     ('PROD' or 'NON-PROD') plus raw-detail type labels used by the UI filters.
     """
-    prod_eligible    = _cpu_prod_eligible(df, non_prod_envs)
-    nonprod_eligible = _cpu_nonprod_eligible(df, non_prod_envs)
+    prod_eligible    = _cpu_prod_eligible(df, prod_envs)
+    nonprod_eligible = _cpu_nonprod_eligible(df, prod_envs)
 
     prod_rec    = _cpu_prod_recommendation(prod_eligible)
     nonprod_rec = _cpu_nonprod_recommendation(nonprod_eligible)
@@ -196,27 +200,29 @@ def find_cpu_rightsizing_optimizations(
 
 def find_cpu_rightsizing_candidates(
     df: pd.DataFrame,
-    non_prod_envs: List[str] = NON_PROD_ENVS,
+    prod_envs: List[str] = PROD_ENVS,
 ) -> pd.DataFrame:
     """Backward-compatible alias for CPU right-sizing optimizations."""
-    return find_cpu_rightsizing_optimizations(df, non_prod_envs=non_prod_envs)
+    return find_cpu_rightsizing_optimizations(df, prod_envs=prod_envs)
 
 
-def _cpu_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
-    prod = df[~df["Environment"].isin(non_prod_envs)]
+def _cpu_prod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
+    env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    prod = df[env_lower.isin(prod_envs)]
     return prod[
         (prod["Avg_CPU_12m"]  < RS_PROD_AVG_CPU_THRESHOLD) &
         (prod["Peak_CPU_12m"] <= RS_PROD_PEAK_CPU_THRESHOLD) &
-        (prod["Current_vCPU"] >= 4)   # UC 3.1: Current vCPU >= 4
+        (prod["Current_vCPU"] >= 4)
     ].copy()
 
 
-def _cpu_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
-    nonprod = df[df["Environment"].isin(non_prod_envs)]
+def _cpu_nonprod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
+    env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    nonprod = df[~env_lower.isin(prod_envs)]
     return nonprod[
         (nonprod["Avg_CPU_12m"]  < RS_NONPROD_AVG_CPU_THRESHOLD) &
         (nonprod["Peak_CPU_12m"] <= RS_NONPROD_PEAK_CPU_THRESHOLD) &
-        (nonprod["Current_vCPU"] >= 4)  # UC 3.1: Current vCPU >= 4
+        (nonprod["Current_vCPU"] >= 4)
     ].copy()
 
 
@@ -262,7 +268,7 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     """
     UC 3.1 NON-PROD recommendations (ALL eligible rows are returned):
       Avg < 15% AND Peak < 60%          -> reduce by ~50-60% (keep 45%), never below 4
-      Avg in [15%-25%) AND Peak <= 70%  -> reduce by ~25-33% (keep 71%), never below 4
+      Avg in (15%-25%) AND Peak <= 70%  -> reduce by ~25-33% (keep 71%), never below 4
       Other eligible rows               -> Eligible but no specific reduction band matched
 
     All eligible rows are returned, including those where no specific band applies.
@@ -300,7 +306,7 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
 
 def find_ram_rightsizing_optimizations(
     df: pd.DataFrame,
-    non_prod_envs: List[str] = NON_PROD_ENVS,
+    prod_envs: List[str] = PROD_ENVS,
 ) -> pd.DataFrame:
     """
     Identify VMs eligible for RAM right-sizing (UC 3.2) across PROD and NON-PROD.
@@ -308,8 +314,8 @@ def find_ram_rightsizing_optimizations(
     Returns a single DataFrame with an added 'Env_Type' column
     ('PROD' or 'NON-PROD') plus raw-detail type labels used by the UI filters.
     """
-    prod_eligible    = _ram_prod_eligible(df, non_prod_envs)
-    nonprod_eligible = _ram_nonprod_eligible(df, non_prod_envs)
+    prod_eligible    = _ram_prod_eligible(df, prod_envs)
+    nonprod_eligible = _ram_nonprod_eligible(df, prod_envs)
 
     prod_rec    = _ram_prod_recommendation(prod_eligible)
     nonprod_rec = _ram_nonprod_recommendation(nonprod_eligible)
@@ -331,14 +337,15 @@ def find_ram_rightsizing_optimizations(
 
 def find_ram_rightsizing_candidates(
     df: pd.DataFrame,
-    non_prod_envs: List[str] = NON_PROD_ENVS,
+    prod_envs: List[str] = PROD_ENVS,
 ) -> pd.DataFrame:
     """Backward-compatible alias for RAM right-sizing optimizations."""
-    return find_ram_rightsizing_optimizations(df, non_prod_envs=non_prod_envs)
+    return find_ram_rightsizing_optimizations(df, prod_envs=prod_envs)
 
 
-def _ram_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
-    prod = df[~df["Environment"].isin(non_prod_envs)]
+def _ram_prod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
+    env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    prod = df[env_lower.isin(prod_envs)]
     return prod[
         (prod["Avg_FreeMem_12m"] >= RS_PROD_AVG_FREEMEM_THRESHOLD) &
         (prod["Min_FreeMem_12m"] >= RS_PROD_MIN_FREEMEM_THRESHOLD) &
@@ -346,8 +353,9 @@ def _ram_prod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFra
     ].copy()
 
 
-def _ram_nonprod_eligible(df: pd.DataFrame, non_prod_envs: List[str]) -> pd.DataFrame:
-    nonprod = df[df["Environment"].isin(non_prod_envs)]
+def _ram_nonprod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
+    env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    nonprod = df[~env_lower.isin(prod_envs)]
     return nonprod[
         (nonprod["Avg_FreeMem_12m"] >= RS_NONPROD_AVG_FREEMEM_THRESHOLD) &
         (nonprod["Min_FreeMem_12m"] >= RS_NONPROD_MIN_FREEMEM_THRESHOLD) &
@@ -445,7 +453,7 @@ def find_criticality_cpu_downsize_optimizations(df: pd.DataFrame) -> pd.DataFram
         ])
 
     # Filter: critical systems only + Avg_CPU < 10%
-    crit_mask = df[COL_CRITICALITY].isin(ALL_CRITICAL_VALS)
+    crit_mask = df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(ALL_CRITICAL_VALS)
     eligible = df[crit_mask & (df["Avg_CPU_12m"].fillna(100) < 10)].copy()
 
     if eligible.empty:
@@ -457,7 +465,7 @@ def find_criticality_cpu_downsize_optimizations(df: pd.DataFrame) -> pd.DataFram
     def _rec(row):
         avg         = row["Avg_CPU_12m"]
         vcpu        = row["Current_vCPU"]
-        criticality = str(row.get(COL_CRITICALITY, ""))
+        criticality = str(row.get(COL_CRITICALITY, "")).strip().lower()
         is_mfg      = criticality in MFG_CRITICAL_VALS
         is_bc_mc    = criticality in CRITICAL_VALS
 
@@ -504,7 +512,7 @@ def find_criticality_cpu_upsize_optimizations(df: pd.DataFrame) -> pd.DataFrame:
         ])
 
     # Filter: Bus/Mission Critical only + Avg_CPU > 80%
-    crit_mask = df[COL_CRITICALITY].isin(CRITICAL_VALS)
+    crit_mask = df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(CRITICAL_VALS)
     eligible  = df[crit_mask & (df["Avg_CPU_12m"].fillna(0) > 80)].copy()
 
     if eligible.empty:
@@ -542,11 +550,11 @@ def find_criticality_ram_downsize_optimizations(df: pd.DataFrame) -> pd.DataFram
     """
     UC 3.4a - Criticality-Aware RAM Downsize.
 
-    Rule: Critical systems (Business Critical / Mission Critical / Manufacturing Critical)
+    Rule: Critical systems (Business Critical / Mission Critical only)
     with Avg_FreeMem_12m > 80% -> Downsize by ~25%, never below 8 GiB.
     Human Intervention Required for all critical downsizes.
 
-    Only critical systems are included. Normal systems are excluded.
+    Manufacturing Critical is excluded from UC3.4a.
     """
     has_criticality = COL_CRITICALITY in df.columns
     if not has_criticality:
@@ -555,8 +563,8 @@ def find_criticality_ram_downsize_optimizations(df: pd.DataFrame) -> pd.DataFram
             "Optimization_Type", "Recommendation_Type"
         ])
 
-    # Filter: critical systems only + Avg_FreeMem > 80%
-    crit_mask = df[COL_CRITICALITY].isin(ALL_CRITICAL_VALS)
+    # Filter: Business Critical / Mission Critical only (no Manufacturing) + Avg_FreeMem > 80%
+    crit_mask = df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(CRITICAL_VALS)
     eligible  = df[crit_mask & (df["Avg_FreeMem_12m"].fillna(0) > 80)].copy()
 
     if eligible.empty:
@@ -568,7 +576,7 @@ def find_criticality_ram_downsize_optimizations(df: pd.DataFrame) -> pd.DataFram
     def _rec(row):
         avg_mem     = row["Avg_FreeMem_12m"]
         ram         = row["Current_RAM_GiB"]
-        criticality = str(row.get(COL_CRITICALITY, ""))
+        criticality = str(row.get(COL_CRITICALITY, "")).strip().lower()
         is_mfg      = criticality in MFG_CRITICAL_VALS
         is_bc_mc    = criticality in CRITICAL_VALS
 
@@ -619,7 +627,7 @@ def find_criticality_ram_upsize_optimizations(df: pd.DataFrame) -> pd.DataFrame:
         ])
 
     # Filter: Bus/Mission Critical only + Avg_FreeMem < 20%
-    crit_mask = df[COL_CRITICALITY].isin(CRITICAL_VALS)
+    crit_mask = df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(CRITICAL_VALS)
     eligible  = df[crit_mask & (df["Avg_FreeMem_12m"].fillna(100) < 20)].copy()
 
     if eligible.empty:
@@ -672,7 +680,7 @@ def find_criticality_ram_optimizations(df: pd.DataFrame) -> pd.DataFrame:
 
 # -- Lifecycle Risk Flags ------------------------------------------------------
 
-LC_CRITICAL_VALS = ["Business Critical", "Mission Critical"]
+LC_CRITICAL_VALS = ["business critical", "mission critical"]
 
 
 def find_lifecycle_risk_flags(df: pd.DataFrame) -> pd.DataFrame:
@@ -695,7 +703,7 @@ def find_lifecycle_risk_flags(df: pd.DataFrame) -> pd.DataFrame:
         ])
 
     # Sequential AND filters
-    step1 = df[df[COL_CRITICALITY].isin(LC_CRITICAL_VALS)].copy()
+    step1 = df[df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(LC_CRITICAL_VALS)].copy()
     step2 = step1[step1["Peak_CPU_12m"].fillna(0) > 95].copy()
     step3 = step2[step2["Min_FreeMem_12m"].fillna(100) < 5].copy()
     flagged = step3

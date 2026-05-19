@@ -171,7 +171,7 @@ def _build_rightsizing_filter_funnel() -> dict:
     try:
         from optimizer.services.db_analysis_service import _build_rightsizing_df
         from optimizer.rules.rightsizing import (
-            NON_PROD_ENVS, COL_CRITICALITY,
+            PROD_ENVS, COL_CRITICALITY,
             ALL_CRITICAL_VALS, CRITICAL_VALS, LC_CRITICAL_VALS,
             find_cpu_rightsizing_optimizations, find_ram_rightsizing_optimizations,
             find_criticality_cpu_downsize_optimizations, find_criticality_cpu_upsize_optimizations,
@@ -187,7 +187,7 @@ def _build_rightsizing_filter_funnel() -> dict:
 
     total_input = len(df)
 
-    prod_mask  = ~df["Environment"].isin(NON_PROD_ENVS) if "Environment" in df.columns else pd.Series([True] * len(df), index=df.index)
+    prod_mask  = df["Environment"].fillna("").astype(str).str.strip().str.lower().isin(PROD_ENVS) if "Environment" in df.columns else pd.Series([True] * len(df), index=df.index)
     prod_df    = df[prod_mask]
     nonprod_df = df[~prod_mask]
     prod_total    = len(prod_df)
@@ -197,7 +197,7 @@ def _build_rightsizing_filter_funnel() -> dict:
     cpu_prod_f1   = prod_df[prod_df["Avg_CPU_12m"].fillna(100) < 15]
     cpu_prod_f2   = cpu_prod_f1[cpu_prod_f1["Peak_CPU_12m"].fillna(100) <= 70]
     cpu_prod_f3   = cpu_prod_f2[cpu_prod_f2["Current_vCPU"].fillna(0) >= 4]
-    cpu_nonprod_f1 = nonprod_df[nonprod_df["Avg_CPU_12m"].fillna(100) < 25]
+    cpu_nonprod_f1 = nonprod_df[nonprod_df["Avg_CPU_12m"].fillna(100) < 15]
     cpu_nonprod_f2 = cpu_nonprod_f1[cpu_nonprod_f1["Peak_CPU_12m"].fillna(100) <= 80]
     cpu_nonprod_f3 = cpu_nonprod_f2[cpu_nonprod_f2["Current_vCPU"].fillna(0) >= 4]
 
@@ -237,13 +237,14 @@ def _build_rightsizing_filter_funnel() -> dict:
     # ── UC3.3 / UC3.4 Criticality ─────────────────────────────────────────────
     has_criticality = COL_CRITICALITY in df.columns
     if has_criticality:
-        crit_all_mask  = df[COL_CRITICALITY].isin(ALL_CRITICAL_VALS)
-        crit_bus_mask  = df[COL_CRITICALITY].isin(CRITICAL_VALS)
+        crit_lower     = df[COL_CRITICALITY].astype(str).str.strip().str.lower()
+        crit_all_mask  = crit_lower.isin(ALL_CRITICAL_VALS)
+        crit_bus_mask  = crit_lower.isin(CRITICAL_VALS)
         crit_all_count = int(crit_all_mask.sum())
         crit_bus_count = int(crit_bus_mask.sum())
         crit_cpu_dn_f2    = int(df[crit_all_mask]["Avg_CPU_12m"].fillna(100).lt(10).sum())
         crit_cpu_up_f2    = int(df[crit_bus_mask]["Avg_CPU_12m"].fillna(0).gt(80).sum())
-        crit_ram_dn_f2    = int(df[crit_all_mask]["Avg_FreeMem_12m"].fillna(0).gt(80).sum())
+        crit_ram_dn_f2    = int(df[crit_bus_mask]["Avg_FreeMem_12m"].fillna(0).gt(80).sum())
         crit_ram_up_f2    = int(df[crit_bus_mask]["Avg_FreeMem_12m"].fillna(100).lt(20).sum())
         crit_cpu_dn_final = len(find_criticality_cpu_downsize_optimizations(df))
         crit_cpu_up_final = len(find_criticality_cpu_upsize_optimizations(df))
@@ -290,7 +291,7 @@ def _build_rightsizing_filter_funnel() -> dict:
 
     # ── UC3.5 Lifecycle ────────────────────────────────────────────────────────
     if has_criticality:
-        lc_f1_df    = df[df[COL_CRITICALITY].isin(LC_CRITICAL_VALS)]
+        lc_f1_df    = df[df[COL_CRITICALITY].astype(str).str.strip().str.lower().isin(LC_CRITICAL_VALS)]
         lc_f2_df    = lc_f1_df[lc_f1_df["Peak_CPU_12m"].fillna(0) > 95]
         lc_f3_df    = lc_f2_df[lc_f2_df["Min_FreeMem_12m"].fillna(100) < 5]
         lc_f1_count = len(lc_f1_df)
@@ -1501,7 +1502,14 @@ def results(request):
         "inventory_status_standard",
         "Actual_Line_Cost",
     ]
-    _RULE_HIDDEN_COLS = {"product_group"}
+    _RULE_HIDDEN_COLS = {
+        "product_group",
+        "installation_id",
+        "installation_tenant_id",
+        "server_id",
+        "demand_detail_id",
+        "demand_tenant_id",
+    }
     all_rule1_keys = list(azure_full[0].keys()) if azure_full else []
     all_rule2_keys = list(retired_full[0].keys()) if retired_full else []
     rule1_keys = [c for c in RULE1_DISPLAY_COLS if c in all_rule1_keys] + \
@@ -1513,6 +1521,8 @@ def results(request):
 
     render_context["azure_payg_prod_candidates_count"] = int(rr.get("azure_payg_prod_candidates_count") or 0)
     render_context["azure_payg_nonprod_candidates_count"] = int(rr.get("azure_payg_nonprod_candidates_count") or 0)
+    render_context["azure_payg_demand_matched_count"] = int(rr.get("azure_payg_demand_matched_count") or 0)
+    render_context["retired_demand_matched_count"] = int(rr.get("retired_demand_matched_count") or 0)
 
     render_context["azure_payg_page"] = [[r.get(k) for k in rule1_keys] for r in azure_slice]
     render_context["retired_devices_page"] = [[r.get(k) for k in rule2_keys] for r in retired_slice]
@@ -1526,13 +1536,12 @@ def results(request):
     render_context["rule1_next"] = min(total_rule1_pages, rule1_page + 1)
     render_context["rule2_prev"] = max(1, rule2_page - 1)
     render_context["rule2_next"] = min(total_rule2_pages, rule2_page + 1)
-    # Full data as JSON for client-side pagination (no full page reload)
-    render_context["rule1_data_json"] = [
-        [r.get(k) for k in rule1_keys] for r in azure_full
-    ]
-    render_context["rule2_data_json"] = [
-        [r.get(k) for k in rule2_keys] for r in retired_full
-    ]
+    # Rule table data is loaded lazily via /api/rule1-data/ and /api/rule2-data/
+    # — do NOT embed large JSON blobs here; the frontend JS fetches them on tab click.
+    render_context["rule1_data_json"] = []
+    render_context["rule2_data_json"] = []
+    render_context["rule1_keys"] = []
+    render_context["rule2_keys"] = []
 
     # ── Strategy 3: CPU & RAM Right-Sizing pagination ─────────────────────────
     rs = context.get("rightsizing") or {}
@@ -2116,10 +2125,17 @@ def report_page(request):
     from optimizer.services.db_analysis_service import get_latest_agentic_context
     agentic = get_latest_agentic_context()
     agent_md = (agentic.get("agent_run") or {}).get("report_markdown") or ""
-    if agentic.get("has_agentic_data") and agent_md:
+
+    # Always regenerate from live data first so counts stay in sync with the
+    # dashboard. Fall back to the stored agent run markdown only if live
+    # generation fails (e.g. no DB connection or empty result).
+    live_md = _resolve_report_markdown(context, agentic=agentic)
+    if live_md:
+        context["report_text"] = live_md
+    elif agent_md:
         context["report_text"] = agent_md
     else:
-        context["report_text"] = _resolve_report_markdown(context, agentic=agentic)
+        context["report_text"] = ""
     context["agentic"] = agentic
     context["has_agentic_data"] = agentic.get("has_agentic_data", False)
     profile = _get_or_create_user_profile(request.user)
@@ -2415,6 +2431,113 @@ def api_savings_summary(request):
             "strategies": strategies,
             "total_savings_eur": total_savings_eur,
             "data_refreshed_at": refreshed_at_str,
+        },
+    })
+
+
+@require_GET
+@login_required
+def api_dashboard_summary(request):
+    """
+    API: Complete KPI summary for all dashboard sections.
+
+    GET /api/dashboard-summary/
+
+    Returns all numeric + EU-formatted values needed to populate the dashboard
+    header strip and each tab's summary card (PAYG, Retired Assets, Rightsizing).
+    Intended to be called by the frontend on page load to avoid embedding large
+    data blobs in the initial HTML response.
+
+    Response shape:
+      {
+        "request_id": str,
+        "status": "completed",
+        "result": {
+          "total_devices_analyzed": int,
+          "total_demand_quantity": int,
+          "total_license_cost": float,
+          "total_license_cost_eu": str,
+          "azure_payg_count": int,
+          "azure_payg_savings": float,
+          "azure_payg_savings_eu": str,
+          "azure_payg_total_cost": float,
+          "azure_payg_total_cost_eu": str,
+          "azure_payg_prod_candidates_count": int,
+          "azure_payg_nonprod_candidates_count": int,
+          "has_azure_payg_data": bool,
+          "retired_count": int,
+          "retired_devices_savings": float,
+          "retired_devices_savings_eu": str,
+          "has_retired_devices_data": bool,
+          "rightsizing_cpu_savings": float,
+          "rightsizing_cpu_savings_eu": str,
+          "rightsizing_savings": float,
+          "rightsizing_savings_eu": str,
+          "rightsizing_cpu_count": int,
+          "rightsizing_ram_count": int,
+          "rightsizing_total_vcpu_reduction": int,
+          "rightsizing_total_ram_reduction_gib": float,
+          "rightsizing_cpu_prod_count": int,
+          "rightsizing_cpu_nonprod_count": int,
+          "rightsizing_ram_prod_count": int,
+          "rightsizing_ram_nonprod_count": int,
+          "potential_savings": float,
+          "potential_savings_eu": str,
+          "data_refreshed_at": str (ISO-8601)
+        }
+      }
+    """
+    from optimizer.services.db_analysis_service import compute_live_db_metrics
+
+    ctx = compute_live_db_metrics()
+    dash = build_dashboard_context(ctx)
+    rr = ctx.get("rule_results") or {}
+    rs = ctx.get("rightsizing") or {}
+
+    refreshed_at = ctx.get("data_refreshed_at")
+
+    return JsonResponse({
+        "request_id": str(uuid.uuid4()),
+        "status": "completed",
+        "result": {
+            # Header KPIs
+            "total_devices_analyzed": int(dash.get("total_devices_analyzed") or 0),
+            "total_demand_quantity": int(dash.get("total_demand_quantity") or 0),
+            "total_license_cost": float(dash.get("total_license_cost") or 0),
+            "total_license_cost_eu": _eu_currency(dash.get("total_license_cost") or 0),
+            # PAYG tab summary
+            "azure_payg_count": int(dash.get("azure_payg_count") or 0),
+            "azure_payg_savings": float(dash.get("azure_payg_savings") or 0),
+            "azure_payg_savings_eu": _eu_currency(dash.get("azure_payg_savings") or 0),
+            "azure_payg_total_cost": float(rr.get("azure_payg_total_cost_eur") or 0),
+            "azure_payg_total_cost_eu": _eu_currency(rr.get("azure_payg_total_cost_eur") or 0),
+            "azure_payg_prod_candidates_count": int(rr.get("azure_payg_prod_candidates_count") or 0),
+            "azure_payg_nonprod_candidates_count": int(rr.get("azure_payg_nonprod_candidates_count") or 0),
+            "azure_payg_demand_matched_count": int(rr.get("azure_payg_demand_matched_count") or 0),
+            "has_azure_payg_data": bool(rr.get("azure_payg")),
+            # Retired Assets tab summary
+            "retired_count": int(dash.get("retired_count") or 0),
+            "retired_devices_savings": float(dash.get("retired_devices_savings") or 0),
+            "retired_devices_savings_eu": _eu_currency(dash.get("retired_devices_savings") or 0),
+            "retired_demand_matched_count": int(rr.get("retired_demand_matched_count") or 0),
+            "has_retired_devices_data": bool(rr.get("retired_devices")),
+            # Rightsizing tab summary
+            "rightsizing_cpu_savings": float(dash.get("rightsizing_cpu_savings") or 0),
+            "rightsizing_cpu_savings_eu": _eu_currency(dash.get("rightsizing_cpu_savings") or 0),
+            "rightsizing_savings": float(dash.get("rightsizing_savings") or 0),
+            "rightsizing_savings_eu": _eu_currency(dash.get("rightsizing_savings") or 0),
+            "rightsizing_cpu_count": int(rs.get("cpu_count") or 0),
+            "rightsizing_ram_count": int(rs.get("ram_count") or 0),
+            "rightsizing_total_vcpu_reduction": int(rs.get("total_vcpu_reduction") or 0),
+            "rightsizing_total_ram_reduction_gib": float(rs.get("total_ram_reduction_gib") or 0),
+            "rightsizing_cpu_prod_count": int(rs.get("cpu_prod_count") or 0),
+            "rightsizing_cpu_nonprod_count": int(rs.get("cpu_nonprod_count") or 0),
+            "rightsizing_ram_prod_count": int(rs.get("ram_prod_count") or 0),
+            "rightsizing_ram_nonprod_count": int(rs.get("ram_nonprod_count") or 0),
+            # Overall
+            "potential_savings": float(dash.get("potential_savings") or 0),
+            "potential_savings_eu": _eu_currency(dash.get("potential_savings") or 0),
+            "data_refreshed_at": refreshed_at.isoformat() if refreshed_at else None,
         },
     })
 
@@ -3280,7 +3403,9 @@ def api_rule1_data(request):
     rr = context.get("rule_results", {})
     data = list(rr.get("azure_payg") or [])
 
-    keys = list(data[0].keys()) if data else []
+    # Exclude columns that are redundant or internal-only for UC1
+    _UC1_EXCLUDED = {'product_group', 'no_license_required_product', 'demand_product_edition'}
+    keys = [k for k in (data[0].keys() if data else []) if k not in _UC1_EXCLUDED]
 
     sort_field = str(request.GET.get("sort_field", "")).strip()
     sort_order = str(request.GET.get("sort_order", "asc")).strip().lower()
@@ -3300,7 +3425,7 @@ def api_rule1_data(request):
     except (TypeError, ValueError):
         page = 1
     try:
-        page_size = min(200, max(1, int(request.GET.get("page_size", 25))))
+        page_size = min(2000, max(1, int(request.GET.get("page_size", 25))))
     except (TypeError, ValueError):
         page_size = 25
 
@@ -3359,7 +3484,7 @@ def api_rule2_data(request):
     except (TypeError, ValueError):
         page = 1
     try:
-        page_size = min(200, max(1, int(request.GET.get("page_size", 25))))
+        page_size = min(2000, max(1, int(request.GET.get("page_size", 25))))
     except (TypeError, ValueError):
         page_size = 25
 
@@ -3467,50 +3592,19 @@ def download_rule_data(request, rule_id):
         return HttpResponse("No data to download.", status=404)
     from io import BytesIO
     buf = BytesIO()
+    _UC1_DROP_COLS = {"product_group", "no_license_required_product", "demand_product_edition"}
+    _UC2_DROP_COLS = {"product_group", "license_metric", "device_status", "demand_product_edition"}
+
     if rule_id == "rule2":
-        raw_df = _build_raw_installations_df()
         results_df = pd.DataFrame(data)
-        data_sources_df = pd.DataFrame([
-            {
-                "Source Table": "usu_installation",
-                "Django Model": "USUInstallation",
-                "Key Columns Used": "device_status, no_license_required, manufacturer, product_family, product_group, product_description, product_edition, license_metric, cpu_core_count, cpu_socket_count, topology_type, inv_status_std_name",
-                "Filter Applied (Rule 2)": "device_status = 'retired' AND no_license_required = 0",
-            },
-            {
-                "Source Table": "server",
-                "Django Model": "Server",
-                "Key Columns Used": "server_name, hosting_zone, environment, cloud_provider, is_cloud_device, installed_status_usu, installed_status_boones, is_active",
-                "Filter Applied (Rule 2)": "is_active = True (joined via FK to USUInstallation)",
-            },
-        ])
+        results_df = results_df.drop(columns=[c for c in _UC2_DROP_COLS if c in results_df.columns])
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
             results_df.to_excel(writer, index=False, sheet_name="Rule2 Retired Devices")
-            if not raw_df.empty:
-                raw_df.to_excel(writer, index=False, sheet_name="Raw Input Data")
-            data_sources_df.to_excel(writer, index=False, sheet_name="Data Sources")
     else:  # rule1
-        raw_df = _build_raw_rule1_df()
         results_df = pd.DataFrame(data)
-        data_sources_df = pd.DataFrame([
-            {
-                "Source Table": "usu_installation",
-                "Django Model": "USUInstallation",
-                "Key Columns Used": "inv_status_std_name, no_license_required, product_family, manufacturer, product_description, device_status",
-                "Filter Applied (Rule 1)": "hosting_zone normalized to 'Public Cloud'/'Private Cloud AVS' AND inv_status_std_name != 'License Included' AND no_license_required = 0",
-            },
-            {
-                "Source Table": "server",
-                "Django Model": "Server",
-                "Key Columns Used": "server_name, hosting_zone, environment, cloud_provider, is_cloud_device, installed_status_usu, installed_status_boones, is_active",
-                "Filter Applied (Rule 1)": "hosting_zone in Public Cloud / Private Cloud AVS (after normalization); is_active = True",
-            },
-        ])
+        results_df = results_df.drop(columns=[c for c in _UC1_DROP_COLS if c in results_df.columns])
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
             results_df.to_excel(writer, index=False, sheet_name="Rule1 PAYG Candidates")
-            if not raw_df.empty:
-                raw_df.to_excel(writer, index=False, sheet_name="Raw Input Data")
-            data_sources_df.to_excel(writer, index=False, sheet_name="Data Sources")
     buf.seek(0)
     response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = _safe_content_disposition(filename)
@@ -3683,7 +3777,7 @@ def download_uc3_ram_input_data(request):
     """
     from io import BytesIO
     from optimizer.services.db_analysis_service import _build_rightsizing_df
-    from optimizer.rules.rightsizing import NON_PROD_ENVS, find_ram_rightsizing_optimizations
+    from optimizer.rules.rightsizing import PROD_ENVS, find_ram_rightsizing_optimizations
 
     df = _build_rightsizing_df()
     if df.empty:
@@ -3692,7 +3786,8 @@ def download_uc3_ram_input_data(request):
     total_input = len(df)
 
     # ── PROD filter funnel (cumulative intermediate counts) ───────────────────
-    prod_df = df[~df["Environment"].isin(NON_PROD_ENVS)].copy()
+    _env_lower_ram = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    prod_df = df[_env_lower_ram.isin(PROD_ENVS)].copy()
     prod_total = len(prod_df)
 
     avg_free = pd.to_numeric(prod_df.get("Avg_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
@@ -3709,7 +3804,7 @@ def download_uc3_ram_input_data(request):
     prod_eligible = int(mask_prod_f3.sum())
 
     # ── NON-PROD filter funnel (cumulative intermediate counts) ───────────────
-    nonprod_df = df[df["Environment"].isin(NON_PROD_ENVS)].copy()
+    nonprod_df = df[~_env_lower_ram.isin(PROD_ENVS)].copy()
     nonprod_total = len(nonprod_df)
 
     avg_free_np = pd.to_numeric(nonprod_df.get("Avg_FreeMem_12m", pd.Series(dtype=float)), errors="coerce")
@@ -3764,7 +3859,7 @@ def download_uc3_ram_input_data(request):
         summary_rows.append({
             "Description": f" {env_row['environment']}",
             "Count": int(env_row["count"]),
-            "Note": "NON-PROD" if env_row["environment"] in NON_PROD_ENVS else "PROD",
+            "Note": "PROD" if str(env_row["environment"]).strip().lower() in PROD_ENVS else "NON-PROD",
         })
     summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
 
@@ -3853,7 +3948,7 @@ def download_uc3_cpu_input_data(request):
     """
     from io import BytesIO
     from optimizer.services.db_analysis_service import _build_rightsizing_df
-    from optimizer.rules.rightsizing import NON_PROD_ENVS
+    from optimizer.rules.rightsizing import PROD_ENVS
 
     df = _build_rightsizing_df()
     if df.empty:
@@ -3862,7 +3957,8 @@ def download_uc3_cpu_input_data(request):
     total_input = len(df)
 
     # ── PROD filter funnel ────────────────────────────────────────────────────
-    prod_df = df[~df["Environment"].isin(NON_PROD_ENVS)].copy()
+    _env_lower_cpu = df["Environment"].fillna("").astype(str).str.strip().str.lower()
+    prod_df = df[_env_lower_cpu.isin(PROD_ENVS)].copy()
     prod_total = len(prod_df)
 
     avg_cpu  = pd.to_numeric(prod_df.get("Avg_CPU_12m",  pd.Series(dtype=float)), errors="coerce")
@@ -3877,7 +3973,7 @@ def download_uc3_cpu_input_data(request):
     prod_eligible = int(mask_p3.sum())
 
     # ── NON-PROD filter funnel ────────────────────────────────────────────────
-    nonprod_df = df[df["Environment"].isin(NON_PROD_ENVS)].copy()
+    nonprod_df = df[~_env_lower_cpu.isin(PROD_ENVS)].copy()
     nonprod_total = len(nonprod_df)
 
     avg_cpu_np  = pd.to_numeric(nonprod_df.get("Avg_CPU_12m",  pd.Series(dtype=float)), errors="coerce")
@@ -3925,7 +4021,7 @@ def download_uc3_cpu_input_data(request):
         {"Description": "--- Environment breakdown (all input rows) ---", "Count": None, "Note": ""},
     ]
     for _, row in env_counts.iterrows():
-        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "NON-PROD" if row["environment"] in NON_PROD_ENVS else "PROD"})
+        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "PROD" if str(row["environment"]).strip().lower() in PROD_ENVS else "NON-PROD"})
 
     summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
 
@@ -4155,7 +4251,7 @@ def download_uc3_physical_input_data(request):
     env_counts = df["Environment"].astype(str).value_counts().reset_index()
     env_counts.columns = ["environment", "count"]
 
-    from optimizer.rules.rightsizing import NON_PROD_ENVS
+    from optimizer.rules.rightsizing import PROD_ENVS
 
     summary_rows = [
         {"Description": "Total rows in DB (Physical Systems input)", "Count": total_input, "Note": "Active servers with utilisation data"},
@@ -4169,7 +4265,7 @@ def download_uc3_physical_input_data(request):
         {"Description": "--- Environment breakdown (all input rows) ---", "Count": None, "Note": ""},
     ]
     for _, row in env_counts.iterrows():
-        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "NON-PROD" if row["environment"] in NON_PROD_ENVS else "PROD"})
+        summary_rows.append({"Description": f" {row['environment']}", "Count": int(row["count"]), "Note": "PROD" if str(row["environment"]).strip().lower() in PROD_ENVS else "NON-PROD"})
 
     summary_df = pd.DataFrame(summary_rows, columns=["Description", "Count", "Note"])
 
