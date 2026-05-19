@@ -2920,6 +2920,7 @@ def api_trigger_agent_run(request):
         generate_and_store_agentic_report,
     )
 
+
     # Parse optional body
     body = {}
     if request.content_type and "application/json" in request.content_type:
@@ -2944,13 +2945,19 @@ def api_trigger_agent_run(request):
         records = []
     data_load_sec = round(time.monotonic() - t0, 3)
 
-    # Also add the strategy outputs used by the agent report.
-    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing
+    # Phase 2: Rule evaluation — PAYG, Retired Devices, Rightsizing.
+    # compute_live_db_metrics() is called ONCE here and passed all the way through to
+    # build_live_agent_report_preview so the report uses the exact same DB snapshot as
+    # the dashboard (which also calls compute_live_db_metrics()).
     t0 = time.monotonic()
+    live_context = {}
+    strategy_results = {}
     try:
-        strategy_results = build_agent_strategy_results_payload(compute_db_metrics())
+
+        live_context = compute_live_db_metrics()
+        strategy_results = build_agent_strategy_results_payload(live_context)
     except Exception:
-        strategy_results = {}
+        pass
     rule_eval_sec = round(time.monotonic() - t0, 3)
 
     result = generate_and_store_agentic_report(
@@ -2959,6 +2966,7 @@ def api_trigger_agent_run(request):
         strategy_results=strategy_results,
         triggered_by=request.user.email or request.user.username,
         phase_timings={"data_load_sec": data_load_sec, "rule_eval_sec": rule_eval_sec},
+        native_context=live_context or None,
     )
 
     elapsed_ms = int((time.time() - started) * 1000)
@@ -3116,9 +3124,9 @@ def api_dq_usu_data(request):
       page_size   — rows per page, max 500 (default: 100)
       family      — "mssql" | "oracle" | "all" (default: "all")
       sort_field  — server_name | product_family | product_description |
-                    product_edition | manufacturer | install_status |
-                    inv_status_std_name | cpu_core_count | hosting_zone |
-                    environment | inventory_date  (default: server_name)
+                    product_edition | manufacturer | device_status |
+                    inv_status_std_name | no_license_required | cpu_core_count |
+                    hosting_zone | environment | inventory_date  (default: server_name)
       sort_order  — "asc" | "desc" (default: "asc")
 
     Response:
@@ -3135,8 +3143,9 @@ def api_dq_usu_data(request):
           "product_description": "Microsoft SQL Server 2017 Standard Core",
           "product_edition": "Standard Core",
           "manufacturer": "Microsoft",
-          "install_status": "Installed",
+          "device_status": "Installed",
           "inv_status_std_name": "Active",
+          "no_license_required": true,   // true | false | null
           "cpu_core_count": 8,
           "hosting_zone": "Public Cloud",
           "environment": "Production",
@@ -3161,6 +3170,7 @@ def api_dq_usu_data(request):
         "hosting_zone":        "server__hosting_zone",
         "environment":         "server__environment",
         "inventory_date":      "inventory_date",
+        "no_license_required": "no_license_required",
     }
 
     try:
@@ -3194,6 +3204,7 @@ def api_dq_usu_data(request):
     results = []
     for i in rows:
         srv = i.server
+        nlr = i.no_license_required
         results.append({
             "server_name":         srv.server_name if srv else "",
             "product_family":      i.product_family or "",
@@ -3206,6 +3217,7 @@ def api_dq_usu_data(request):
             "hosting_zone":        srv.hosting_zone if srv else "",
             "environment":         srv.environment if srv else "",
             "inventory_date":      i.inventory_date.isoformat() if i.inventory_date else "",
+            "no_license_required": True if nlr is True else (False if nlr is False else None),
         })
 
     return JsonResponse({

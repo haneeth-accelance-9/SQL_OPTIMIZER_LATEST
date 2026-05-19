@@ -255,26 +255,32 @@ def _friendly_usecase_name(usecase_id: str) -> str:
     return raw
 
 
+_UC_LABEL_MAP: dict[str, str] = {
+    "uc_1_1_azure_byol_to_payg":           "UC 1.1 — Azure BYOL to PAYG",
+    "uc_1_2_retired_device_installs":       "UC 1.2 — Retired Device Installs",
+    "uc_3_1_cpu_rightsizing":              "UC 3.1 — CPU Rightsizing",
+    "uc_3_2_ram_rightsizing":              "UC 3.2 — RAM Rightsizing",
+    "uc_3_3_criticality_cpu_optimization": "UC 3.3 — Criticality CPU Optimization (Human Review)",
+    "uc_3_4_criticality_ram_optimization": "UC 3.4 — Criticality RAM Optimization (Human Review)",
+    "uc_3_5_lifecycle_risk_flags":         "UC 3.5 — Lifecycle Risk Flags (Human Review)",
+    "uc_3_6_physical_system_review":       "UC 3.6 — Physical System Review",
+}
+
+
 def _friendly_rule_heading(rule_id: str, meta: dict[str, Any] | None) -> str:
     rid = str(rule_id or "").strip()
+    normalized = rid.lower().strip()
     desc = (meta or {}).get("description") if isinstance(meta, dict) else None
     desc_s = str(desc or "").strip()
     if desc_s:
+        # Prepend UC prefix so the description has context
+        for key, label in _UC_LABEL_MAP.items():
+            if normalized == key:
+                prefix = label.split(" — ")[0]  # e.g. "UC 1.2"
+                return f"{prefix} — {desc_s}"
         return desc_s
 
-    # For rules present in evaluation but not in rules.base.yaml, provide friendly labels.
-    # Never show internal rule IDs in the report output.
-    normalized = rid.lower().strip()
-    fallback_map = {
-        "uc_3_3_criticality_cpu_optimization": "Criticality-aware CPU Optimization (Human Review)",
-        "uc_3_4_criticality_ram_optimization": "Criticality-aware RAM Optimization (Human Review)",
-        "uc_3_5_lifecycle_risk_flags": "Lifecycle Risk Flags (Human Review)",
-        "uc_3_6_physical_system_review": "Physical Systems Require Review",
-    }
-    if normalized in fallback_map:
-        return fallback_map[normalized]
-
-    return "Additional finding"
+    return _UC_LABEL_MAP.get(normalized, "Additional finding")
 
 
 HIDDEN_REPORT_RULE_IDS = {
