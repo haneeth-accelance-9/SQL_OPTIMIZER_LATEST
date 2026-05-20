@@ -50,7 +50,7 @@ MONETARY_CONTEXT_PATTERN = re.compile(
     rf"(?i)(?P<label>\b(?:{'|'.join(re.escape(label) for label in MONETARY_CONTEXT_LABELS)})\b"
     r"(?:\s+(?:of|is|was|at))?"
     r"(?:\*{0,2})?\s*[:=-]?\s*(?:\*{0,2})?\s*)"
-    rf"(?P<amount>(?<![{re.escape(EURO_SYMBOL)}$])\d[\d,]*(?:\.\d+)?)"
+    rf"(?P<amount>(?<![{re.escape(EURO_SYMBOL)}$])(?:\d[\d,]*(?:\.\d+)?|\d[\d.]*(?:,\d+)?))"
 )
 
 
@@ -81,6 +81,9 @@ def normalize_report_currency_text(text: str) -> str:
     normalized = (text or "").replace("$", EURO_SYMBOL)
 
     def _replace_amount(match: re.Match) -> str:
+        after = match.string[match.end():]
+        if after.lstrip(" ").startswith(EURO_SYMBOL):
+            return match.group(0)
         return f"{match.group('label')}{EURO_SYMBOL}{match.group('amount')}"
 
     return MONETARY_CONTEXT_PATTERN.sub(_replace_amount, normalized)

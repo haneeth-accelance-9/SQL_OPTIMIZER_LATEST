@@ -374,7 +374,7 @@
                             <svg class="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z"></path>
                             </svg>
-                            <p class="whitespace-nowrap">Data for this Strategy is sourced from USU and VMware flat files. Future state: VMware flat file data will be replaced by CMDB.</p>
+                            <p class="whitespace-nowrap">Data for this Strategy is sourced from USU.</p>
                         </div>
                     </div>
                    
@@ -3534,7 +3534,7 @@
                     if (result.summary) {
                         updateRs3Summary(type, result.summary);
                         if (result.summary.savings_eur != null) {
-                            rs3State[type].savingsEur = Math.round(Number(result.summary.savings_eur) || 0);
+                            rs3State[type].savingsEur = Number(result.summary.savings_eur) || 0;
                             renderRs3SavingsTile(type);
                         }
                     }
@@ -3624,8 +3624,8 @@
             setText('rs3-' + type + '-legend-1', config.chartLabels[0]);
             setText('rs3-' + type + '-legend-2', config.chartLabels[1]);
             if (summary.savings_eur != null) {
-                var savingsInt = Math.round(Number(summary.savings_eur) || 0);
-                setText('rs3-' + type + '-reduction-value', euCurrency(savingsInt));
+                var savingsVal = Number(summary.savings_eur) || 0;
+                setText('rs3-' + type + '-reduction-value', euCurrency(savingsVal));
             }
             if (type === 'ram') {
                 setText('overview-ram-gib', summary.reduction_total);
@@ -5200,8 +5200,8 @@
                 } else {
                     usuState._allCachedItems = [];
                     usuState.total      = Number(payload.total || 0);
-                    usuState.totalPages = Math.max(1, Number(instData.total_pages || 1));
-                    usuState.page       = Number(instData.page || usuState.page);
+                    usuState.totalPages = Math.max(1, Number(payload.total_pages || 1));
+                    usuState.page       = Number(payload.page || usuState.page);
                     usuState._cachedItems = items;
                 }
 
