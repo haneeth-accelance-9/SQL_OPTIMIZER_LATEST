@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "1.0.0"
 
-_azure_client = None
-
 AGENT_RULES_CONFIG_PATH = (
     Path(__file__).resolve().parents[3]
     / "agent"
@@ -137,41 +135,10 @@ HIDDEN_REPORT_RULE_IDS = frozenset({
 })
 
 
-def _get_client():
-    """Reuse a single Azure OpenAI client (module-level cache).
-
-    Routes through Azure APIM when AZURE_APIM_ENDPOINT + AZURE_APIM_SUB_KEY are
-    configured; falls back to a direct AzureOpenAI endpoint otherwise.
-    """
-    global _azure_client
-    if _azure_client is not None:
-        return _azure_client
-    try:
-        from openai import AzureOpenAI
-    except ImportError:
-        return None
-    from django.conf import settings
-
-    api_key = getattr(settings, "AZURE_OPENAI_API_KEY", "")
-    apim_endpoint = getattr(settings, "AZURE_APIM_ENDPOINT", "")
-    apim_sub_key = getattr(settings, "AZURE_APIM_SUB_KEY", "")
-    openai_endpoint = getattr(settings, "AZURE_OPENAI_ENDPOINT", "")
-
-    # Prefer APIM gateway when configured; fall back to direct Azure OpenAI endpoint.
-    endpoint = apim_endpoint or openai_endpoint
-    if not endpoint or not api_key:
-        return None
-
-    client_kwargs = {
-        "api_key": api_key,
-        "api_version": getattr(settings, "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-        "azure_endpoint": endpoint,
-    }
-    if apim_sub_key:
-        client_kwargs["default_headers"] = {"Ocp-Apim-Subscription-Key": apim_sub_key}
-
-    _azure_client = AzureOpenAI(**client_kwargs)
-    return _azure_client
+def _get_llm_client():
+    """Return the singleton LLMClient from the clients registry."""
+    from optimizer.clients import get_client
+    return get_client("llm")
 
 
 def build_prompt(context: Dict[str, Any]) -> str:
@@ -198,28 +165,15 @@ def generate_report_text(context: Dict[str, Any]) -> Optional[str]:
     """
     Call Azure OpenAI to generate report text. Returns None if API is not configured or call fails.
     """
-    client = _get_client()
-    if not client:
-        logger.warning("Azure OpenAI not configured; skipping AI report")
-        return None
-
-    from django.conf import settings as _s
-    deployment = getattr(_s, "AZURE_OPENAI_DEPLOYMENT", "gpt-4")
     prompt = build_prompt(context)
-
+    llm = _get_llm_client()
     try:
-        timeout = float(getattr(_s, "AZURE_OPENAI_TIMEOUT", 60))
-        response = client.chat.completions.create(
-            model=deployment,
-            messages=[
-                {"role": "system", "content": "You write professional IT and license optimization reports. Be concise and factual."},
-                {"role": "user", "content": prompt},
-            ],
+        text = llm.complete(
+            system="You write professional IT and license optimization reports. Be concise and factual.",
+            user=prompt,
             max_tokens=2000,
             temperature=0.3,
-            timeout=timeout,
         )
-        text = response.choices[0].message.content if response.choices else None
         if text and "**" not in text and "##" not in text:
             text = text.replace("Executive Summary", "## Executive Summary").replace("Current State", "## Current State").replace("Recommendations", "## Recommendations")
         return normalize_report_content_text(text) if text else None
@@ -237,14 +191,6 @@ def generate_cost_reduction_recommendations(
     which servers/workloads to convert to Developer, Enterprise, or Standard.
     Returns markdown string or None if API unavailable or call fails.
     """
-    client = _get_client()
-    if not client:
-        return None
-
-    from django.conf import settings as _s
-    deployment = getattr(_s, "AZURE_OPENAI_DEPLOYMENT", "gpt-4")
-    timeout = float(getattr(_s, "AZURE_OPENAI_TIMEOUT", 60))
-
     dist = license_metrics.get("price_distribution") or []
     azure_count = rule_results.get("azure_payg_count", 0) or 0
     retired_count = rule_results.get("retired_count", 0) or 0
@@ -272,25 +218,21 @@ def generate_cost_reduction_recommendations(
 - Retired devices still reporting installations (to reconcile): {retired_count}
 
 **Required sections (use Markdown ## and ###):**
-1. **How to decrease costs** â€“ 3â€“5 specific, actionable steps to reduce SQL Server license spend (e.g. move dev/test to Developer, consolidate Enterprise where not needed, leverage PAYG for cloud workloads).
-2. **Which servers/workloads to convert to Developer edition** â€“ Identify scenarios (e.g. dev, test, non-production) and estimated impact.
-3. **Which servers/workloads to keep or move to Enterprise** â€“ When Enterprise features are justified.
-4. **Which servers/workloads to keep or move to Standard** â€“ When Standard is sufficient for production.
+1. **How to decrease costs** â€” 3â€”5 specific, actionable steps to reduce SQL Server license spend (e.g. move dev/test to Developer, consolidate Enterprise where not needed, leverage PAYG for cloud workloads).
+2. **Which servers/workloads to convert to Developer edition** â€” Identify scenarios (e.g. dev, test, non-production) and estimated impact.
+3. **Which servers/workloads to keep or move to Enterprise** â€” When Enterprise features are justified.
+4. **Which servers/workloads to keep or move to Standard** â€” When Standard is sufficient for production.
 
 Use only the numbers provided. Be specific and practical. Keep each section to a short paragraph or bullet list."""
 
+    llm = _get_llm_client()
     try:
-        response = client.chat.completions.create(
-            model=deployment,
-            messages=[
-                {"role": "system", "content": "You write concise, actionable IT license optimization recommendations. Use Markdown headings and bullet points."},
-                {"role": "user", "content": prompt},
-            ],
+        text = llm.complete(
+            system="You write concise, actionable IT license optimization recommendations. Use Markdown headings and bullet points.",
+            user=prompt,
             max_tokens=1500,
             temperature=0.3,
-            timeout=timeout,
         )
-        text = response.choices[0].message.content if response.choices else None
         return normalize_report_content_text(text) if text else None
     except Exception as e:
         logger.exception("Azure OpenAI cost reduction recommendations failed: %s", e)
@@ -1244,22 +1186,14 @@ def call_agent_generate_report(
         "deterministic_report_markdown": str,
       }
     """
-    import json as _json
-    import urllib.request
-    from django.conf import settings as _s
+    from optimizer.clients import get_client
+    agent = get_client("agent")
 
-    endpoint = getattr(_s, "AGENT_A2A_ENDPOINT", "http://localhost:8000").rstrip("/")
-    timeout = getattr(_s, "AGENT_A2A_TIMEOUT", 120)
-    url = f"{endpoint}/generate-report"
-
-    default_local_endpoints = {"http://localhost:8000", "http://127.0.0.1:8000"}
-    endpoint_explicitly_configured = bool(os.environ.get("AGENT_A2A_ENDPOINT", "").strip())
-    if not endpoint_explicitly_configured and endpoint in default_local_endpoints:
+    if agent.is_local_dev():
         logger.error(
-            "AI agent NOT used — AGENT_A2A_ENDPOINT is unset or pointing at the local Django server (%s). "
+            "AI agent NOT used — AGENT_A2A_ENDPOINT is unset or pointing at the local Django server. "
             "Report generated via in-process Django fallback. "
             "To use the real AI agent, set AGENT_A2A_ENDPOINT to the external A2A server URL.",
-            endpoint,
             exc_info=True,
         )
         return _build_local_agent_report_response(
@@ -1271,27 +1205,16 @@ def call_agent_generate_report(
             native_context=native_context,
         )
 
-    payload = {
-        "usecase_id": usecase_id,
-        "records": records,
-        "strategy_results": strategy_results or {},
-        "notes": notes,
-        "llm_first": llm_first,
-        "llm_max_retries": getattr(_s, "AGENT_A2A_MAX_RETRIES", 2),
-        "llm_timeout_seconds": min(timeout, 90),
-    }
-    body = _json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read().decode("utf-8")
-        return _json.loads(raw)
+        return agent.call_generate_report(
+            usecase_id=usecase_id,
+            records=records,
+            strategy_results=strategy_results,
+            notes=notes,
+            llm_first=llm_first,
+        )
     except Exception as exc:
+        url = f"{agent._config.endpoint}/generate-report"
         logger.error(
             "AI agent NOT used — A2A agent HTTP call failed for %s (%s). "
             "Report generated via in-process Django fallback. "

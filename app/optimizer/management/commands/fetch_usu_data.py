@@ -36,13 +36,12 @@ import time
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-import requests
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 from django.db.utils import OperationalError
-from requests.auth import HTTPBasicAuth
 
+from optimizer.clients import get_client
 from optimizer.models import Server, Tenant, USUDemandDetail, USUInstallation
 
 logger = logging.getLogger(__name__)
@@ -143,44 +142,6 @@ def _beat_ids(value) -> list[str]:
     if not value:
         return []
     return [b.strip() for b in str(value).split("\n") if b.strip()]
-
-
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
-
-def _build_session(username: str, password: str) -> requests.Session:
-    """
-    Create a reusable requests.Session with Basic Auth pre-configured.
-    A single session reuses the underlying TCP connection across pages
-    (HTTP keep-alive), which significantly reduces per-request overhead.
-    """
-    session = requests.Session()
-    session.auth = HTTPBasicAuth(username, password)
-    session.headers.update({"Accept": "application/json"})
-    return session
-
-
-def _fetch_page(session: requests.Session, url: str, params: dict | None = None) -> dict:
-    """
-    GET a single API page with exponential-ish back-off retry.
-
-    Retries up to MAX_RETRIES times on any exception (network timeout,
-    5xx server error, JSON decode error, etc.).
-    Raises the last exception if all retries are exhausted.
-    """
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            resp = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            if attempt == MAX_RETRIES:
-                raise
-            wait = attempt * RETRY_BACKOFF
-            logger.warning(
-                "Fetch failed (attempt %d/%d) for %s: %s — retrying in %ds",
-                attempt, MAX_RETRIES, url, exc, wait,
-            )
-            time.sleep(wait)
 
 
 # ── DB connection helpers ─────────────────────────────────────────────────────
@@ -330,7 +291,7 @@ def _resolve_server_from_demand(tenant: Tenant, raw: dict) -> Server:
 
 # ── Installations: fetch ──────────────────────────────────────────────────────
 
-def fetch_installations(session: requests.Session, stdout) -> list[dict]:
+def fetch_installations(usu, stdout) -> list[dict]:
     """
     Sequentially page through the installations endpoint until exhausted.
 
@@ -346,7 +307,7 @@ def fetch_installations(session: requests.Session, stdout) -> list[dict]:
 
     while url:
         t0   = time.time()
-        data = _fetch_page(session, url, params)
+        data = usu.fetch_url(url, params)
 
         records      = data.get("data") or []
         next_page_uri = data.get("metadata", {}).get("pagination", {}).get("next_page_uri")
@@ -372,9 +333,7 @@ def fetch_installations(session: requests.Session, stdout) -> list[dict]:
 
 # ── Demand details: sequential next_page_uri fetch ───────────────────────────
 
-def fetch_demand_details(
-    session: requests.Session, total_count: int, stdout
-) -> list[dict]:
+def fetch_demand_details(usu, total_count: int, stdout) -> list[dict]:
     """
     Sequentially page through the demand-details endpoint using next_page_uri.
 
@@ -392,7 +351,7 @@ def fetch_demand_details(
 
     while url:
         t0   = time.time()
-        data = _fetch_page(session, url, params)
+        data = usu.fetch_url(url, params)
 
         records       = data.get("data") or []
         next_page_uri = data.get("metadata", {}).get("pagination", {}).get("next_page_uri")
@@ -665,23 +624,18 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING("  [!] DRY RUN -- no DB writes"))
 
-        # ── Step 1: Read credentials from Django settings (loaded from .env) ──
-        username = getattr(django_settings, "USU_API_USERNAME", "myusudata")
-        password = getattr(django_settings, "USU_API_PASSWORD", "test123Usu")
+        # ── Step 1: Build USU client (credentials from Django settings) ──────
+        usu = get_client("usu")
 
-        # ── Step 2: Build a shared HTTP session with Basic Auth ───────────────
-        # One session = one TCP connection pool → faster than per-request connections.
-        session = _build_session(username, password)
-
-        # ── Step 3: Resolve the tenant row (creates it if first run) ─────────
+        # ── Step 2: Resolve the tenant row (creates it if first run) ─────────
         tenant = _get_or_create_tenant(tenant_name)
         self.stdout.write(f"  Tenant : {tenant.name}")
 
-        # ── Step 4: Installations → usu_installation ─────────────────────────
+        # ── Step 3: Installations → usu_installation ─────────────────────────
         if not skip_install:
             t0 = time.time()
             try:
-                records = fetch_installations(session, self.stdout)
+                records = fetch_installations(usu, self.stdout)
                 save_installations(tenant, records, dry_run, self.stdout)
                 self.stdout.write(self.style.SUCCESS(
                     f"  Installations done in {time.time() - t0:.1f}s"
@@ -692,11 +646,11 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  Skipping installations (--skip-install)")
 
-        # ── Step 5: Demand details → usu_demand_detail ───────────────────────
+        # ── Step 4: Demand details → usu_demand_detail ───────────────────────
         if not skip_demand:
             t0 = time.time()
             try:
-                records = fetch_demand_details(session, demand_count, self.stdout)
+                records = fetch_demand_details(usu, demand_count, self.stdout)
                 save_demand_details(tenant, records, dry_run, self.stdout)
                 self.stdout.write(self.style.SUCCESS(
                     f"  Demand details done in {int((time.time()-t0)//60)}m "
@@ -708,7 +662,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  Skipping demand details (--skip-demand)")
 
-        # ── Step 6: Done ──────────────────────────────────────────────────────
+        # ── Step 5: Done ──────────────────────────────────────────────────────
         total = time.time() - run_start
         self.stdout.write(self.style.SUCCESS(
             f"\n== Sync complete in {int(total//60)}m {int(total%60)}s ==\n"

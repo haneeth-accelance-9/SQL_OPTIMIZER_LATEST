@@ -22,13 +22,12 @@ Usage:
 
 import logging
 
-import httpx
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
 
-logger = logging.getLogger(__name__)
+from optimizer.clients import get_client
 
-_DEFAULT_BASE_URL = "https://prometheus-dedicated-64-prod-eu-west-5.grafana.net"
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -49,83 +48,58 @@ class Command(BaseCommand):
         )
 
     def handle(self, *_args, **options):
-        base_url  = getattr(django_settings, "GRAFANA_BASE_URL",  _DEFAULT_BASE_URL).rstrip("/")
-        tenant_id = getattr(django_settings, "GRAFANA_TENANT_ID", "")
-        gf_user   = getattr(django_settings, "GRAFANA_USER",      "")
-        gf_token  = getattr(django_settings, "GRAFANA_TOKEN",     "")
-        timeout   = float(getattr(django_settings, "GRAFANA_TIMEOUT", 30))
-
+        gf_token = getattr(django_settings, "GRAFANA_TOKEN", "")
         if not gf_token:
             self.stderr.write(self.style.ERROR("GRAFANA_TOKEN not set in .env"))
             return
 
-        headers = {
-            "X-Scope-OrgID": tenant_id,
-            "Accept":        "application/json",
-        }
+        grafana = get_client("grafana")
 
-        with httpx.Client(auth=(gf_user, gf_token), headers=headers, timeout=timeout) as client:
+        # ── Option A: list all job label values (what exporters are running) ──
+        if options["jobs"]:
+            self.stdout.write(self.style.MIGRATE_HEADING("\n── Active Prometheus jobs (exporters) ──"))
+            jobs = grafana.list_job_values()
+            for job in jobs:
+                self.stdout.write(f"  {job}")
+            self.stdout.write(f"\nTotal: {len(jobs)} jobs\n")
+            return
 
-            # ── Option A: list all job label values (what exporters are running) ──
-            if options["jobs"]:
-                self.stdout.write(self.style.MIGRATE_HEADING("\n── Active Prometheus jobs (exporters) ──"))
-                resp = client.get(f"{base_url}/api/prom/api/v1/label/job/values")
-                resp.raise_for_status()
-                jobs = resp.json().get("data", [])
-                for job in sorted(jobs):
-                    self.stdout.write(f"  {job}")
-                self.stdout.write(f"\nTotal: {len(jobs)} jobs\n")
-                return
+        # ── Option B: test a specific PromQL expression ───────────────────
+        if options["promql"]:
+            promql = options["promql"]
+            self.stdout.write(self.style.MIGRATE_HEADING(f"\n── Testing PromQL: {promql} ──"))
+            results = grafana.test_promql(promql)
+            self.stdout.write(f"  Matches : {len(results)} series")
+            for r in results[:10]:
+                self.stdout.write(f"  Labels  : {r.get('metric', {})}")
+                val = r.get("value", [None, None])
+                self.stdout.write(f"  Value   : {val[1]}")
+                self.stdout.write("")
+            if len(results) > 10:
+                self.stdout.write(f"  … and {len(results) - 10} more series")
+            return
 
-            # ── Option B: test a specific PromQL expression ───────────────────
-            if options["promql"]:
-                promql = options["promql"]
-                self.stdout.write(self.style.MIGRATE_HEADING(f"\n── Testing PromQL: {promql} ──"))
-                resp = client.get(
-                    f"{base_url}/api/prom/api/v1/query",
-                    params={"query": promql, "time": "now"},
-                )
-                resp.raise_for_status()
-                body    = resp.json()
-                results = body.get("data", {}).get("result", [])
-                self.stdout.write(f"  Status  : {body.get('status')}")
-                self.stdout.write(f"  Matches : {len(results)} series")
-                for r in results[:10]:    # show first 10 series
-                    self.stdout.write(f"  Labels  : {r.get('metric', {})}")
-                    val = r.get("value", [None, None])
-                    self.stdout.write(f"  Value   : {val[1]}")
-                    self.stdout.write("")
-                if len(results) > 10:
-                    self.stdout.write(f"  … and {len(results) - 10} more series")
-                return
+        # ── Option C: list all metric names (with optional keyword filter) ─
+        keyword = options["keyword"] or None
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"\n── Metric names"
+            + (f" matching '{keyword}'" if keyword else " (ALL)")
+            + " ──"
+        ))
 
-            # ── Option C: list all metric names (with optional keyword filter) ─
-            keyword = (options["keyword"] or "").lower()
-            self.stdout.write(self.style.MIGRATE_HEADING(
-                f"\n── Metric names"
-                + (f" matching '{keyword}'" if keyword else " (ALL)")
-                + " ──"
-            ))
+        all_names = grafana.list_metric_names()
+        filtered = grafana.list_metric_names(keyword) if keyword else all_names
 
-            # GET /api/prom/api/v1/label/__name__/values returns every metric name
-            resp = client.get(f"{base_url}/api/prom/api/v1/label/__name__/values")
-            resp.raise_for_status()
-            all_names = resp.json().get("data", [])
+        for name in filtered:
+            self.stdout.write(f"  {name}")
 
-            # Apply keyword filter if provided
-            filtered = [n for n in all_names if keyword in n.lower()] if keyword else all_names
-            filtered.sort()
-
-            for name in filtered:
-                self.stdout.write(f"  {name}")
-
+        self.stdout.write(
+            f"\nShowing {len(filtered)} of {len(all_names)} total metrics.\n"
+        )
+        if not keyword:
             self.stdout.write(
-                f"\nShowing {len(filtered)} of {len(all_names)} total metrics.\n"
+                "Tip: use --filter <keyword> to narrow results, e.g.:\n"
+                "  python manage.py explore_grafana_metrics --filter mysql\n"
+                "  python manage.py explore_grafana_metrics --filter memory\n"
+                "  python manage.py explore_grafana_metrics --jobs\n"
             )
-            if not keyword:
-                self.stdout.write(
-                    "Tip: use --filter <keyword> to narrow results, e.g.:\n"
-                    "  python manage.py explore_grafana_metrics --filter mysql\n"
-                    "  python manage.py explore_grafana_metrics --filter memory\n"
-                    "  python manage.py explore_grafana_metrics --jobs\n"
-                )

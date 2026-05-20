@@ -50,12 +50,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal, InvalidOperation
 
-import requests
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from requests.auth import HTTPBasicAuth
 
+from optimizer.clients import get_client
 from optimizer.models import Server, Tenant, USUDemandDetail
 
 logger = logging.getLogger(__name__)
@@ -110,58 +109,23 @@ def _decimal(v) -> Decimal | None:
         return None
 
 
-# -- HTTP session --------------------------------------------------------------
+# -- Page fetch helper ---------------------------------------------------------
 
-def _build_session(username: str, password: str) -> requests.Session:
-    s = requests.Session()
-    s.auth = HTTPBasicAuth(username, password)
-    s.headers["Accept"] = "application/json"
-    return s
-
-
-def _fetch_page_with_retry(
-    session: requests.Session,
-    skip: int,
-    stdout,
-) -> tuple[list[dict], int | None]:
-    """
-    Fetch exactly PAGE_SIZE records starting at $skip.
-
-    Returns (records, total_count_from_api).
-    total_count is read from the first page's metadata and may be None on later pages.
-    """
-    url = BASE_URL + ENDPOINT
-    params = {
-        "product_family": PRODUCT_FAMILY,
-        "$top": PAGE_SIZE,
-        "$skip": skip,
-    }
-
-    for attempt in range(1, MAX_RETRIES + 1):
+def _fetch_page(usu, skip: int) -> tuple[list[dict], int | None]:
+    """Fetch one page via USUClient and return (records, total_count)."""
+    data = usu.fetch_url(
+        BASE_URL + ENDPOINT,
+        {"product_family": PRODUCT_FAMILY, "$top": PAGE_SIZE, "$skip": skip},
+    )
+    records = data.get("data") or []
+    meta    = data.get("metadata") or {}
+    total   = meta.get("count") or meta.get("total") or None
+    if total:
         try:
-            resp = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
-            resp.raise_for_status()
-            data = resp.json()
-            records = data.get("data") or []
-            # Extract total count from metadata if present
-            meta = data.get("metadata") or {}
-            total = meta.get("count") or meta.get("total") or None
-            if total:
-                try:
-                    total = int(total)
-                except (ValueError, TypeError):
-                    total = None
-            return records, total
-        except Exception as exc:
-            if attempt == MAX_RETRIES:
-                logger.error("Page $skip=%d failed after %d retries: %s", skip, MAX_RETRIES, exc)
-                raise
-            wait = attempt * RETRY_BACKOFF
-            stdout.write(
-                f"    [WARN] $skip={skip} attempt {attempt}/{MAX_RETRIES}: {exc} "
-                f"-- retrying in {wait}s"
-            )
-            time.sleep(wait)
+            total = int(total)
+        except (ValueError, TypeError):
+            total = None
+    return records, total
 
 
 # -- Checkpoint helpers --------------------------------------------------------
@@ -365,8 +329,7 @@ class Command(BaseCommand):
         no_db        = options["no_db"]
         dry_run      = options["dry_run"]
 
-        username = getattr(django_settings, "USU_API_USERNAME", "myusudata")
-        password = getattr(django_settings, "USU_API_PASSWORD", "test123Usu")
+        usu = get_client("usu")
 
         self.stdout.write(self.style.MIGRATE_HEADING(
             "\n============================================================\n"
@@ -403,7 +366,6 @@ class Command(BaseCommand):
                     f"  Deleted {deleted:,} stale rows from usu_demand_detail"
                 )
 
-        session      = _build_session(username, password)
         t_start      = time.time()
         total_fetched = 0
         total_written = 0
@@ -425,7 +387,7 @@ class Command(BaseCommand):
             for skip in skip_values:
                 page_start = time.time()
                 try:
-                    records, api_total = _fetch_page_with_retry(session, skip, self.stdout)
+                    records, api_total = _fetch_page(usu, skip)
                 except Exception as exc:
                     self.stderr.write(
                         self.style.ERROR(
@@ -491,7 +453,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  Using {concurrency} concurrent fetch workers\n")
 
             def _fetch(skip: int) -> tuple[int, list[dict], int | None]:
-                recs, total = _fetch_page_with_retry(session, skip, self.stdout)
+                recs, total = _fetch_page(usu, skip)
                 return skip, recs, total
 
             # Process in windows of `concurrency` pages at a time to keep

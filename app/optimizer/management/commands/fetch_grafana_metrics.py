@@ -50,11 +50,12 @@ import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-import httpx
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from optimizer.clients import get_client
+from optimizer.clients.grafana_client import GRAFANA_METRICS
 from optimizer.models import GrafanaMetricSnapshot, Server, Tenant
 
 logger = logging.getLogger(__name__)
@@ -71,75 +72,8 @@ DB_BATCH_SIZE       = 500
 MAX_RETRIES         = 3
 RETRY_BACKOFF       = 5   # seconds
 
-# ── Metric registry ───────────────────────────────────────────────────────────
-# Internal metric_name → (PromQL expression, unit string)
-#
-# ⚠ Verify these PromQL expressions match the metric names actually exposed
-#   by your exporters.  Use Grafana Explore on the -prom datasource to test.
-#
-# Exporters assumed:
-#   mysqld_exporter   → mysql_*
-#   node_exporter     → node_* (Linux) or windows_* (Windows)
-
-GRAFANA_METRICS: dict[str, tuple[str, str]] = {
-    # Active DB connections — mssql_connections has a 'database' label so
-    # we can later filter per DB (O11Y, master, msdb, etc.)
-    "connections": (
-        "mssql_connections",
-        "",
-    ),
-
-    # Batch requests per second — mssql_batch_requests_total is a counter,
-    # so rate() converts it to the per-second rate seen in the Grafana panel (~1.4 req/s)
-    "batch_requests": (
-        "rate(mssql_batch_requests_total[5m])",
-        "req/s",
-    ),
-
-    # OS-level memory reported by SQL Server — mssql_os_memory is in bytes,
-    # dividing by 1 GiB converts to GiB (panel shows ~22 GiB available, ~8 GiB used)
-    "os_memory_available_gib": (
-        "mssql_os_memory / 1073741824",
-        "GiB",
-    ),
-
-    # Total memory SQL Server has acquired from the OS (server_total_memory_bytes).
-    # Dividing by 1 GiB gives GiB. This is what the Memory Manager panel tracks.
-    "memory_manager_total_gib": (
-        "mssql_server_total_memory_bytes / 1073741824",
-        "GiB",
-    ),
-
-    # SQL Server page life expectancy — how long (seconds) a page stays in buffer pool.
-    # Low PLE (< 300s) indicates memory pressure; panel shows ~2000s = healthy.
-    "page_life_expectancy": (
-        "mssql_page_life_expectancy_seconds",
-        "s",
-    ),
-
-    # Active running queries — mssql_running_queries directly matches
-    # the Grafana panel showing 47–70 active queries
-    "running_queries": (
-        "mssql_running_queries",
-        "",
-    ),
-
-    # SQL Server's own memory utilization % — mssql_memory_utilization_percentage
-    # is a built-in SQL Server counter (panel shows ~100%, meaning SQL Server
-    # is using all the memory it has been granted by the OS)
-    "memory_utilization_pct": (
-        "mssql_memory_utilization_percentage",
-        "%",
-    ),
-
-    # Total database size in MiB — mssql_database_size_bytes has a 'database'
-    # label so each DB (O11Y, master, msdb, etc.) gets its own time series row.
-    # Dividing by 1 MiB converts bytes to MiB.
-    "database_size_mib": (
-        "mssql_database_size_bytes / 1048576",
-        "MiB",
-    ),
-}
+# GRAFANA_METRICS canonical definition lives in optimizer.clients.grafana_client.
+# It is imported at the top of this file and remains overridable via Django settings.
 
 
 # ── Time-range helper ─────────────────────────────────────────────────────────
@@ -169,71 +103,6 @@ def _parse_range(range_str: str) -> tuple[str, str]:
 
     # Prometheus API expects RFC3339 or Unix timestamps
     return start.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-# ── Prometheus HTTP API query ─────────────────────────────────────────────────
-
-def _query_range(
-    client: httpx.Client,
-    base_url: str,
-    promql: str,
-    start: str,
-    end: str,
-    step: str,
-) -> list[dict]:
-    """
-    Call the Prometheus range-query endpoint on the Mimir cluster.
-
-    Endpoint: GET {base_url}/api/prom/api/v1/query_range
-
-    Parameters:
-      query : PromQL expression
-      start : RFC3339 start time
-      end   : RFC3339 end time
-      step  : resolution step  (e.g. '1h', '30m')
-
-    Returns a list of metric series, each:
-      {
-        "metric": {"instance": "...", "job": "...", ...},
-        "values": [[unix_ts, "value_str"], ...]
-      }
-
-    Raises on non-2xx after MAX_RETRIES attempts.
-    """
-    params = {
-        "query": promql,
-        "start": start,
-        "end":   end,
-        "step":  step,
-    }
-
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            resp = client.get(
-                f"{base_url}/api/prom/api/v1/query_range",
-                params=params,
-            )
-            resp.raise_for_status()
-            body = resp.json()
-
-            # Prometheus always wraps results: {"status": "success", "data": {...}}
-            if body.get("status") != "success":
-                raise ValueError(f"Prometheus returned status={body.get('status')}: "
-                                 f"{body.get('error', 'unknown error')}")
-
-            return body.get("data", {}).get("result", [])
-
-        except Exception as exc:
-            if attempt == MAX_RETRIES:
-                raise
-            wait = attempt * RETRY_BACKOFF
-            logger.warning(
-                "Prometheus query failed (attempt %d/%d): %s — retrying in %ds",
-                attempt, MAX_RETRIES, exc, wait,
-            )
-            time.sleep(wait)
-
-    return []   # unreachable but keeps type checker happy
 
 
 # ── Server resolution ─────────────────────────────────────────────────────────
@@ -361,95 +230,72 @@ class Command(BaseCommand):
             defaults={"description": "Auto-created by fetch_grafana_metrics", "is_active": True},
         )
 
-        # ── Step 3: Build httpx client ────────────────────────────────────────
-        # Basic Auth  : username=GRAFANA_USER, password=GRAFANA_TOKEN
-        # X-Scope-OrgID header is mandatory for Mimir multi-tenancy.
-        # Without it the cluster returns 401 or routes to the wrong tenant.
-        client_kwargs = {
-            "auth":    (gf_user, gf_token),
-            "headers": {
-                "X-Scope-OrgID": tenant_id,
-                "Accept":        "application/json",
-            },
-            "timeout": float(timeout),
-        }
+        # ── Step 3: Build Grafana client ──────────────────────────────────────
+        grafana = get_client("grafana")
 
         total_saved = 0
 
-        with httpx.Client(**client_kwargs) as client:
+        # ── Step 4: Query each metric from Prometheus ─────────────────────────
+        for metric_name, (promql, unit) in metrics.items():
+            self.stdout.write(f"\n  -- {metric_name}")
+            self.stdout.write(f"     PromQL : {promql}")
 
-            # ── Step 4: Query each metric from Prometheus ─────────────────────
-            for metric_name, (promql, unit) in metrics.items():
-                self.stdout.write(f"\n  -- {metric_name}")
-                self.stdout.write(f"     PromQL : {promql}")
+            try:
+                series_list = grafana.query_range(promql, start_str, end_str, step)
+            except Exception as exc:
+                logger.error("Metric '%s' query failed: %s", metric_name, exc)
+                self.stderr.write(self.style.ERROR(f"     FAILED: {exc}"))
+                continue
 
-                try:
-                    series_list = _query_range(
-                        client, base_url, promql, start_str, end_str, step
+            self.stdout.write(f"     Series : {len(series_list)} instances returned")
+
+            if not series_list:
+                self.stdout.write("     No data — skipping.")
+                continue
+
+            # ── Step 5: Parse series → build snapshot objects ─────────────────
+            objs    = []
+            written = 0
+
+            for series in series_list:
+                metric_labels = series.get("metric", {})
+                server = _resolve_server(tenant, metric_labels)
+
+                for unix_ts, val_str in series.get("values", []):
+                    metric_ts = datetime.fromtimestamp(float(unix_ts), tz=timezone.utc)
+
+                    objs.append(GrafanaMetricSnapshot(
+                        tenant       = tenant,
+                        server       = server,
+                        dashboard    = dashboard,
+                        metric_name  = metric_name,
+                        metric_value = _to_decimal(val_str),
+                        metric_unit  = unit,
+                        metric_ts    = metric_ts,
+                    ))
+
+                    if len(objs) >= DB_BATCH_SIZE and not dry_run:
+                        with transaction.atomic():
+                            GrafanaMetricSnapshot.objects.bulk_create(
+                                objs, ignore_conflicts=True
+                            )
+                        written     += len(objs)
+                        total_saved += len(objs)
+                        objs = []
+
+            if objs and not dry_run:
+                with transaction.atomic():
+                    GrafanaMetricSnapshot.objects.bulk_create(
+                        objs, ignore_conflicts=True
                     )
-                except Exception as exc:
-                    logger.error("Metric '%s' query failed: %s", metric_name, exc)
-                    self.stderr.write(self.style.ERROR(f"     FAILED: {exc}"))
-                    continue
+                written     += len(objs)
+                total_saved += len(objs)
 
-                self.stdout.write(f"     Series : {len(series_list)} instances returned")
-
-                if not series_list:
-                    self.stdout.write("     No data — skipping.")
-                    continue
-
-                # ── Step 5: Parse series → build snapshot objects ─────────────
-                objs    = []
-                written = 0
-
-                for series in series_list:
-                    # 'metric' dict holds Prometheus labels: instance, job, etc.
-                    metric_labels = series.get("metric", {})
-
-                    # Map the Prometheus instance label to a Server row
-                    server = _resolve_server(tenant, metric_labels)
-
-                    # 'values' is [[unix_timestamp, "value_string"], ...]
-                    # Prometheus returns values as strings to preserve precision.
-                    for unix_ts, val_str in series.get("values", []):
-                        metric_ts = datetime.fromtimestamp(
-                            float(unix_ts), tz=timezone.utc
-                        )
-
-                        objs.append(GrafanaMetricSnapshot(
-                            tenant       = tenant,
-                            server       = server,
-                            dashboard    = dashboard,
-                            metric_name  = metric_name,
-                            metric_value = _to_decimal(val_str),
-                            metric_unit  = unit,
-                            metric_ts    = metric_ts,
-                        ))
-
-                        # Flush once the batch is full — avoids holding large lists in RAM
-                        if len(objs) >= DB_BATCH_SIZE and not dry_run:
-                            with transaction.atomic():
-                                GrafanaMetricSnapshot.objects.bulk_create(
-                                    objs, ignore_conflicts=True
-                                )
-                            written     += len(objs)
-                            total_saved += len(objs)
-                            objs = []
-
-                # Final partial batch for this metric
-                if objs and not dry_run:
-                    with transaction.atomic():
-                        GrafanaMetricSnapshot.objects.bulk_create(
-                            objs, ignore_conflicts=True
-                        )
-                    written     += len(objs)
-                    total_saved += len(objs)
-
-                self.stdout.write(self.style.SUCCESS(
-                    f"     OK: {written:,} rows -> grafana_metric_snapshot"
-                    if not dry_run else
-                    f"     [dry-run] Would save ~{len(objs) + written:,} rows"
-                ))
+            self.stdout.write(self.style.SUCCESS(
+                f"     OK: {written:,} rows -> grafana_metric_snapshot"
+                if not dry_run else
+                f"     [dry-run] Would save ~{len(objs) + written:,} rows"
+            ))
 
         # ── Step 6: Final summary ─────────────────────────────────────────────
         elapsed = time.time() - run_start

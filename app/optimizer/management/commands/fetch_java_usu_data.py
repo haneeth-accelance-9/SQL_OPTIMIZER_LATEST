@@ -40,12 +40,11 @@ import time
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-import requests
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from requests.auth import HTTPBasicAuth
 
+from optimizer.clients import get_client
 from optimizer.models import Server, Tenant, USUDemandDetail, USUInstallation
 
 logger = logging.getLogger(__name__)
@@ -127,32 +126,6 @@ def _beat_ids(value) -> list[str]:
     return [b.strip() for b in str(value).split("\n") if b.strip()]
 
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
-
-def _build_session(username: str, password: str) -> requests.Session:
-    session = requests.Session()
-    session.auth = HTTPBasicAuth(username, password)
-    session.headers.update({"Accept": "application/json"})
-    return session
-
-
-def _fetch_page(session: requests.Session, url: str, params: dict | None = None) -> dict:
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            resp = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            if attempt == MAX_RETRIES:
-                raise
-            wait = attempt * RETRY_BACKOFF
-            logger.warning(
-                "Fetch failed (attempt %d/%d) for %s: %s — retrying in %ds",
-                attempt, MAX_RETRIES, url, exc, wait,
-            )
-            time.sleep(wait)
-
-
 # ── Tenant / Server resolution ────────────────────────────────────────────────
 
 def _get_or_create_tenant(name: str) -> Tenant:
@@ -227,7 +200,7 @@ def _resolve_server_from_demand(tenant: Tenant, raw: dict) -> Server:
 
 # ── Installations: fetch ──────────────────────────────────────────────────────
 
-def fetch_java_installations(session: requests.Session, stdout) -> list[dict]:
+def fetch_java_installations(usu, stdout) -> list[dict]:
     """
     Fetch all Java/Oracle installation records from USU API.
     Total: ~1 230 records — fits in a single $top=30 000 page.
@@ -244,7 +217,7 @@ def fetch_java_installations(session: requests.Session, stdout) -> list[dict]:
 
     while url:
         t0   = time.time()
-        data = _fetch_page(session, url, params)
+        data = usu.fetch_url(url, params)
 
         records       = data.get("data") or []
         next_page_uri = data.get("metadata", {}).get("pagination", {}).get("next_page_uri")
@@ -269,7 +242,7 @@ def fetch_java_installations(session: requests.Session, stdout) -> list[dict]:
 
 # ── Demand details: fetch ─────────────────────────────────────────────────────
 
-def fetch_java_demand_details(session: requests.Session, stdout) -> list[dict]:
+def fetch_java_demand_details(usu, stdout) -> list[dict]:
     """
     Fetch all Java/Oracle demand-detail records from USU API.
     Total: ~1 230 records — fits in a single $top=30 000 page.
@@ -287,7 +260,7 @@ def fetch_java_demand_details(session: requests.Session, stdout) -> list[dict]:
 
     while url:
         t0   = time.time()
-        data = _fetch_page(session, url, params)
+        data = usu.fetch_url(url, params)
 
         records       = data.get("data") or []
         next_page_uri = data.get("metadata", {}).get("pagination", {}).get("next_page_uri")
@@ -487,23 +460,19 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING("  [!] DRY RUN -- no DB writes"))
 
-        # ── Step 1: Read credentials from Django settings ─────────────────────
-        username = getattr(django_settings, "USU_API_USERNAME", "myusudata")
-        password = getattr(django_settings, "USU_API_PASSWORD", "test123Usu")
+        # ── Step 1: Build USU client (credentials from Django settings) ──────
+        usu = get_client("usu")
 
-        # ── Step 2: Build shared HTTP session with Basic Auth ─────────────────
-        session = _build_session(username, password)
-
-        # ── Step 3: Resolve tenant row ────────────────────────────────────────
+        # ── Step 2: Resolve tenant row ────────────────────────────────────────
         tenant = _get_or_create_tenant(tenant_name)
         self.stdout.write(f"  Tenant       : {tenant.name}")
         self.stdout.write(f"  Product family: {PRODUCT_FAMILY} (Oracle Server Data)")
 
-        # ── Step 4: Installations → usu_installation ──────────────────────────
+        # ── Step 3: Installations → usu_installation ──────────────────────────
         if not skip_install:
             t0 = time.time()
             try:
-                records = fetch_java_installations(session, self.stdout)
+                records = fetch_java_installations(usu, self.stdout)
                 save_java_installations(tenant, records, dry_run, self.stdout)
                 self.stdout.write(self.style.SUCCESS(
                     f"  Installations done in {time.time() - t0:.1f}s"
@@ -514,11 +483,11 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  Skipping installations (--skip-install)")
 
-        # ── Step 5: Demand details → usu_demand_detail ────────────────────────
+        # ── Step 4: Demand details → usu_demand_detail ────────────────────────
         if not skip_demand:
             t0 = time.time()
             try:
-                records = fetch_java_demand_details(session, self.stdout)
+                records = fetch_java_demand_details(usu, self.stdout)
                 save_java_demand_details(tenant, records, dry_run, self.stdout)
                 self.stdout.write(self.style.SUCCESS(
                     f"  Demand details done in {int((time.time()-t0)//60)}m "
