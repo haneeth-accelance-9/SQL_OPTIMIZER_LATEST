@@ -399,8 +399,7 @@
                                     <p class="text-[11px] uppercase tracking-wide text-slate-400">Retired Devices</p>
                                     <p id="retired-count-main" class="mt-1 text-xl font-bold text-slate-900">{{ retired_count }}</p>
                                     <p class="mt-1 text-[11px] text-slate-400">
-                                        <span id="retired-demand-matched-count">{{ retired_demand_matched_count }}</span>
-                                        of <span id="retired-total-count">{{ retired_count }}</span> matched demand data
+                                        Columns with effective quantity as '0' have no cost calculation
                                     </p>
                                 </div>
                                 <div>
@@ -884,10 +883,10 @@
                     <div class="payg-metric-card payg-metric-card-compact xl:col-span-4">
                         <div class="flex items-center justify-between gap-3">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated Savings</p>
-                            <p class="text-5xl font-extrabold tracking-tight text-sky-600"><span id="rs3-cpu-reduction-badge">{{ rs.total_vcpu_reduction|default:0 }}</span> <span class="text-2xl font-bold">vCPUs</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-sky-600"><span id="rs3-cpu-reduction-badge"><svg class="inline-block animate-spin h-8 w-8 text-sky-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg></span> <span class="text-2xl font-bold">vCPUs</span></p>
                         </div>
                         <div class="mt-3">
-                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total">0,00 €</span></p>
+                            <p class="text-5xl font-extrabold tracking-tight text-slate-900"><span id="rs3-cpu-savings-total"><svg class="inline-block animate-spin h-8 w-8 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg></span></p>
                         </div>
                         <p class="mt-1 text-xs text-slate-500">Estimated annual savings from CPU rightsizing</p>
                         <div class="mt-6 space-y-3 text-[11px]">
@@ -2307,6 +2306,8 @@
         // Populates header KPIs and all tab summary cards from /api/dashboard-summary/
         var _kpiSpinner = '<svg class="inline-block animate-spin h-6 w-6 text-white opacity-60" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg>';
         var _overviewSpinner = '<svg class="inline-block animate-spin h-7 w-7 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg>';
+        var _cpuBadgeSpinner   = '<svg class="inline-block animate-spin h-8 w-8 text-sky-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg>';
+        var _cpuSavingsSpinner = '<svg class="inline-block animate-spin h-8 w-8 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.568 3 7.291l3-2.291z"></path></svg>';
         function fetchDashboardSummary() {
             if (!window.dashboardSummaryUrl) return;
             // Show spinner on the two count elements while the full computation runs
@@ -3553,8 +3554,14 @@
 
         function setRs3Loading(type, isLoading) {
             var el = document.getElementById('rs3-' + type + '-loading');
-            if (!el) return;
-            el.classList.toggle('hidden', !isLoading);
+            if (el) el.classList.toggle('hidden', !isLoading);
+            // Show spinners on CPU savings tile while the API fetch is in-flight
+            if (type === 'cpu' && isLoading) {
+                var badgeEl   = document.getElementById('rs3-cpu-reduction-badge');
+                var savingsEl = document.getElementById('rs3-cpu-savings-total');
+                if (badgeEl)   badgeEl.innerHTML   = _cpuBadgeSpinner;
+                if (savingsEl) savingsEl.innerHTML = _cpuSavingsSpinner;
+            }
         }
 
         function setRs3EmptyState(type, hasRows) {

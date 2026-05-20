@@ -1479,7 +1479,6 @@ def _build_rightsizing_df() -> pd.DataFrame:
 
     rows = list(
         CPUUtilisation.objects.filter(
-            server__is_active=True,
             period_month__in=list(RIGHTSIZING_LOGICAL_CPU_HEADER_BY_MONTH.keys()),
         ).select_related("server")
     )
@@ -2094,11 +2093,13 @@ def build_rightsizing_sheet_export(sheet_key: str) -> pd.DataFrame:
     # Apply the same post-rule filters used on the dashboard so export matches screen data
     if "_RAM_" in normalized_sheet_key.upper():
         if not filtered_df.empty and "Recommended_RAM_GiB" in filtered_df.columns:
+            # Floor differs by tier: PROD >= 8 GiB, NON-PROD >= 4 GiB
+            ram_floor = 4 if "NONPROD" in normalized_sheet_key.upper() else 8
             filtered_df = filtered_df[
                 filtered_df["Recommended_RAM_GiB"].notna()
                 & (filtered_df["Recommended_RAM_GiB"] != filtered_df["Current_RAM_GiB"])
-                & (filtered_df["Current_RAM_GiB"] >= 8)
-                & (filtered_df["Recommended_RAM_GiB"] >= 8)
+                & (filtered_df["Current_RAM_GiB"] >= ram_floor)
+                & (filtered_df["Recommended_RAM_GiB"] >= ram_floor)
             ]
     else:
         if not filtered_df.empty and "Recommended_vCPU" in filtered_df.columns:

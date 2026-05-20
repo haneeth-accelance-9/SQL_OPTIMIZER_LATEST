@@ -3789,7 +3789,7 @@ def download_uc3_ram_input_data(request):
     """
     from io import BytesIO
     from optimizer.services.db_analysis_service import _build_rightsizing_df
-    from optimizer.rules.rightsizing import PROD_ENVS, find_ram_rightsizing_optimizations
+    from optimizer.rules.rightsizing import PROD_ENVS
 
     df = _build_rightsizing_df()
     if df.empty:
@@ -3832,10 +3832,12 @@ def download_uc3_ram_input_data(request):
     mask_np_f3 = mask_np_f2 & (ram_col_np > 4)
     nonprod_eligible = int(mask_np_f3.sum())
 
-    # ── Actual final candidates: run the full rule (includes recommendation-band filter)
-    final_df = find_ram_rightsizing_optimizations(df)
-    prod_candidates   = int((final_df["Env_Type"] == "PROD").sum())
-    nonprod_candidates = int((final_df["Env_Type"] == "NON-PROD").sum())
+    # ── Actual final candidates: use the same filtered pipeline as the dashboard
+    from optimizer.services.db_analysis_service import build_rightsizing_sheet_export
+    prod_table_df    = build_rightsizing_sheet_export("PROD_RAM_Rightsizing")
+    nonprod_table_df = build_rightsizing_sheet_export("NONPROD_RAM_Rightsizing")
+    prod_candidates   = len(prod_table_df)
+    nonprod_candidates = len(nonprod_table_df)
     total_candidates  = prod_candidates + nonprod_candidates
 
     # ── Environment breakdown (all input rows) ────────────────────────────────
