@@ -376,15 +376,37 @@ GRAFANA_BASE_URL = os.environ.get(
     "https://prometheus-dedicated-64-prod-eu-west-5.grafana.net",
 )
 
+# Derive GRAFANA_USER and GRAFANA_TOKEN from OTEL_EXPORTER_OTLP_HEADERS if not
+# set explicitly.  OTEL_EXPORTER_OTLP_HEADERS encodes:
+#   Authorization=Basic%20<base64(INSTANCE_ID:TOKEN)>
+# so the same credentials used for OTLP export are reused for Mimir queries.
+def _parse_grafana_creds_from_otlp(raw: str):
+    """Return (user_id, token) decoded from OTEL_EXPORTER_OTLP_HEADERS."""
+    import base64
+    from urllib.parse import unquote
+    try:
+        decoded = unquote(raw)                          # %20 → space
+        if "Basic " in decoded:
+            b64 = decoded.split("Basic ", 1)[1].strip()
+            credentials = base64.b64decode(b64).decode("utf-8")
+            user_id, _, token = credentials.partition(":")
+            return user_id.strip(), token.strip()
+    except Exception:
+        pass
+    return "", ""
+
+_otlp_headers_raw = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+_otlp_user, _otlp_token = _parse_grafana_creds_from_otlp(_otlp_headers_raw)
+
 # Mimir tenant ID — sent as X-Scope-OrgID header on every request.
-# Without this header Mimir returns 401 or empty results.
-GRAFANA_TENANT_ID = os.environ.get("GRAFANA_TENANT_ID", "")
+# On Grafana Cloud the tenant ID equals the numeric instance/user ID.
+GRAFANA_TENANT_ID = os.environ.get("GRAFANA_TENANT_ID", "") or _otlp_user
 
 # Numeric Grafana user ID — used as the Basic Auth username
-GRAFANA_USER = os.environ.get("GRAFANA_USER", "")
+GRAFANA_USER = os.environ.get("GRAFANA_USER", "") or _otlp_user
 
-# Grafana service account token (glc_eyJ…) — used as the Basic Auth password
-GRAFANA_TOKEN = os.environ.get("GRAFANA_TOKEN", "")
+# Grafana service account token — used as the Basic Auth password
+GRAFANA_TOKEN = os.environ.get("GRAFANA_TOKEN", "") or _otlp_token
 
 # HTTP request timeout in seconds — Mimir queries can be slow for large ranges
 GRAFANA_TIMEOUT = int(os.environ.get("GRAFANA_TIMEOUT", "30"))
