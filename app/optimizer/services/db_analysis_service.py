@@ -1563,7 +1563,7 @@ def _build_rightsizing_df() -> pd.DataFrame:
     _product_qs = (
         _USUInst.objects
         .filter(server_id__in=list(server_records.keys()))
-        .exclude(product_family__in=SHOWCASE_ONLY_PRODUCT_FAMILIES)
+        .filter(product_family="SQL Server")
         .values("server_id", "product_family", "product_group", "product_description")
     )
     _product_lookup: dict = {}
@@ -1584,6 +1584,14 @@ def _build_rightsizing_df() -> pd.DataFrame:
         _rec["product_description"] = _prod.get("product_description", "")
 
     df = pd.DataFrame(server_records.values())
+    # Keep only SQL Server rows — drop servers whose usu_installation has no SQL Server record
+    if "product_family" in df.columns:
+        before = len(df)
+        df = df[df["product_family"] == "SQL Server"].copy()
+        logger.info(
+            "[UC3 Rightsizing] SQL Server product filter: %d → %d rows (removed %d non-SQL Server)",
+            before, len(df), before - len(df),
+        )
     for header in RIGHTSIZING_REPORT_BASE_HEADERS:
         if header not in df.columns:
             df[header] = None
