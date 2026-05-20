@@ -209,21 +209,33 @@ def find_cpu_rightsizing_candidates(
 def _cpu_prod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
     env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
     prod = df[env_lower.isin(prod_envs)]
-    return prod[
+    prod_total = len(prod)
+    result = prod[
         (prod["Avg_CPU_12m"]  < RS_PROD_AVG_CPU_THRESHOLD) &
         (prod["Peak_CPU_12m"] <= RS_PROD_PEAK_CPU_THRESHOLD) &
         (prod["Current_vCPU"] >= 4)
     ].copy()
+    logger.info(
+        "[UC3.1 CPU PROD] _cpu_prod_eligible: PROD env total=%d → eligible (Avg<15%%, Peak≤70%%, vCPU≥4)=%d",
+        prod_total, len(result),
+    )
+    return result
 
 
 def _cpu_nonprod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
     env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
     nonprod = df[~env_lower.isin(prod_envs)]
-    return nonprod[
+    nonprod_total = len(nonprod)
+    result = nonprod[
         (nonprod["Avg_CPU_12m"]  < RS_NONPROD_AVG_CPU_THRESHOLD) &
         (nonprod["Peak_CPU_12m"] <= RS_NONPROD_PEAK_CPU_THRESHOLD) &
         (nonprod["Current_vCPU"] >= 4)
     ].copy()
+    logger.info(
+        "[UC3.1 CPU NONPROD] _cpu_nonprod_eligible: NON-PROD env total=%d → eligible (Avg<15%%, Peak≤80%%, vCPU≥4)=%d",
+        nonprod_total, len(result),
+    )
+    return result
 
 
 def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
@@ -261,6 +273,13 @@ def _cpu_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     df["Recommended_vCPU"]   = result[1]
     # Return ALL eligible rows (including those with no specific band)
     df = df[df["CPU_Recommendation"].notna()].copy()
+    no_band = int((df["Recommended_vCPU"] == df["Current_vCPU"]).sum())
+    actionable = len(df) - no_band
+    logger.info(
+        "[UC3.1 CPU PROD] _cpu_prod_recommendation: in=%d → out=%d "
+        "(actionable=%d, no-specific-band/no-op=%d)",
+        len(eligible_df), len(df), actionable, no_band,
+    )
     return df
 
 
@@ -299,6 +318,13 @@ def _cpu_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     df["Recommended_vCPU"]   = result[1]
     # Return ALL eligible rows (including those with no specific band)
     df = df[df["CPU_Recommendation"].notna()].copy()
+    no_band = int((df["Recommended_vCPU"] == df["Current_vCPU"]).sum())
+    actionable = len(df) - no_band
+    logger.info(
+        "[UC3.1 CPU NONPROD] _cpu_nonprod_recommendation: in=%d → out=%d "
+        "(actionable=%d, no-specific-band/no-op=%d)",
+        len(eligible_df), len(df), actionable, no_band,
+    )
     return df
 
 
@@ -346,21 +372,33 @@ def find_ram_rightsizing_candidates(
 def _ram_prod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
     env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
     prod = df[env_lower.isin(prod_envs)]
-    return prod[
+    prod_total = len(prod)
+    result = prod[
         (prod["Avg_FreeMem_12m"] >= RS_PROD_AVG_FREEMEM_THRESHOLD) &
         (prod["Min_FreeMem_12m"] >= RS_PROD_MIN_FREEMEM_THRESHOLD) &
         (prod["Current_RAM_GiB"] > RS_PROD_MIN_RAM_GIB)
     ].copy()
+    logger.info(
+        "[UC3.2 RAM PROD] _ram_prod_eligible: PROD env total=%d → eligible (AvgFree≥35%%, MinFree≥20%%, RAM>8)=%d",
+        prod_total, len(result),
+    )
+    return result
 
 
 def _ram_nonprod_eligible(df: pd.DataFrame, prod_envs: List[str]) -> pd.DataFrame:
     env_lower = df["Environment"].fillna("").astype(str).str.strip().str.lower()
     nonprod = df[~env_lower.isin(prod_envs)]
-    return nonprod[
+    nonprod_total = len(nonprod)
+    result = nonprod[
         (nonprod["Avg_FreeMem_12m"] >= RS_NONPROD_AVG_FREEMEM_THRESHOLD) &
         (nonprod["Min_FreeMem_12m"] >= RS_NONPROD_MIN_FREEMEM_THRESHOLD) &
         (nonprod["Current_RAM_GiB"] > RS_NONPROD_MIN_RAM_GIB)
     ].copy()
+    logger.info(
+        "[UC3.2 RAM NONPROD] _ram_nonprod_eligible: NON-PROD env total=%d → eligible (AvgFree≥30%%, MinFree≥15%%, RAM>4)=%d",
+        nonprod_total, len(result),
+    )
+    return result
 
 
 def _ram_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
@@ -394,7 +432,15 @@ def _ram_prod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     df["RAM_Recommendation"]  = result[0]
     df["Recommended_RAM_GiB"] = result[1]
     # Only return rows that received an actionable recommendation
+    before_notna = len(df)
     df = df[df["RAM_Recommendation"].notna()].copy()
+    no_rec = before_notna - len(df)
+    no_op = int((df["Recommended_RAM_GiB"] == df["Current_RAM_GiB"]).sum())
+    logger.info(
+        "[UC3.2 RAM PROD] _ram_prod_recommendation: in=%d → out=%d "
+        "(no-recommendation/excluded=%d [AvgFree>50%% but MinFree<30%%], no-op=%d [Recommended==Current])",
+        len(eligible_df), len(df), no_rec, no_op,
+    )
     return df
 
 
@@ -429,7 +475,15 @@ def _ram_nonprod_recommendation(eligible_df: pd.DataFrame) -> pd.DataFrame:
     df["RAM_Recommendation"]  = result[0]
     df["Recommended_RAM_GiB"] = result[1]
     # Only return rows that received an actionable recommendation
+    before_notna = len(df)
     df = df[df["RAM_Recommendation"].notna()].copy()
+    no_rec = before_notna - len(df)
+    no_op = int((df["Recommended_RAM_GiB"] == df["Current_RAM_GiB"]).sum())
+    logger.info(
+        "[UC3.2 RAM NONPROD] _ram_nonprod_recommendation: in=%d → out=%d "
+        "(no-recommendation/excluded=%d [AvgFree>50%% but MinFree<25%%], no-op=%d [Recommended==Current])",
+        len(eligible_df), len(df), no_rec, no_op,
+    )
     return df
 
 

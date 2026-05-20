@@ -428,23 +428,23 @@
             </div>
             <div class="overflow-x-auto">
                 <table class="funnel-table">
-                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <thead><tr><th>Rightsizing Candidates Analysis</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
                         <tr><td>Total rows in DB (UC3.1 CPU input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td>--- PROD filters (Environment not in NON-PROD list) ---</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 1: Avg_CPU_12m &lt; 15%</td><td class="count">{{ filter_funnel.cpu_prod_f1|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 2: Peak_CPU_12m &lt;= 70%</td><td class="count">{{ filter_funnel.cpu_prod_f2|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 3: Current_vCPU &gt;= 4</td><td class="count">{{ filter_funnel.cpu_prod_f3|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_prod_final|default:0 }}</td><td></td></tr>
+                        <tr class="section-hdr"><td>PROD Filters (Production, Prod, NULL)</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td>Production servers identified &amp; Filtered</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 1: Average CPU utilization over the last 12 months is &lt; 15%</td><td class="count">{{ filter_funnel.cpu_prod_f1|default:0 }}</td><td>Low average CPU utilisation detected</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 2: Peak CPU utilization over the last 12 months &lt;= 70%</td><td class="count">{{ filter_funnel.cpu_prod_f2|default:0 }}</td><td>Peak CPU usage within threshold</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 3: Current allocated vCPU count is &gt;= 4</td><td class="count">{{ filter_funnel.cpu_prod_f3|default:0 }}</td><td>Minimum CPU allocation eligible for rightsizing</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 PROD Filter 4: Recommendation Band Applied (No CPU Reduction needed)</td><td class="count">{{ filter_funnel.cpu_prod_final|default:0 }}</td><td>Rightsizing recommendation successfully generated on eligible servers</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td>--- NON-PROD filters (Development, Test, QA, UAT, DR) ---</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 1: Avg_CPU_12m &lt; 15%</td><td class="count">{{ filter_funnel.cpu_nonprod_f1|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 2: Peak_CPU_12m &lt;= 80%</td><td class="count">{{ filter_funnel.cpu_nonprod_f2|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 3: Current_vCPU &gt;= 4</td><td class="count">{{ filter_funnel.cpu_nonprod_f3|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 4: Recommendation band applied</td><td class="count">{{ filter_funnel.cpu_nonprod_final|default:0 }}</td><td></td></tr>
+                        <tr class="section-hdr"><td>NON-PROD Filters (Environment not in Prod List)</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td>Non-production servers identified &amp; Filtered</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 1: Average CPU utilization over the last 12 months is &lt; 15%</td><td class="count">{{ filter_funnel.cpu_nonprod_f1|default:0 }}</td><td>Low Average CPU utilisation detected</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 2: Peak CPU utilization over the last 12 months &lt;= 80%</td><td class="count">{{ filter_funnel.cpu_nonprod_f2|default:0 }}</td><td>Peak CPU usage within non-prod tolerance</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 3: Current allocated vCPU count is &gt;= 4</td><td class="count">{{ filter_funnel.cpu_nonprod_f3|default:0 }}</td><td>Minimum CPU allocation eligible for rightsizing</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.1 NON-PROD Filter 4: Recommendation Band Applied (No CPU Reduction needed)</td><td class="count">{{ filter_funnel.cpu_nonprod_final|default:0 }}</td><td>Rightsizing recommendation successfully generated on eligible servers</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-row"><td>UC3.1 CPU FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.cpu_final|default:0 }}</td><td>{{ filter_funnel.cpu_prod_final|default:0 }} PROD, {{ filter_funnel.cpu_nonprod_final|default:0 }} NON-PROD — Rows the rule will action</td></tr>
+                        <tr class="final-row"><td>FINAL CPU RIGHTSIZING CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.cpu_final|default:0 }}</td><td>{{ filter_funnel.cpu_prod_final|default:0 }} PROD, {{ filter_funnel.cpu_nonprod_final|default:0 }} NON-PROD — Servers identified for CPU optimisation</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -458,25 +458,23 @@
             </div>
             <div class="overflow-x-auto">
                 <table class="funnel-table">
-                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <thead><tr><th>Rightsizing Candidates Analysis</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
                         <tr><td>Total rows in DB (UC3.2 RAM input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td>── PROD path ──────────────────────────────</td><td class="count"></td><td></td></tr>
-                        <tr><td>PROD rows (Environment not in NON-PROD list)</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;PROD Filter 1: Avg_FreeMem_12m &gt;= 35%</td><td class="count">{{ filter_funnel.ram_prod_f1|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;PROD Filter 2: Min_FreeMem_12m &gt;= 20%</td><td class="count">{{ filter_funnel.ram_prod_f2|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;PROD Filter 3: Current_RAM_GiB &gt; 8</td><td class="count">{{ filter_funnel.ram_prod_eligible|default:0 }}</td><td>Eligible after 3 filters</td></tr>
-                        <tr><td>&nbsp;&nbsp;PROD Final (after recommendation-band filter)</td><td class="count">{{ filter_funnel.ram_prod_final|default:0 }}</td><td>PROD candidates actioned</td></tr>
+                        <tr class="section-hdr"><td>PROD Filters (Production, Prod, NULL)</td><td class="count">{{ filter_funnel.prod_total|default:0 }}</td><td>Production servers identified &amp; Filtered</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 PROD Filter 1: Average free memory over the last 12 months is &gt;= 35%</td><td class="count">{{ filter_funnel.ram_prod_f1|default:0 }}</td><td>High average free memory identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 PROD Filter 2: Minimum free memory over the last 12 months is &gt;= 20%</td><td class="count">{{ filter_funnel.ram_prod_f2|default:0 }}</td><td>Minimum free memory within threshold</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 PROD Filter 3: Current allocated RAM is &gt; 8 GiB</td><td class="count">{{ filter_funnel.ram_prod_eligible|default:0 }}</td><td>RAM allocation eligible for reduction</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 PROD Filter 4: Recommendation Band Applied (No RAM Reduction needed)</td><td class="count">{{ filter_funnel.ram_prod_final|default:0 }}</td><td>Rightsizing recommendation successfully generated on eligible servers</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td>── NON-PROD path ───────────────────────────</td><td class="count"></td><td></td></tr>
-                        <tr><td>NON-PROD rows (Development, Test, QA, UAT, DR)</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 1: Avg_FreeMem_12m &gt;= 30%</td><td class="count">{{ filter_funnel.ram_nonprod_f1|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 2: Min_FreeMem_12m &gt;= 15%</td><td class="count">{{ filter_funnel.ram_nonprod_f2|default:0 }}</td><td></td></tr>
-                        <tr><td>&nbsp;&nbsp;NON-PROD Filter 3: Current_RAM_GiB &gt; 4</td><td class="count">{{ filter_funnel.ram_nonprod_eligible|default:0 }}</td><td>Eligible after 3 filters</td></tr>
-                        <tr><td>&nbsp;&nbsp;NON-PROD Final (after recommendation-band filter)</td><td class="count">{{ filter_funnel.ram_nonprod_final|default:0 }}</td><td>NON-PROD candidates actioned</td></tr>
+                        <tr class="section-hdr"><td>NON-PROD Filters (Environment not in Prod List)</td><td class="count">{{ filter_funnel.nonprod_total|default:0 }}</td><td>Production servers identified &amp; Filtered</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 NON-PROD Filter 1: Average free memory over the last 12 months is &gt;= 30%</td><td class="count">{{ filter_funnel.ram_nonprod_f1|default:0 }}</td><td>High average free memory identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 NON-PROD Filter 2: Minimum free memory over the last 12 months is &gt;= 15%</td><td class="count">{{ filter_funnel.ram_nonprod_f2|default:0 }}</td><td>Minimum free memory within threshold</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 NON-PROD Filter 3: Current allocated RAM is &gt; 4 GiB</td><td class="count">{{ filter_funnel.ram_nonprod_eligible|default:0 }}</td><td>RAM allocation eligible for reduction</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.2 NON-PROD Filter 4: Recommendation Band Applied (No RAM Reduction needed)</td><td class="count">{{ filter_funnel.ram_nonprod_final|default:0 }}</td><td>Rightsizing recommendation successfully generated on eligible servers</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-row"><td>UC3.2 RAM FINAL CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.ram_final|default:0 }}</td><td>{{ filter_funnel.ram_prod_final|default:0 }} PROD, {{ filter_funnel.ram_nonprod_final|default:0 }} NON-PROD — Rows the rule will action</td></tr>
+                        <tr class="final-row"><td>FINAL RAM REDUCTION CANDIDATES</td><td class="count" style="color:#065f46;">{{ filter_funnel.ram_final|default:0 }}</td><td>{{ filter_funnel.ram_prod_final|default:0 }} PROD, {{ filter_funnel.ram_nonprod_final|default:0 }} NON-PROD — Servers identified for RAM Reduction</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -490,21 +488,21 @@
             </div>
             <div class="overflow-x-auto">
                 <table class="funnel-table">
-                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <thead><tr><th>Remote &amp; Functional Systems</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
                         <tr><td>Total rows in DB (UC3.3 Crit CPU input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td colspan="3">--- UC3.3a Downsize filters ---</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 1: Criticality = Business/Mission/Manufacturing Critical</td><td class="count">{{ filter_funnel.crit_all_count|default:0 }}</td><td>Values: Business Critical, Mission Critical, Manufacturing Critical</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 2: Avg_CPU_12m &lt; 10%</td><td class="count">{{ filter_funnel.crit_cpu_dn_f2|default:0 }}</td><td></td></tr>
-                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3a DOWNSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_cpu_dn_final|default:0 }}</td><td>Human Intervention Required</td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.3a CPU Downsize Analysis</td><td>Critical workloads evaluated for downsizing</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 1: Criticality = Business Critical or Mission Critical</td><td class="count">{{ filter_funnel.crit_all_count|default:0 }}</td><td>High-criticality servers identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3a Filter 2: Average CPU utilization over the last 12 months is &lt; 10%</td><td class="count">{{ filter_funnel.crit_cpu_dn_f2|default:0 }}</td><td>Sustained low CPU utilisation detected</td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3a Critical CPU Downsize Candidates</td><td class="count">{{ filter_funnel.crit_cpu_dn_final|default:0 }}</td><td>Human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td colspan="3">--- UC3.3b Upsize filters ---</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 2: Avg_CPU_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_cpu_up_f2|default:0 }}</td><td></td></tr>
-                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_cpu_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.3b CPU Upsize Analysis</td><td>Critical workloads evaluated for upsizing</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 1: Criticality = Business Critical or Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>High-criticality servers identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3b Filter 2: Average CPU utilization over the last 12 months is &gt; 80%</td><td class="count">{{ filter_funnel.crit_cpu_up_f2|default:0 }}</td><td>Sustained high CPU utilisation detected</td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3b Critical CPU Upsize Candidates</td><td class="count">{{ filter_funnel.crit_cpu_up_final|default:0 }}</td><td>Flag only — human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>UC3.3 Crit CPU FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>-</td></tr>
+                        <tr class="final-warn"><td>TOTAL CPU CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>Critical CPU optimisation candidate list generated</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -518,21 +516,21 @@
             </div>
             <div class="overflow-x-auto">
                 <table class="funnel-table">
-                    <thead><tr><th>Description</th><th class="text-right">Count</th><th>Note</th></tr></thead>
+                    <thead><tr><th>Remote &amp; Functional Systems</th><th class="text-right">Count</th><th>Note</th></tr></thead>
                     <tbody>
                         <tr><td>Total rows in DB (UC3.4 Crit RAM input)</td><td class="count">{{ filter_funnel.total_input|default:0 }}</td><td>Active servers with utilisation data</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td colspan="3">--- UC3.4a Downsize filters ---</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 2: Avg_FreeMem_12m &gt; 80%</td><td class="count">{{ filter_funnel.crit_ram_dn_f2|default:0 }}</td><td></td></tr>
-                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4a DOWNSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_dn_final|default:0 }}</td><td>Downsize RAM by ~25% — Human Intervention Required</td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.4a RAM Downsize Analysis</td><td>Critical workloads evaluated for RAM downsizing</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 1: Criticality = Business Critical or Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>High-criticality servers identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4a Filter 2: Average free memory utilization over the last 12 months is &gt; 80%</td><td class="count">{{ filter_funnel.crit_ram_dn_f2|default:0 }}</td><td>Excess free memory consistently observed</td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4a Critical RAM Downsize Candidates</td><td class="count">{{ filter_funnel.crit_ram_dn_final|default:0 }}</td><td>Human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="section-hdr"><td colspan="3">--- UC3.4b Upsize filters ---</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 1: Criticality = Business Critical / Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>Values: Business Critical, Mission Critical</td></tr>
-                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 2: Avg_FreeMem_12m &lt; 20%</td><td class="count">{{ filter_funnel.crit_ram_up_f2|default:0 }}</td><td></td></tr>
-                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4b UPSIZE CANDIDATES</td><td class="count">{{ filter_funnel.crit_ram_up_final|default:0 }}</td><td>Flag Only — Human Intervention Required</td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.4b RAM Upsize Analysis</td><td>Critical workloads evaluated for RAM upsize risk</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 1: Criticality = Business Critical or Mission Critical</td><td class="count">{{ filter_funnel.crit_bus_count|default:0 }}</td><td>High-criticality servers identified</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4b Filter 2: Average free memory utilization over the last 12 months is &lt; 20%</td><td class="count">{{ filter_funnel.crit_ram_up_f2|default:0 }}</td><td>Low free memory consistently observed</td></tr>
+                        <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4b Critical RAM Upsize Candidates</td><td class="count">{{ filter_funnel.crit_ram_up_final|default:0 }}</td><td>Flag only — human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>UC3.4 Crit RAM FINAL FLAGS</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>-</td></tr>
+                        <tr class="final-warn"><td>TOTAL RAM CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>Critical RAM optimisation candidate list generated</td></tr>
                     </tbody>
                 </table>
             </div>
