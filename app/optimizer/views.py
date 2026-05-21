@@ -257,11 +257,53 @@ def _build_rightsizing_filter_funnel() -> dict:
         # This matches the export functions (download_uc3_crit_cpu/ram_input_data).
         crit_cpu_filtered_final = crit_cpu_dn_final + crit_cpu_up_final
         crit_ram_filtered_final = crit_ram_dn_final + crit_ram_up_final
+
+        # UC3.3c — actionable CPU subset (matches agent report count)
+        _crit_cpu_c = pd.concat(
+            [find_criticality_cpu_downsize_optimizations(df),
+             find_criticality_cpu_upsize_optimizations(df)],
+            ignore_index=True,
+        )
+        if not _crit_cpu_c.empty:
+            _crit_cpu_c = _crit_cpu_c[
+                _crit_cpu_c["Recommended_vCPU"].notna() &
+                (_crit_cpu_c["Recommended_vCPU"] != _crit_cpu_c["Current_vCPU"])
+            ]
+            crit_cpu_after_noop = len(_crit_cpu_c)
+            _crit_cpu_c = _crit_cpu_c[
+                (_crit_cpu_c["Current_vCPU"] >= 4) &
+                (_crit_cpu_c["Recommended_vCPU"] >= 4)
+            ]
+        else:
+            crit_cpu_after_noop = 0
+        crit_cpu_actionable = len(_crit_cpu_c)
+
+        # UC3.4c — actionable RAM subset (matches agent report count)
+        _crit_ram_c = pd.concat(
+            [find_criticality_ram_downsize_optimizations(df),
+             find_criticality_ram_upsize_optimizations(df)],
+            ignore_index=True,
+        )
+        if not _crit_ram_c.empty:
+            _crit_ram_c = _crit_ram_c[
+                _crit_ram_c["Recommended_RAM_GiB"].notna() &
+                (_crit_ram_c["Recommended_RAM_GiB"] != _crit_ram_c["Current_RAM_GiB"])
+            ]
+            crit_ram_after_noop = len(_crit_ram_c)
+            _crit_ram_c = _crit_ram_c[
+                (_crit_ram_c["Current_RAM_GiB"] >= 8) &
+                (_crit_ram_c["Recommended_RAM_GiB"] >= 8)
+            ]
+        else:
+            crit_ram_after_noop = 0
+        crit_ram_actionable = len(_crit_ram_c)
     else:
         crit_all_count = crit_bus_count = 0
         crit_cpu_dn_f2 = crit_cpu_up_f2 = crit_ram_dn_f2 = crit_ram_up_f2 = 0
         crit_cpu_dn_final = crit_cpu_up_final = crit_ram_dn_final = crit_ram_up_final = 0
         crit_cpu_filtered_final = crit_ram_filtered_final = 0
+        crit_cpu_after_noop = crit_cpu_actionable = 0
+        crit_ram_after_noop = crit_ram_actionable = 0
 
     # ── UC3.5 Lifecycle ────────────────────────────────────────────────────────
     if has_criticality:
@@ -315,13 +357,17 @@ def _build_rightsizing_filter_funnel() -> dict:
         "crit_cpu_up_f2":     crit_cpu_up_f2,
         "crit_cpu_dn_final":  crit_cpu_dn_final,
         "crit_cpu_up_final":  crit_cpu_up_final,
-        "crit_cpu_final":     crit_cpu_filtered_final,
+        "crit_cpu_final":        crit_cpu_filtered_final,
+        "crit_cpu_after_noop":   crit_cpu_after_noop,
+        "crit_cpu_actionable":   crit_cpu_actionable,
         # UC3.4 Crit RAM
-        "crit_ram_dn_f2":    crit_ram_dn_f2,
-        "crit_ram_up_f2":    crit_ram_up_f2,
-        "crit_ram_dn_final": crit_ram_dn_final,
-        "crit_ram_up_final": crit_ram_up_final,
-        "crit_ram_final":    crit_ram_filtered_final,
+        "crit_ram_dn_f2":       crit_ram_dn_f2,
+        "crit_ram_up_f2":       crit_ram_up_f2,
+        "crit_ram_dn_final":    crit_ram_dn_final,
+        "crit_ram_up_final":    crit_ram_up_final,
+        "crit_ram_final":       crit_ram_filtered_final,
+        "crit_ram_after_noop":  crit_ram_after_noop,
+        "crit_ram_actionable":  crit_ram_actionable,
         # UC3.5 Lifecycle
         "lc_f1":    lc_f1_count,
         "lc_f2":    lc_f2_count,

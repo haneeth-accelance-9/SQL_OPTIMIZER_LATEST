@@ -502,7 +502,12 @@
                         <tr><td>&nbsp;&nbsp;UC3.3b Filter 2: Average CPU utilization over the last 12 months is &gt; 80%</td><td class="count">{{ filter_funnel.crit_cpu_up_f2|default:0 }}</td><td>Sustained high CPU utilisation detected</td></tr>
                         <tr class="final-slate"><td>&nbsp;&nbsp;UC3.3b Critical CPU Upsize Candidates</td><td class="count">{{ filter_funnel.crit_cpu_up_final|default:0 }}</td><td>Flag only — human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>TOTAL CPU CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td>Critical CPU optimisation candidate list generated</td></tr>
+                        <tr><td style="font-weight:700; color:#000;">TOTAL CPU CANDIDATES</td><td class="count" style="font-weight:700; color:#000;">{{ filter_funnel.crit_cpu_final|default:0 }}</td><td style="font-weight:700; color:#000;">Critical CPU optimisation candidate list generated</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.3c Actionable CPU Candidates (Human Review Required)</td><td>Post-validation filters applied to UC3.3a + UC3.3b combined</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3c Filter 1: Exclude no-op recommendations (Recommended vCPU = Current vCPU)</td><td class="count">{{ filter_funnel.crit_cpu_after_noop|default:0 }}</td><td>Removes servers where no actual change would occur</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.3c Filter 2: Both Current and Recommended vCPU ≥ 4 (minimum floor)</td><td class="count">{{ filter_funnel.crit_cpu_actionable|default:0 }}</td><td>Prevents unsafe undersizing below business minimum</td></tr>
+                        <tr class="final-warn"><td>&nbsp;&nbsp;UC3.3c ACTIONABLE CPU CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_cpu_actionable|default:0 }}</td><td>Human intervention required</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -530,7 +535,12 @@
                         <tr><td>&nbsp;&nbsp;UC3.4b Filter 2: Average free memory utilization over the last 12 months is &lt; 20%</td><td class="count">{{ filter_funnel.crit_ram_up_f2|default:0 }}</td><td>Low free memory consistently observed</td></tr>
                         <tr class="final-slate"><td>&nbsp;&nbsp;UC3.4b Critical RAM Upsize Candidates</td><td class="count">{{ filter_funnel.crit_ram_up_final|default:0 }}</td><td>Flag only — human intervention required</td></tr>
                         <tr><td></td><td class="count"></td><td></td></tr>
-                        <tr class="final-warn"><td>TOTAL RAM CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td>Critical RAM optimisation candidate list generated</td></tr>
+                        <tr><td style="font-weight:700; color:#000;">TOTAL RAM CANDIDATES</td><td class="count" style="font-weight:700; color:#000;">{{ filter_funnel.crit_ram_final|default:0 }}</td><td style="font-weight:700; color:#000;">Critical RAM optimisation candidate list generated</td></tr>
+                        <tr><td></td><td class="count"></td><td></td></tr>
+                        <tr class="section-hdr"><td colspan="2">UC3.4c Actionable RAM Candidates (Human Review Required)</td><td>Post-validation filters applied to UC3.4a + UC3.4b combined</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4c Filter 1: Exclude no-op recommendations (Recommended RAM = Current RAM)</td><td class="count">{{ filter_funnel.crit_ram_after_noop|default:0 }}</td><td>Removes servers where no actual change would occur</td></tr>
+                        <tr><td>&nbsp;&nbsp;UC3.4c Filter 2: Both Current and Recommended RAM ≥ 8 GiB (minimum floor)</td><td class="count">{{ filter_funnel.crit_ram_actionable|default:0 }}</td><td>Prevents unsafe undersizing below business minimum</td></tr>
+                        <tr class="final-warn"><td>&nbsp;&nbsp;UC3.4c ACTIONABLE RAM CANDIDATES</td><td class="count" style="color:#991b1b;">{{ filter_funnel.crit_ram_actionable|default:0 }}</td><td>Human intervention required</td></tr>
                     </tbody>
                 </table>
             </div>
