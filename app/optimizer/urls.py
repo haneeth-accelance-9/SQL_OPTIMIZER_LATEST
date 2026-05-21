@@ -71,4 +71,8 @@ urlpatterns = [
     #      Returns snapshot rows if available, rollup rows as fallback
     #      ?page=1&page_size=100&sort_field=timestamp&sort_order=desc
     path("api/dq-grafana-data/", views.api_dq_grafana_data, name="api_dq_grafana_data"),
+    # ── Admin Panel: User Management ──────────────────────────────────────────
+    path("admin/", views.admin_panel, name="admin_panel"),
+    path("api/admin/users/", views.api_admin_users, name="api_admin_users"),
+    path("api/admin/users/<int:user_id>/", views.api_admin_user_detail, name="api_admin_user_detail"),
 ]

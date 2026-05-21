@@ -201,6 +201,9 @@
                     <a href="{% url 'optimizer:results' %}" class="appbar-link {% if request.resolver_match.url_name == 'results' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">RESULTS</a>
                     <a href="{% url 'optimizer:report' %}" class="appbar-link {% if request.resolver_match.url_name == 'report' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">REPORTS</a>
                     {% endif %}
+                    {% if is_admin %}
+                    <a href="{% url 'optimizer:admin_panel' %}" class="appbar-link {% if request.resolver_match.url_name == 'admin_panel' %}is-current{% endif %} text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">ADMIN</a>
+                    {% endif %}
                     <a href="{% url 'optimizer:logout' %}" class="appbar-link text-sm rounded px-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white">LOG OUT</a>
                     <!-- Notification bell hidden for now
                      <button type="button"

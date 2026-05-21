@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel | SQL License Optimizer{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto h-full overflow-y-auto py-8 px-4">
+
+    <!-- Page Header -->
+    <div class="flex items-start justify-between mb-8">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.32em] text-sky-600">Administration</p>
+            <h1 class="mt-2 text-2xl font-bold text-slate-900">User Management</h1>
+            <p class="mt-1 text-sm text-slate-500">Create, edit, and manage user accounts and their access roles.</p>
+        </div>
+        <button id="btn-create-user" type="button"
+            class="inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all"
+            style="background-color: #00BCFF;">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Create User
+        </button>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="fixed top-6 right-6 z-[100] hidden">
+        <div id="toast-inner" class="flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg text-sm font-semibold min-w-[260px]">
+            <svg id="toast-icon" class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-700">All Users</h2>
+                <p id="users-count" class="text-xs text-slate-400 mt-0.5">Loading...</p>
+            </div>
+            <div id="table-loading" class="flex items-center gap-2 text-xs text-slate-400">
+                <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                </svg>
+                Loading
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100">
+                <thead>
+                    <tr class="bg-slate-50">
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Username</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Joined</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody" class="divide-y divide-slate-100 bg-white">
+                    <tr>
+                        <td colspan="5" class="px-6 py-14 text-center text-sm text-slate-400">Loading users...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Create / Edit User Modal ─────────────────────────────────────────── -->
+<div id="user-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+    <div id="modal-backdrop" class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+        <!-- Modal header -->
+        <div class="px-6 py-5" style="background: linear-gradient(to right, #1a78c0, #00BCFF, #84D91D);">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300" id="modal-subtitle">New User</p>
+                    <h2 class="mt-1 text-xl font-bold text-white" id="modal-title">Create User</h2>
+                </div>
+                <button type="button" id="modal-close"
+                    class="h-9 w-9 rounded-full border border-white/20 text-white/70 hover:text-white flex items-center justify-center transition">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <!-- Modal body -->
+        <form id="user-form" class="px-6 py-6 space-y-5" novalidate>
+            {% csrf_token %}
+            <input type="hidden" id="edit-user-id" value="">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5" for="field-username">
+                    Username <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="field-username" placeholder="jane.smith" required autocomplete="username"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5" for="field-email">
+                    Email <span class="text-red-500">*</span>
+                </label>
+                <input type="email" id="field-email" placeholder="jane.smith@company.com" required autocomplete="email"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5" for="field-password">
+                    Password
+                    <span id="password-hint" class="text-xs font-normal text-slate-400 ml-1">(min 10 chars, letters &amp; numbers)</span>
+                </label>
+                <input type="password" id="field-password" placeholder="••••••••" autocomplete="new-password"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5" for="field-role">User Type</label>
+                <select id="field-role"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100 transition">
+                    <option value="viewer">Viewer — read-only access</option>
+                    <option value="editor">Editor — can trigger runs &amp; decisions</option>
+                    <option value="admin">Admin — full access</option>
+                </select>
+            </div>
+            <!-- Error box -->
+            <div id="form-error" class="hidden rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
+            <!-- Actions -->
+            <div class="flex gap-3 pt-1">
+                <button type="button" id="modal-cancel"
+                    class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">
+                    Cancel
+                </button>
+                <button type="submit" id="form-submit"
+                    class="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed transition"
+                    style="background-color: #00BCFF;">
+                    Create User
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ─── Delete Confirmation Modal ────────────────────────────────────────── -->
+<div id="delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+        <div class="flex flex-col items-center text-center">
+            <div class="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <svg class="h-7 w-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900">Delete User</h3>
+            <p class="mt-2 text-sm text-slate-500 leading-relaxed" id="delete-confirm-text">
+                Are you sure you want to delete this user? This action cannot be undone.
+            </p>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button type="button" id="delete-cancel"
+                class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">
+                Cancel
+            </button>
+            <button type="button" id="delete-confirm"
+                class="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const ROLE_LABELS = { admin: 'Admin', editor: 'Editor', viewer: 'Viewer' };
+    const ROLE_CLASSES = {
+        admin:  'bg-purple-100 text-purple-700 border-purple-200',
+        editor: 'bg-sky-100 text-sky-700 border-sky-200',
+        viewer: 'bg-slate-100 text-slate-600 border-slate-200',
+    };
+
+    let allUsers = [];
+    let deleteTargetId = null;
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function csrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+
+    function showEl(el)  { el.classList.remove('hidden'); el.classList.add('flex'); }
+    function hideEl(el)  { el.classList.remove('flex');   el.classList.add('hidden'); }
+
+    function showToast(message, type) {
+        const toast = document.getElementById('toast');
+        const inner = document.getElementById('toast-inner');
+        const icon  = document.getElementById('toast-icon');
+        const msg   = document.getElementById('toast-message');
+
+        msg.textContent = message;
+        inner.className = 'flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg text-sm font-semibold min-w-[260px] ';
+
+        if (type === 'success') {
+            inner.className += 'bg-emerald-50 border-emerald-200 text-emerald-800';
+            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+        } else {
+            inner.className += 'bg-red-50 border-red-200 text-red-800';
+            icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+        }
+
+        toast.classList.remove('hidden');
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => toast.classList.add('hidden'), 3500);
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+        catch { return '—'; }
+    }
+
+    // ── table rendering ──────────────────────────────────────────────────────
+
+    function renderTable(users) {
+        const tbody   = document.getElementById('users-tbody');
+        const counter = document.getElementById('users-count');
+        const loader  = document.getElementById('table-loading');
+
+        hideEl(loader);
+        counter.textContent = users.length + ' user' + (users.length !== 1 ? 's' : '');
+
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-14 text-center text-sm text-slate-400">No users found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(u => {
+            const roleClass   = ROLE_CLASSES[u.role] || ROLE_CLASSES.viewer;
+            const roleLabel   = ROLE_LABELS[u.role]  || u.role;
+            const safeUser    = (u.username || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const safeEmail   = (u.email    || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+            return `
+            <tr class="hover:bg-slate-50 transition-colors group">
+                <td class="px-6 py-4 text-sm font-semibold text-slate-900">${safeUser}</td>
+                <td class="px-6 py-4 text-sm text-slate-600">${safeEmail}</td>
+                <td class="px-6 py-4">
+                    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${roleClass}">
+                        ${roleLabel}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-slate-500">${fmtDate(u.date_joined)}</td>
+                <td class="px-6 py-4">
+                    <div class="flex items-center justify-end gap-2">
+                        <button type="button" data-action="edit" data-id="${u.id}"
+                            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-sky-300 hover:text-sky-700 transition">
+                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                            </svg>
+                            Edit
+                        </button>
+                        <button type="button" data-action="delete" data-id="${u.id}" data-name="${safeUser}"
+                            class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-red-300 hover:text-red-600 transition">
+                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Delete
+                        </button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ── API calls ─────────────────────────────────────────────────────────────
+
+    async function loadUsers() {
+        try {
+            const res  = await fetch('/api/admin/users/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to load users');
+            allUsers = data.users || [];
+            renderTable(allUsers);
+        } catch (err) {
+            document.getElementById('users-tbody').innerHTML =
+                `<tr><td colspan="6" class="px-6 py-14 text-center text-sm text-red-500">${err.message}</td></tr>`;
+            document.getElementById('table-loading').classList.add('hidden');
+        }
+    }
+
+    async function createUser(payload) {
+        const res  = await fetch('/api/admin/users/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create user');
+        return data;
+    }
+
+    async function updateUser(userId, payload) {
+        const res  = await fetch(`/api/admin/users/${userId}/`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update user');
+        return data;
+    }
+
+    async function deleteUser(userId) {
+        const res  = await fetch(`/api/admin/users/${userId}/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+        return data;
+    }
+
+    // ── modal helpers ─────────────────────────────────────────────────────────
+
+    const userModal   = document.getElementById('user-modal');
+    const deleteModal = document.getElementById('delete-modal');
+
+    function openUserModal({ id, username, email, role } = {}) {
+        const isEdit = !!id;
+        document.getElementById('modal-title').textContent    = isEdit ? 'Edit User'    : 'Create User';
+        document.getElementById('modal-subtitle').textContent = isEdit ? 'Update Details' : 'New User';
+        document.getElementById('form-submit').textContent    = isEdit ? 'Save Changes' : 'Create User';
+        document.getElementById('password-hint').textContent  = isEdit
+            ? '(leave blank to keep current)'
+            : '(min 8 characters, required)';
+        document.getElementById('edit-user-id').value   = id       || '';
+        document.getElementById('field-username').value = username || '';
+        document.getElementById('field-email').value    = email    || '';
+        document.getElementById('field-password').value = '';
+        document.getElementById('field-role').value     = role     || 'viewer';
+        document.getElementById('field-password').required = !isEdit;
+        document.getElementById('form-error').classList.add('hidden');
+        showEl(userModal);
+    }
+
+    function closeUserModal()   { hideEl(userModal); }
+    function closeDeleteModal() { hideEl(deleteModal); deleteTargetId = null; }
+
+    // ── event wiring ──────────────────────────────────────────────────────────
+
+    document.getElementById('btn-create-user').addEventListener('click', () => openUserModal());
+    document.getElementById('modal-close').addEventListener('click',    closeUserModal);
+    document.getElementById('modal-cancel').addEventListener('click',   closeUserModal);
+    document.getElementById('modal-backdrop').addEventListener('click', closeUserModal);
+    document.getElementById('delete-cancel').addEventListener('click',  closeDeleteModal);
+
+    // Table row actions (event delegation)
+    document.getElementById('users-tbody').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+
+        const id = parseInt(btn.dataset.id, 10);
+
+        if (btn.dataset.action === 'edit') {
+            const u = allUsers.find(x => x.id === id);
+            if (u) openUserModal(u);
+        }
+
+        if (btn.dataset.action === 'delete') {
+            deleteTargetId = id;
+            const name = btn.dataset.name || 'this user';
+            document.getElementById('delete-confirm-text').textContent =
+                `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+            showEl(deleteModal);
+        }
+    });
+
+    // Delete confirm
+    document.getElementById('delete-confirm').addEventListener('click', async () => {
+        const btn = document.getElementById('delete-confirm');
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+        try {
+            await deleteUser(deleteTargetId);
+            closeDeleteModal();
+            await loadUsers();
+            showToast('User deleted successfully.', 'success');
+        } catch (err) {
+            closeDeleteModal();
+            showToast(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Delete';
+        }
+    });
+
+    // Create / Edit form submit
+    document.getElementById('user-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const errorBox = document.getElementById('form-error');
+        const submitBtn = document.getElementById('form-submit');
+        errorBox.classList.add('hidden');
+
+        const userId = document.getElementById('edit-user-id').value;
+        const isEdit = !!userId;
+
+        const payload = {
+            username: document.getElementById('field-username').value.trim(),
+            email:    document.getElementById('field-email').value.trim(),
+            password: document.getElementById('field-password').value,
+            role:     document.getElementById('field-role').value,
+        };
+
+
+        // Password validation
+        const pw = payload.password;
+        if (!isEdit || pw) {
+            if (!pw) {
+                errorBox.textContent = 'Password is required.';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+            if (pw.length < 10) {
+                errorBox.textContent = 'Password must be at least 10 characters.';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+            if (!/[a-zA-Z]/.test(pw)) {
+                errorBox.textContent = 'Password must contain at least one letter.';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+            if (!/[0-9]/.test(pw)) {
+                errorBox.textContent = 'Password must contain at least one number.';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+        }
+
+        submitBtn.disabled    = true;
+        submitBtn.textContent = isEdit ? 'Saving...' : 'Creating...';
+
+        try {
+            if (isEdit) {
+                await updateUser(parseInt(userId, 10), payload);
+            } else {
+                await createUser(payload);
+            }
+            closeUserModal();
+            await loadUsers();
+            showToast(isEdit ? 'User updated successfully.' : 'User created successfully.', 'success');
+        } catch (err) {
+            errorBox.textContent = err.message || 'An unexpected error occurred.';
+            errorBox.classList.remove('hidden');
+        } finally {
+            submitBtn.disabled    = false;
+            submitBtn.textContent = isEdit ? 'Save Changes' : 'Create User';
+        }
+    });
+
+    // Close modals on Escape
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeUserModal(); closeDeleteModal(); }
+    });
+
+    // ── init ──────────────────────────────────────────────────────────────────
+
+    loadUsers();
+}());
+</script>
+{% endblock %}

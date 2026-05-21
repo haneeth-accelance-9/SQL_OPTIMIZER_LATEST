@@ -19,9 +19,15 @@ def notification_context(request):
     except Exception:
         is_viewer_only = False
 
+    try:
+        is_admin = request.user.optimizer_profile.is_admin
+    except Exception:
+        is_admin = False
+
     return {
         "header_alerts": all_alerts[:4],
         "header_alert_summary": build_alert_summary(all_alerts),
         "header_alert_count": len(all_alerts),
         "is_viewer_only": is_viewer_only,
+        "is_admin": is_admin,
     }

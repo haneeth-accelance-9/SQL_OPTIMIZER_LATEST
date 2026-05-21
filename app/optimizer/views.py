@@ -4389,3 +4389,174 @@ def download_uc3_lifecycle_input_data(request):
     response = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = _safe_content_disposition("uc3_lifecycle_input_data.xlsx")
     return response
+
+
+# ── Admin Panel: User Management ──────────────────────────────────────────────
+
+@require_GET
+@login_required
+@admin_only
+def admin_panel(request):
+    """User management page — admin only."""
+    return render(request, "optimizer/admin_panel.html", {
+        "title": "Admin Panel",
+        "is_viewer_only": False,
+    })
+
+
+@require_http_methods(["GET", "POST"])
+@csrf_protect
+@login_required
+@admin_only
+def api_admin_users(request):
+    """
+    GET  /api/admin/users/  → list all users
+    POST /api/admin/users/  → create a new user
+    """
+    import json as _json
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+
+    if request.method == "GET":
+        qs = User.objects.select_related("optimizer_profile").order_by("date_joined")
+        data = []
+        for u in qs:
+            try:
+                role = u.optimizer_profile.role
+            except UserProfile.DoesNotExist:
+                role = ROLE_VIEWER
+            data.append({
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "role": role,
+                "is_active": u.is_active,
+                "date_joined": u.date_joined.isoformat(),
+            })
+        return JsonResponse({"users": data})
+
+    # POST — create
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    username = (body.get("username") or "").strip()
+    email    = (body.get("email") or "").strip()
+    password = body.get("password") or ""
+    role     = (body.get("role") or ROLE_VIEWER).strip()
+
+    if not username:
+        return JsonResponse({"error": "Username is required."}, status=400)
+    if not email:
+        return JsonResponse({"error": "Email is required."}, status=400)
+    if not password or len(password) < 10:
+        return JsonResponse({"error": "Password must be at least 10 characters."}, status=400)
+    if not any(c.isalpha() for c in password):
+        return JsonResponse({"error": "Password must contain at least one letter."}, status=400)
+    if not any(c.isdigit() for c in password):
+        return JsonResponse({"error": "Password must contain at least one number."}, status=400)
+    if role not in (ROLE_ADMIN, ROLE_EDITOR, ROLE_VIEWER):
+        return JsonResponse({"error": "Invalid role."}, status=400)
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({"error": "A user with this username already exists."}, status=400)
+    if User.objects.filter(email=email).exists():
+        return JsonResponse({"error": "A user with this email already exists."}, status=400)
+
+    new_user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+    )
+    UserProfile.objects.update_or_create(user=new_user, defaults={"role": role})
+    logger.info("Admin created user id=%s username=%s role=%s by=%s", new_user.pk, username, role, request.user.username)
+
+    return JsonResponse({
+        "id": new_user.id,
+        "username": new_user.username,
+        "email": new_user.email,
+        "role": role,
+        "is_active": new_user.is_active,
+        "date_joined": new_user.date_joined.isoformat(),
+    }, status=201)
+
+
+@require_http_methods(["PUT", "DELETE"])
+@csrf_protect
+@login_required
+@admin_only
+def api_admin_user_detail(request, user_id):
+    """
+    PUT    /api/admin/users/<id>/  → update user
+    DELETE /api/admin/users/<id>/  → delete user
+    """
+    import json as _json
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+
+    try:
+        target = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found."}, status=404)
+
+    if target == request.user:
+        return JsonResponse({"error": "You cannot modify your own account from this panel."}, status=400)
+
+    if request.method == "DELETE":
+        logger.info("Admin deleted user id=%s email=%s by=%s", target.pk, target.email, request.user.username)
+        target.delete()
+        return JsonResponse({"message": "User deleted successfully."})
+
+    # PUT — update
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    username = (body.get("username") or target.username or "").strip()
+    email    = (body.get("email") or target.email or "").strip()
+    role     = (body.get("role") or ROLE_VIEWER).strip()
+    password = body.get("password") or ""
+
+    if not username:
+        return JsonResponse({"error": "Username is required."}, status=400)
+    if not email:
+        return JsonResponse({"error": "Email is required."}, status=400)
+    if role not in (ROLE_ADMIN, ROLE_EDITOR, ROLE_VIEWER):
+        return JsonResponse({"error": "Invalid role."}, status=400)
+    if User.objects.filter(username=username).exclude(pk=user_id).exists():
+        return JsonResponse({"error": "Another user with this username already exists."}, status=400)
+    if User.objects.filter(email=email).exclude(pk=user_id).exists():
+        return JsonResponse({"error": "Another user with this email already exists."}, status=400)
+    if password:
+        if len(password) < 10:
+            return JsonResponse({"error": "Password must be at least 10 characters."}, status=400)
+        if not any(c.isalpha() for c in password):
+            return JsonResponse({"error": "Password must contain at least one letter."}, status=400)
+        if not any(c.isdigit() for c in password):
+            return JsonResponse({"error": "Password must contain at least one number."}, status=400)
+
+    target.username = username
+    target.email    = email
+    if password:
+        target.set_password(password)
+    target.save()
+
+    UserProfile.objects.update_or_create(user=target, defaults={"role": role})
+    logger.info("Admin updated user id=%s email=%s role=%s by=%s", target.pk, email, role, request.user.username)
+
+    try:
+        updated_role = target.optimizer_profile.role
+    except UserProfile.DoesNotExist:
+        updated_role = role
+
+    return JsonResponse({
+        "id": target.id,
+        "username": target.username,
+        "email": target.email,
+        "role": updated_role,
+        "is_active": target.is_active,
+        "date_joined": target.date_joined.isoformat(),
+    })
