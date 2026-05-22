@@ -2207,6 +2207,7 @@ def get_latest_agentic_context() -> dict:
         "candidates_pending": len(pending),
         "candidates_rejected": len(rejected),
         "total_estimated_saving_eur": round(total_saving, 2),
+        "data_quality": (run.input_file_versions or {}).get("data_quality") or {},
     }
 
 

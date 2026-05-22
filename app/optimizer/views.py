@@ -2158,6 +2158,7 @@ def report_page(request):
         context["report_text"] = ""
     context["agentic"] = agentic
     context["has_agentic_data"] = agentic.get("has_agentic_data", False)
+    context["data_quality"] = agentic.get("data_quality") or {}
     profile = _get_or_create_user_profile(request.user)
     context["is_viewer_only"] = profile.is_viewer_only
 

@@ -1321,6 +1321,7 @@ def generate_and_store_agentic_report(
     # Extract report + metadata
     report_md = result.get("report_markdown") or result.get("deterministic_report_markdown") or ""
     rules_eval = result.get("rules_evaluation") or {}
+    data_quality = result.get("data_quality") or {}
     llm_meta = result.get("llm_meta") or {}
     llm_used = bool(result.get("llm_used"))
     llm_model = (llm_meta.get("model") if isinstance(llm_meta, dict) else "") or (
@@ -1412,6 +1413,7 @@ def generate_and_store_agentic_report(
         **(run.input_file_versions or {}),
         "prompt_version": PROMPT_VERSION,
         "phase_timings": _pt,
+        "data_quality": data_quality,
     }
 
     # Knowledge source references (task: knowledge_sources captured)
@@ -1447,6 +1449,7 @@ def generate_and_store_agentic_report(
         "llm_used": llm_used,
         "candidates_created": candidate_rows_created,
         "rules_evaluation": rules_eval,
+        "data_quality": data_quality,
     }
 
 
