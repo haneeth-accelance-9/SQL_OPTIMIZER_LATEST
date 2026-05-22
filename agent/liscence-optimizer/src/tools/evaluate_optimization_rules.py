@@ -16,6 +16,11 @@ from agenticai.tools import tool_registry
 from .rules_evaluator import evaluate_rules_on_records, summarize_for_executive_report
 from .rules_loader import load_rules_with_optional_override
 
+try:
+    from ..guardrails import assess_data_quality
+except ImportError:
+    from guardrails import assess_data_quality  # type: ignore
+
 
 def _json_loads_maybe(payload: str) -> Any:
     if payload is None:
@@ -54,12 +59,21 @@ def evaluate_optimization_rules(
         )
 
     try:
+        quality_report = assess_data_quality(records)
         rules_doc = load_rules_with_optional_override(
             base_path=Path(rules_path) if rules_path else None,
             override_yaml=override_rules_yaml,
         )
         evaluation = evaluate_rules_on_records(rules_doc, records)
         summary = summarize_for_executive_report(evaluation, max_examples_per_rule=max_examples_per_rule)
-        return json.dumps({"success": True, "evaluation": evaluation, "summary": summary}, indent=2)
+        return json.dumps(
+            {
+                "success": True,
+                "evaluation": evaluation,
+                "summary": summary,
+                "data_quality": quality_report.to_dict(),
+            },
+            indent=2,
+        )
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)}, indent=2)

@@ -555,6 +555,63 @@ def _collect_host_evidence_from_strategy(strategy_results: dict[str, Any]) -> di
     return evidence
 
 
+def _render_data_quality_section(data_quality: dict[str, Any]) -> list[str]:
+    """Render a ## Data Quality markdown section from a data_quality dict."""
+    lines: list[str] = []
+    if not isinstance(data_quality, dict):
+        return lines
+
+    lines.append("## Data Quality")
+    lines.append("")
+
+    completeness = data_quality.get("completeness_by_group")
+    if isinstance(completeness, dict) and completeness:
+        lines.append("| Group | Completeness |")
+        lines.append("|---|---:|")
+        _group_labels = {"licensing": "Licensing (UC 1.x)", "compute": "Compute / Rightsizing (UC 3.x)"}
+        for group, rate in completeness.items():
+            label = _group_labels.get(group, group.title())
+            pct = f"{float(rate) * 100:.1f}%"
+            lines.append(f"| {label} | {pct} |")
+        lines.append("")
+
+    acc_rate = data_quality.get("accuracy_rate")
+    acc_violations = data_quality.get("accuracy_violations") or []
+    if acc_rate is not None:
+        acc_pct = f"{float(acc_rate) * 100:.1f}%"
+        lines.append(f"- **Accuracy**: {acc_pct}")
+        if acc_violations:
+            from collections import Counter
+            field_counts: Counter = Counter(v.get("field") for v in acc_violations if isinstance(v, dict))
+            top = ", ".join(f"`{f}` ({c} record{'s' if c != 1 else ''})" for f, c in field_counts.most_common(5))
+            lines.append(f"  - Top offending fields: {top}")
+
+    con_rate = data_quality.get("consistency_rate")
+    con_violations = data_quality.get("consistency_violations") or []
+    if con_rate is not None:
+        con_pct = f"{float(con_rate) * 100:.1f}%"
+        lines.append(f"- **Consistency**: {con_pct}")
+        if con_violations:
+            from collections import Counter
+            check_counts: Counter = Counter(v.get("check") for v in con_violations if isinstance(v, dict))
+            failed = ", ".join(f"`{c}` ({n} record{'s' if n != 1 else ''})" for c, n in check_counts.most_common(5))
+            lines.append(f"  - Failed checks: {failed}")
+
+    lines.append("")
+    below_threshold = any(
+        isinstance(v, (int, float)) and v < 1.0
+        for v in [acc_rate, con_rate, *(completeness or {}).values()]
+    )
+    if below_threshold:
+        lines.append(
+            "> **Note**: One or more quality rates are below 100% — recommendations derived from "
+            "incomplete or inconsistent data should be manually validated before action is taken."
+        )
+        lines.append("")
+
+    return lines
+
+
 def _render_markdown(
     *,
     usecase_id: str,
@@ -562,6 +619,7 @@ def _render_markdown(
     rules_evaluation: dict[str, Any] | None,
     notes: str | None,
     instructions: str,
+    data_quality: dict[str, Any] | None = None,
 ) -> str:
     # NOTE: `instructions` is intentionally NOT emitted. It exists only for compatibility
     # with older clients that passed a prompt template path.
@@ -621,6 +679,9 @@ def _render_markdown(
         if top_named:
             lines.append(f"- Highest-volume findings: {', '.join(top_named)}.")
     lines.append("")
+
+    if isinstance(data_quality, dict) and data_quality:
+        lines.extend(_render_data_quality_section(data_quality))
 
     lines.append("## Portfolio snapshot")
     lines.append("")
@@ -792,6 +853,7 @@ def report_generator(
     rules_evaluation_json: str | None = None,
     notes: str | None = None,
     prompt_path: str | None = None,
+    data_quality_json: str | None = None,
 ) -> str:
     try:
         strategy_results_raw = _json_loads_maybe(strategy_results_json)
@@ -815,6 +877,10 @@ def report_generator(
                 indent=2,
             )
 
+        data_quality = _json_loads_maybe(data_quality_json) if data_quality_json else None
+        if data_quality is not None and not isinstance(data_quality, dict):
+            data_quality = None
+
         p = Path(prompt_path) if prompt_path else _default_prompt_path()
         instructions = _read_text(p)
 
@@ -824,6 +890,7 @@ def report_generator(
             rules_evaluation=rules_evaluation,
             notes=notes,
             instructions=instructions,
+            data_quality=data_quality,
         )
 
         return json.dumps(

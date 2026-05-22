@@ -23,9 +23,9 @@ PROMPT_VERSION = "1.0.0"
 
 # Guardrails (prompt injection protection + output filtering)
 try:
-    from .guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output
+    from .guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output, assess_data_quality
 except ImportError:
-    from guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output  # type: ignore
+    from guardrails import sanitize_prompt_input, validate_and_sanitize_records, filter_llm_output, assess_data_quality  # type: ignore
 
 
 # Import AgenticAI SDK
@@ -219,6 +219,7 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
         safe_usecase_id = sanitize_prompt_input(req.usecase_id, field_name="usecase_id")
         safe_notes = sanitize_prompt_input(req.notes, field_name="notes") if req.notes else req.notes
         safe_records = validate_and_sanitize_records(req.records)
+        quality_report = assess_data_quality(safe_records)
 
         eval_json_str = evaluate_optimization_rules(records_json=json.dumps(safe_records))
         eval_obj = json.loads(eval_json_str) if eval_json_str else {"success": False, "error": "Empty evaluation"}
@@ -231,6 +232,7 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
             strategy_results_json=json.dumps(req.strategy_results or {}),
             rules_evaluation_json=json.dumps(eval_obj),
             notes=safe_notes,
+            data_quality_json=json.dumps(quality_report.to_dict()),
         )
         report_obj = json.loads(report_json_str) if report_json_str else {"success": False, "error": "Empty report"}
 
@@ -290,6 +292,7 @@ def _register_deterministic_routes(fastapi_app: Any) -> None:
             "llm_error": llm_error,
             "llm_meta": llm_meta if llm_used else None,
             "deterministic_report_markdown": deterministic_md,
+            "data_quality": quality_report.to_dict(),
         }
 
     fastapi_app.include_router(router)

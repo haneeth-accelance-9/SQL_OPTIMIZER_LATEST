@@ -4,10 +4,12 @@ Responsible AI guardrails for the LiscenceOptimizer agent.
 Tasks implemented here:
   - Prompt injection protection  : sanitize_prompt_input(), validate_and_sanitize_records()
   - Output filtering             : filter_llm_output()
+  - Data quality assessment      : assess_data_quality()
 """
 
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -202,3 +204,158 @@ def filter_llm_output(text: str, field_name: str = "report_markdown") -> str:
         )
 
     return text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Data quality assessment
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Fields expected per use-case group; absence counts as a completeness gap.
+_REQUIRED_FIELDS_BY_GROUP: dict[str, list[str]] = {
+    "licensing": ["install_status", "hosting_zone", "no_license_required"],
+    "compute":   ["avg_cpu_12m", "peak_cpu_12m", "avg_free_mem_12m", "min_free_mem_12m", "current_vcpu"],
+}
+
+_VIOLATIONS_CAP = 50  # max violations retained in the report to keep payload bounded
+
+
+@dataclass
+class DataQualityReport:
+    """Summary of completeness, accuracy, and consistency checks on a record batch."""
+
+    total_records: int
+    completeness_by_group: dict[str, float]
+    accuracy_rate: float
+    accuracy_violations: list[dict[str, Any]]
+    consistency_rate: float
+    consistency_violations: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_records": self.total_records,
+            "completeness_by_group": self.completeness_by_group,
+            "accuracy_rate": round(self.accuracy_rate, 4),
+            "accuracy_violations": self.accuracy_violations[:_VIOLATIONS_CAP],
+            "consistency_rate": round(self.consistency_rate, 4),
+            "consistency_violations": self.consistency_violations[:_VIOLATIONS_CAP],
+        }
+
+
+def assess_data_quality(records: list[Any]) -> DataQualityReport:
+    """
+    Run completeness, accuracy, and consistency checks on a list of record dicts.
+
+    - Completeness : per-group fraction of records that have all required fields present.
+    - Accuracy     : fraction of valid records with no out-of-range numeric fields.
+    - Consistency  : fraction of valid records where related fields are logically consistent.
+
+    Non-dict items are silently skipped (they are counted in total_records but not
+    included in any rate denominator so they do not penalise the rates).
+    """
+    total = len(records)
+
+    if total == 0:
+        return DataQualityReport(
+            total_records=0,
+            completeness_by_group={g: 1.0 for g in _REQUIRED_FIELDS_BY_GROUP},
+            accuracy_rate=1.0,
+            accuracy_violations=[],
+            consistency_rate=1.0,
+            consistency_violations=[],
+        )
+
+    completeness_ok: dict[str, int] = {g: 0 for g in _REQUIRED_FIELDS_BY_GROUP}
+    accuracy_violated: set[int] = set()
+    accuracy_violations: list[dict[str, Any]] = []
+    consistency_violated: set[int] = set()
+    consistency_violations: list[dict[str, Any]] = []
+    valid_count = 0
+
+    for i, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
+        valid_count += 1
+
+        # ── Completeness ──────────────────────────────────────────────────────
+        for group, fields in _REQUIRED_FIELDS_BY_GROUP.items():
+            if all(f in record for f in fields):
+                completeness_ok[group] += 1
+
+        # ── Accuracy ──────────────────────────────────────────────────────────
+        for cpu_field in ("avg_cpu_12m", "peak_cpu_12m"):
+            val = record.get(cpu_field)
+            if isinstance(val, (int, float)) and not isinstance(val, bool) and val > 1.0:
+                accuracy_violated.add(i)
+                accuracy_violations.append({
+                    "record_index": i,
+                    "field": cpu_field,
+                    "value": val,
+                    "reason": "CPU fraction exceeds 1.0 (expected 0–1 range)",
+                })
+
+        vcpu = record.get("current_vcpu")
+        if isinstance(vcpu, (int, float)) and not isinstance(vcpu, bool) and vcpu < 1:
+            accuracy_violated.add(i)
+            accuracy_violations.append({
+                "record_index": i,
+                "field": "current_vcpu",
+                "value": vcpu,
+                "reason": "current_vcpu below minimum (must be >= 1)",
+            })
+
+        # ── Consistency ───────────────────────────────────────────────────────
+        avg_cpu = record.get("avg_cpu_12m")
+        peak_cpu = record.get("peak_cpu_12m")
+        if (
+            isinstance(avg_cpu, (int, float)) and not isinstance(avg_cpu, bool)
+            and isinstance(peak_cpu, (int, float)) and not isinstance(peak_cpu, bool)
+            and avg_cpu > peak_cpu
+        ):
+            consistency_violated.add(i)
+            consistency_violations.append({
+                "record_index": i,
+                "check": "avg_cpu_12m <= peak_cpu_12m",
+                "values": {"avg_cpu_12m": avg_cpu, "peak_cpu_12m": peak_cpu},
+            })
+
+        min_free = record.get("min_free_mem_12m")
+        avg_free = record.get("avg_free_mem_12m")
+        if (
+            isinstance(min_free, (int, float)) and not isinstance(min_free, bool)
+            and isinstance(avg_free, (int, float)) and not isinstance(avg_free, bool)
+            and min_free > avg_free
+        ):
+            consistency_violated.add(i)
+            consistency_violations.append({
+                "record_index": i,
+                "check": "min_free_mem_12m <= avg_free_mem_12m",
+                "values": {"min_free_mem_12m": min_free, "avg_free_mem_12m": avg_free},
+            })
+
+    # ── Rates ─────────────────────────────────────────────────────────────────
+    denom = valid_count if valid_count > 0 else 1
+    completeness_by_group = {g: completeness_ok[g] / denom for g in _REQUIRED_FIELDS_BY_GROUP}
+
+    if valid_count == 0:
+        accuracy_rate = 1.0
+        consistency_rate = 1.0
+    else:
+        accuracy_rate = (valid_count - len(accuracy_violated)) / valid_count
+        consistency_rate = (valid_count - len(consistency_violated)) / valid_count
+
+    logger.info(
+        "data_quality total=%d valid=%d accuracy=%.4f consistency=%.4f",
+        total,
+        valid_count,
+        accuracy_rate,
+        consistency_rate,
+    )
+
+    return DataQualityReport(
+        total_records=total,
+        completeness_by_group=completeness_by_group,
+        accuracy_rate=accuracy_rate,
+        accuracy_violations=accuracy_violations,
+        consistency_rate=consistency_rate,
+        consistency_violations=consistency_violations,
+    )
