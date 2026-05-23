@@ -1,4 +1,5 @@
 name: SonarQube Scan
+
 on:
   workflow_dispatch:
   pull_request:
@@ -22,16 +23,81 @@ jobs:
     environment:
       name: ${{ github.base_ref || github.ref_name }}
 
+    services:
+      postgres:
+        image: official-dockerhub-images.artifactory.bayer.com/postgres:15
+        env:
+          POSTGRES_DB: test_mvp6_license_agent_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SETTINGS_MODULE: sql_license_optimizer.settings
+      SECRET_KEY: ci-insecure-key-not-used-in-production
+      DB_HOST: postgres
+      DB_NAME: test_mvp6_license_agent_dev
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_PORT: "5432"
+
     steps:
       - uses: actions/checkout@v4
         with:
-            fetch-depth: 0 # gets full git history for SonarQube analysis
+          fetch-depth: 0 # full history required for SonarQube blame analysis
+
       - uses: bayer-int/devops-autoken@v0.3.0
         with:
-          project: ${{ vars.SONAR_PROJECT_KEY }}
+          project: bayer-int_af-license-agreement-171817_ce02d861-5f80-4816-9b6f-1cc4000ba92f
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
-          apt-get update
-          apt-get install -y unzip curl git
-      - uses: sonarsource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            python3 python3-pip python3-venv \
+            unzip curl git \
+            libpq-dev gcc
+
+      - name: Install Python dependencies
+        working-directory: app
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements-dev.txt
+
+      - name: Run migrations
+        working-directory: app
+        run: python3 manage.py migrate --no-input
+
+      - name: Run tests and generate coverage report
+        working-directory: app
+        run: pytest
+
+      - name: Fix coverage.xml source path for SonarQube
+        working-directory: app
+        run: |
+          python3 -c "
+          import re, os
+          path = 'coverage.xml'
+          if not os.path.exists(path):
+              print('coverage.xml not found, skipping fix')
+              exit(0)
+          with open(path, 'r') as f:
+              content = f.read()
+          # Replace any local path inside <source> tags with container path
+          content = re.sub(r'<source>[^<]*optimizer</source>', '<source>/usr/src/optimizer</source>', content)
+          with open(path, 'w') as f:
+              f.write(content)
+          print('coverage.xml source path updated.')
+          "
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
+        with:
+          projectBaseDir: app
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
