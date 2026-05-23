@@ -1,0 +1,6 @@
+projectKey=sql-license-optimizer
+serverUrl=http://sonarqube:9000
+serverVersion=26.5.0.122743
+dashboardUrl=http://sonarqube:9000/dashboard?id=sql-license-optimizer
+ceTaskId=5802ad9a-cfed-4db3-a9a8-8c0051639b13
+ceTaskUrl=http://sonarqube:9000/api/ce/task?id=5802ad9a-cfed-4db3-a9a8-8c0051639b13

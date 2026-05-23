@@ -111,21 +111,24 @@ def _build_profile_initials(user) -> str:
     return (initials or "U").upper()
 
 
+
 def _build_profile_context(user, profile, form=None):
     """Build the display context expected by the profile page template."""
-    full_name = f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
-    display_name = full_name or user.username
+    first = (getattr(user, "first_name", "") or "").strip()
+    last = (getattr(user, "last_name", "") or "").strip()
+    full_name = f"{first} {last}".strip()
     return {
         "title": "Profile",
         "profile_form": form or UserProfileForm(instance=profile, user=user),
-        "profile_display_name": display_name,
+        "profile_display_name": full_name or user.username,
         "profile_initials": _build_profile_initials(user),
         "profile_email": user.email or "Not provided",
         "profile_username": user.username,
+        "profile_role": profile.get_role_display(),
         "profile_team_name": profile.team_name or "Not provided",
-        "profile_image_url": profile.image_url or "",
-        "profile_first_name": user.first_name or "Not provided",
-        "profile_last_name": user.last_name or "Not provided",
+        "profile_image_url": profile.image_url,
+        "profile_first_name": first,
+        "profile_last_name": last,
         "is_viewer_only": profile.is_viewer_only,
     }
 
@@ -2024,15 +2027,17 @@ def dashboard(request):
 @login_required
 def profile_page(request):
     """Display and update the logged-in user's profile details."""
+    from django.contrib.auth import update_session_auth_hash
     profile = _get_or_create_user_profile(request.user)
-    if request.method == "POST" and not profile.is_viewer_only:
-        form = UserProfileForm(request.POST, instance=profile, user=request.user)
+    if request.method == "POST":
+        form = UserProfileForm(request.POST, user=request.user, instance=profile)
         if form.is_valid():
             form.save()
+            update_session_auth_hash(request, request.user)
             messages.success(request, "Profile updated successfully.")
             return redirect("optimizer:profile")
     else:
-        form = UserProfileForm(instance=profile, user=request.user)
+        form = UserProfileForm(user=request.user, instance=profile)
     context = _build_profile_context(request.user, profile, form=form)
     return render(request, "optimizer/profile.html", context)
 

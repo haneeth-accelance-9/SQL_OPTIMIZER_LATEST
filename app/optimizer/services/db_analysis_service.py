@@ -220,6 +220,14 @@ def _normalize_hosting_zone(zone: Any) -> str:
     return str(zone or "").strip()
 
 
+def _normalize_install_status(device_status: Any, usu_status: Any, boones_status: Any) -> str:
+    """Return the first non-blank value from the three status fields."""
+    for val in (device_status, usu_status, boones_status):
+        s = str(val or "").strip()
+        if s:
+            return s
+    return ""
+
 
 def _build_installations_df() -> pd.DataFrame:
     """

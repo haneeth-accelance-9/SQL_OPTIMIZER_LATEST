@@ -210,7 +210,9 @@ def test_logout_works_for_anonymous(client):
 
 @pytest.mark.django_db
 def test_home_returns_200_for_authenticated_user(client):
+    from optimizer.models import UserProfile
     user = User.objects.create_user(username="homeuser", password="pass1234!")
+    UserProfile.objects.update_or_create(user=user, defaults={"role": "editor"})
     client.force_login(user)
     response = client.get(reverse("optimizer:home"))
     assert response.status_code == 200

@@ -57,51 +57,51 @@ class SignUpForm(UserCreationForm):
         return username
 
 
-class UserProfileForm(forms.ModelForm):
-    """Editable profile form combining auth user fields with profile metadata."""
+class UserProfileForm(forms.Form):
+    """Profile form: update email and optionally change password."""
 
-    first_name = forms.CharField(
-        max_length=150,
-        required=False,
-        widget=forms.TextInput(attrs={"placeholder": "First name", "autocomplete": "given-name"}),
-    )
-    last_name = forms.CharField(
-        max_length=150,
-        required=False,
-        widget=forms.TextInput(attrs={"placeholder": "Last name", "autocomplete": "family-name"}),
-    )
     email = forms.EmailField(
         required=False,
         widget=forms.EmailInput(attrs={"placeholder": "you@company.com", "autocomplete": "email"}),
     )
-
-    class Meta:
-        model = UserProfile
-        fields = ("first_name", "last_name", "email", "team_name", "image_url")
-        widgets = {
-            "team_name": forms.TextInput(attrs={"placeholder": "Your team or department"}),
-            "image_url": forms.URLInput(attrs={"placeholder": "https://example.com/profile-image.jpg"}),
-        }
+    password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={
+            "placeholder": "Leave blank to keep current password",
+            "autocomplete": "new-password",
+        }),
+    )
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user")
+        self.instance = kwargs.pop("instance", None)
         super().__init__(*args, **kwargs)
-        self.fields["first_name"].initial = self.user.first_name
-        self.fields["last_name"].initial = self.user.last_name
         self.fields["email"].initial = self.user.email
+        css = (
+            "mt-1 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 "
+            "text-sm text-slate-700 shadow-sm focus:border-sky-500 focus:outline-none "
+            "focus:ring-2 focus:ring-sky-200"
+        )
         for field in self.fields.values():
-            field.widget.attrs.setdefault(
-                "class",
-                "mt-1 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200",
-            )
+            field.widget.attrs.setdefault("class", css)
 
-    def save(self, commit=True):
-        profile = super().save(commit=False)
-        self.user.first_name = self.cleaned_data.get("first_name", "")
-        self.user.last_name = self.cleaned_data.get("last_name", "")
+    def clean_password(self):
+        password = self.cleaned_data.get("password")
+        if password:
+            if len(password) < 10:
+                raise ValidationError("Password must be at least 10 characters.")
+            if not any(c.isalpha() for c in password):
+                raise ValidationError("Password must contain at least one letter.")
+            if not any(c.isdigit() for c in password):
+                raise ValidationError("Password must contain at least one number.")
+        return password
+
+    def save(self):
         self.user.email = self.cleaned_data.get("email", "")
-        if commit:
-            self.user.save(update_fields=["first_name", "last_name", "email"])
-            profile.user = self.user
-            profile.save()
-        return profile
+        password = self.cleaned_data.get("password")
+        if password:
+            self.user.set_password(password)
+            self.user.save(update_fields=["email", "password"])
+        else:
+            self.user.save(update_fields=["email"])
+        return self.instance
