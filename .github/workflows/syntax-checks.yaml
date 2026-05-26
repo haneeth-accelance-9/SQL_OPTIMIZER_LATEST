@@ -46,6 +46,7 @@ jobs:
 
       - name: Prepare git
         run: |
+          git config --global --add safe. Directory '*'
           git config --global credential.helper 'store --file ~/.git-credentials'
           git config --global url."https://token:${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}@github.com/bayer-int".insteadOf https://github.com/bayer-int
 

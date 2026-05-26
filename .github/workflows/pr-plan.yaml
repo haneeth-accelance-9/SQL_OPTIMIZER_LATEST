@@ -1,5 +1,5 @@
 name: PR Plan
-
+ 
 on:
   pull_request:
     types: [opened, reopened, synchronize]
@@ -8,15 +8,15 @@ on:
       - dev
       - qa
       - prod
-
+ 
 permissions:
   pull-requests: write
   contents: read
   id-token: write
-
+ 
 env:
   TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION || '1.5.5' }}
-
+ 
 jobs:
   validate_and_plan:
     name: Validate and Plan
@@ -36,22 +36,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+ 
       - name: Install packages
         shell: bash
         working-directory: ./.github/workflows/scripts/
         run: |
           . install-terraform.sh && \
           . install-git.sh
-
+ 
       - name: Prepare
         run: |
+          git config --global --add safe.directory '*'
           git config --global credential.helper 'store --file ~/.git-credentials'
-          git config --global url."https://token:${{ secrets.ORG_REPOS_INTERNAL_READ_ONLY }}@github.com/bayer-int".insteadOf https://github.com/bayer-int
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+          git config --global url."https://token:${{ secrets.GH_PAT_MODULES }}@github.com/bayer-int".insteadOf https://github.com/bayer-int
+ 
       - name: Terraform Init
         working-directory: configuration
         run: |
@@ -61,13 +59,22 @@ jobs:
             -backend-config="storage_account_name=${{ vars.AZURE_TF_BACKEND_NAME }}" \
             -backend-config="container_name=${{ vars.AZURE_TF_BACKEND_CONTAINER_NAME }}" \
             -backend-config="key=${{ github.base_ref }}.tfstate"
-
+ 
       - name: Terraform Validate
         working-directory: configuration
         run: terraform validate
-
+ 
+      - name: Construct Grafana OTLP auth header
+        run: |
+          GRAFANA_AUTH=$(echo -n "${{ secrets.GRAFANA_USER }}:${{ secrets.GRAFANA_TOKEN }}" | base64 -w 0)
+          echo "OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic ${GRAFANA_AUTH}" >> $GITHUB_ENV
+ 
       - name: Terraform Plan
         working-directory: configuration
+        env:
+          TF_VAR_azure_apim_sub_key: ${{ secrets.APIM_SUBSCRIPTION_KEY }}
+          TF_VAR_runtime_otlp_endpoint: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          TF_VAR_otel_exporter_otlp_headers: ${{ env.OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
           terraform plan \
             -no-color \
@@ -78,7 +85,7 @@ jobs:
             terraform show -no-color tfplan | sed -E 's/^([[:space:]]+)([-+])/\2\1/g'
             echo EOF
           } >> "$GITHUB_ENV"
-
+ 
       - name: Create comment with plan
         uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc # v2.8.2
         with:
