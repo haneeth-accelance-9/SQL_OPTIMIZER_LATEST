@@ -1,0 +1,308 @@
+**DATABASE MIGRATION DOCUMENT**
+
+PostgreSQL → Azure Cosmos DB for PostgreSQL
+
+| **Project** | AF License Agreement — 171817 |
+| --- | --- |
+| **Prepared by** | Platform / DevOps Team |
+| **Date** | 04 June 2026 |
+| **Version** | 1.0 |
+| **Status** | Final |
+| **Branch** | db_migration_fixes |
+
+# 1.  Executive Summary
+
+This document describes all configuration and code changes made to migrate the af-license-agreement-171817 Django application database backend from Azure Database for PostgreSQL Flexible Server to Azure Cosmos DB for PostgreSQL (Citus-based distributed PostgreSQL). No data migration was required; the change is purely at the connection-configuration and infrastructure-definition level.
+
+Because Cosmos DB for PostgreSQL is fully wire-compatible with standard PostgreSQL, the Django ORM, all models, migrations, ArrayField usage, JSONField usage, psycopg2-binary driver, and CI test containers were left untouched.
+
+# 2.  Scope
+
+**In scope:**
+
+Application settings defaults (settings.py)
+
+Developer environment example configuration (.env.example)
+
+Terraform infrastructure variable definitions and values
+
+CI/CD deploy pipeline variable mapping
+
+Code documentation (module docstring in models.py)
+
+**Out of scope:**
+
+Data migration — not required (new cluster, fresh schema via Django migrate)
+
+Django ORM models, migrations, or query code
+
+psycopg2-binary driver (same driver for both services)
+
+CI test containers (local postgres:15 containers remain correct for unit tests)
+
+Azure infrastructure provisioning (handled by the team after this change)
+
+# 3.  Why Azure Cosmos DB for PostgreSQL
+
+Azure Cosmos DB for PostgreSQL (formerly Hyperscale / Citus) was selected as the migration target for the following reasons:
+
+PostgreSQL wire-protocol compatible — zero ORM code changes required.
+
+Managed, fully-integrated Azure service with private endpoints and SSL enforcement.
+
+Horizontal scale-out capability for future growth (distributed tables via Citus extension).
+
+Supports all PostgreSQL extensions used by the application: ArrayField, JSONField, partial indexes.
+
+Unified Azure resource alongside the existing CosmosDB NoSQL account.
+
+# 4.  Key Connection Differences vs. PostgreSQL Flexible Server
+
+| **Attribute** | **Azure PostgreSQL Flexible Server** | **Azure Cosmos DB for PostgreSQL** |
+| --- | --- | --- |
+| **Host format** | <server>.postgres.database.azure.com | c-<cluster>.<id>.postgres.cosmos.azure.com |
+| **Default DB name** | Configurable (was: mvp6) | citus |
+| **Admin user** | Configurable (was: pgadmin) | citus |
+| **Port** | 5432 | 5432  (unchanged) |
+| **SSL** | sslmode=require  (Azure-only) | sslmode=require  (unchanged) |
+| **Driver** | psycopg2-binary | psycopg2-binary  (unchanged) |
+| **Django ENGINE** | django.db.backends.postgresql | django.db.backends.postgresql  (unchanged) |
+
+# 5.  Files Changed
+
+## 5.1  app/sql_license_optimizer/settings.py
+
+The Django database configuration defaults were updated to match the Cosmos DB for PostgreSQL defaults so the application connects correctly when environment variables are not explicitly supplied.
+
+**Change 1 — Default database user:**
+
+  # Before
+
+  "USER": os.environ.get("DB_USER", "postgres"),
+
+  # After
+
+  "USER": os.environ.get("DB_USER", "citus"),
+
+**Change 2 — Default database name:**
+
+  # Before
+
+  "NAME": os.environ.get("DB_NAME", "mvp6"),
+
+  # After
+
+  "NAME": os.environ.get("DB_NAME", "citus"),
+
+Note: The existing SSL detection logic (endswith('.azure.com')) was not changed. Cosmos DB for PostgreSQL hostnames end in .postgres.cosmos.azure.com, which already satisfies the condition, so SSL options are applied automatically.
+
+## 5.2  app/.env.example
+
+A dedicated database configuration section was added so developers have a complete reference for the Cosmos DB for PostgreSQL connection variables. The existing CosmosDB NoSQL section was clarified to distinguish it from the relational DB.
+
+**Added section:**
+
+# ============================================================
+
+# Database Configuration — CosmosDB for PostgreSQL
+
+# ============================================================
+
+DB_ENGINE=postgresql
+
+DB_HOST=c-<cluster-name>.<uniqueid>.postgres.cosmos.azure.com
+
+DB_NAME=citus
+
+DB_USER=citus
+
+DB_PASSWORD=your-cosmosdb-postgres-password
+
+DB_PORT=5432
+
+DB_SSL_MODE=require
+
+## 5.3  configuration/terraform.tfvars
+
+The production Container App environment variables were updated to point at the Cosmos DB for PostgreSQL cluster. A placeholder host FQDN is used; the team will replace it with the actual cluster FQDN after Azure provisioning.
+
+| **Variable** | **Old value** | **New value** |
+| --- | --- | --- |
+| **DB_HOST** | psql-mvp6-9280-sandbox.privatelink.postgres.database.azure.com | c-<cluster-name>.<uniqueid>.postgres.cosmos.azure.com |
+| **DB_USER** | pgadmin | citus |
+| **DB_NAME** | mvp6 | citus |
+| **DB_PORT** | 5432 | 5432  (unchanged) |
+| **DB_SSL_MODE** | require | require  (unchanged) |
+
+**Comment block updated:**
+
+  # Before
+
+  # sensitive var.postgres_admin_password as the DB_PASSWORD secret.
+
+  # MUST be the *privatelink* FQDN, not "<srv>.postgres.database.azure.com"
+
+  # After
+
+  # Azure Cosmos DB for PostgreSQL (Citus). Password injected from
+
+  # var.cosmosdb_postgres_password. Host ends with .azure.com so
+
+  # settings.py applies sslmode=require automatically.
+
+## 5.4  configuration/variables.tf
+
+The Terraform variable holding the database admin password was renamed from postgres_admin_password to cosmosdb_postgres_password. The description was updated to reference Cosmos DB for PostgreSQL. No default value or sensitivity setting was changed.
+
+  # Before
+
+  variable "postgres_admin_password" {
+
+    description = "Admin password for the PostgreSQL Flexible Server..."
+
+    type        = string
+
+    default     = ""
+
+    sensitive   = true
+
+  }
+
+  # After
+
+  variable "cosmosdb_postgres_password" {
+
+    description = "Admin password for the Azure Cosmos DB for PostgreSQL cluster..."
+
+    type        = string
+
+    default     = ""
+
+    sensitive   = true
+
+  }
+
+## 5.5  configuration/main.tf
+
+The reference to the renamed Terraform variable was updated in the locals block that injects DB_PASSWORD as a Container App secret.
+
+  # Before
+
+  var.postgres_admin_password != "" ? { DB_PASSWORD = var.postgres_admin_password } : {},
+
+  # After
+
+  var.cosmosdb_postgres_password != "" ? { DB_PASSWORD = var.cosmosdb_postgres_password } : {},
+
+The inline comment above this expression was updated to describe Cosmos DB for PostgreSQL instead of Azure PostgreSQL Flexible Server.
+
+## 5.6  .github/workflows/deploy.yaml
+
+The Terraform plan step passes the database password from a GitHub environment secret into a Terraform variable. The variable name argument was updated to match the renamed variable. The GitHub secret itself (POSTGRES_ADMIN_PASSWORD) is unchanged — no repository admin action is required.
+
+  # Before
+
+  -var="postgres_admin_password=${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
+
+  # After
+
+  -var="cosmosdb_postgres_password=${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
+
+## 5.7  app/optimizer/models.py
+
+The module-level docstring that documents the minimum DATABASES settings.py configuration was updated to reflect Cosmos DB for PostgreSQL as the backend, show the correct host format, and use the correct default user and database name.
+
+  # Before
+
+  # MVP6 License Agent — Django Models
+
+  # Azure Database for PostgreSQL Flexible Server backend.
+
+  # "HOST": env("DB_HOST"),  # <server>.postgres.database.azure.com
+
+  # After
+
+  # MVP6 License Agent — Django Models
+
+  # Azure Cosmos DB for PostgreSQL (Citus) backend.
+
+  # "HOST": env("DB_HOST"),  # c-<cluster>.<id>.postgres.cosmos.azure.com
+
+# 6.  Files Intentionally Not Changed
+
+| **File / Component** | **Reason unchanged** |
+| --- | --- |
+| **app/requirements.txt** | psycopg2-binary is the correct driver for Cosmos DB for PostgreSQL — no substitute needed. |
+| **app/Dockerfile** | No system libpq package required; psycopg2-binary bundles its own libpq. |
+| **app/optimizer/models.py  (code)** | All 16 Django models, ArrayField, JSONField, FK relationships work unchanged with Cosmos DB for PostgreSQL. |
+| **app/optimizer/migrations/  (12 files)** | Migrations apply identically; Cosmos DB for PostgreSQL is standard PostgreSQL under the hood. |
+| **app/sql_license_optimizer/settings.py — ENGINE** | django.db.backends.postgresql is the correct backend for both services. |
+| **app/sql_license_optimizer/settings.py — SSL logic** | endswith('.azure.com') already matches *.postgres.cosmos.azure.com. |
+| **.github/workflows/pr-check.yaml** | Local postgres:15 container is correct for Django unit tests; no reason to point CI at production. |
+| **.github/workflows/scan-tools.yml** | Same reasoning — local postgres container for SonarQube test coverage run. |
+| **agent/liscence-optimizer/src/guardrails.py** | The postgresql:// regex is a security guardrail on LLM output, not a connection config. |
+| **configuration/outputs.tf** | No PostgreSQL-specific outputs existed; cosmosdbaccount_endpoint output for NoSQL is unrelated. |
+
+# 7.  Deployment Checklist
+
+The following steps must be completed in order after this code change is merged:
+
+**  1.  Provision Azure Cosmos DB for PostgreSQL cluster**
+
+Create the cluster via Azure Portal or Terraform. Note the FQDN: c-<cluster>.<id>.postgres.cosmos.azure.com
+
+**  2.  Update DB_HOST in terraform.tfvars**
+
+Replace the placeholder FQDN in configuration/terraform.tfvars with the actual cluster FQDN.
+
+**  3.  Update GitHub secret (if password changed)**
+
+If a new password was set for the Cosmos DB for PostgreSQL admin user, update the POSTGRES_ADMIN_PASSWORD GitHub environment secret.
+
+**  4.  Run terraform apply**
+
+Apply the Terraform configuration to push updated DB_HOST, DB_USER, DB_NAME, and DB_PASSWORD into the Container App environment.
+
+**  5.  Run Django migrations**
+
+SSH/exec into the Container App or run: python manage.py migrate --no-input. This creates all 16 tables, indexes, and the rate_limit_cache table on the new cluster.
+
+**  6.  Run createcachetable**
+
+python manage.py createcachetable  — provisions the DatabaseCache table for login rate-limiting (the Dockerfile CMD already includes this).
+
+**  7.  Verify application health**
+
+Check the /health/ endpoint and confirm the Container App health probe is passing. Inspect Azure Monitor logs for DB connection errors.
+
+**  8.  Seed license rules**
+
+python manage.py seed_license_rules  — if the environment requires initial rule data.
+
+# 8.  Rollback Plan
+
+Because no data migration was performed, rollback requires only reverting the configuration changes:
+
+Revert the configuration/terraform.tfvars DB_HOST, DB_USER, DB_NAME to the original Flexible Server values.
+
+Revert the TF variable name in variables.tf, main.tf, and deploy.yaml to postgres_admin_password.
+
+Run terraform apply to restore the old Container App environment variables.
+
+No data restoration is required as no data was written to or deleted from either cluster during the migration.
+
+# 9.  Change Summary
+
+| **File** | **Type** | **Change** |
+| --- | --- | --- |
+| **app/sql_license_optimizer/settings.py** | Config | DB_USER default: postgres → citus; DB_NAME default: mvp6 → citus |
+| **app/.env.example** | Documentation | Added Database Configuration section; clarified CosmosDB NoSQL section label |
+| **app/optimizer/models.py** | Documentation | Updated module docstring: Flexible Server → Cosmos DB for PostgreSQL; updated host format and default values |
+| **configuration/terraform.tfvars** | Infrastructure | DB_HOST → CosmosDB FQDN placeholder; DB_USER pgadmin → citus; DB_NAME mvp6 → citus; updated comments |
+| **configuration/variables.tf** | Infrastructure | Renamed postgres_admin_password → cosmosdb_postgres_password; updated description |
+| **configuration/main.tf** | Infrastructure | Updated variable reference and inline comment |
+| **.github/workflows/deploy.yaml** | CI/CD | Updated Terraform -var argument name; GitHub secret POSTGRES_ADMIN_PASSWORD unchanged |
+
+────────────────────────────────────────────────────────────
+
+af-license-agreement-171817  ·  Migration Document v1.0  ·  04 June 2026  ·  Confidential — Internal Use Only
