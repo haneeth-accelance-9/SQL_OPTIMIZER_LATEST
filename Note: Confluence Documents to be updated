@@ -1,0 +1,10 @@
+Changes to be done on Confluence
+
+1. Architecture Decision Records Page
+    ADR 1,2, & 4 to be removed 
+    ADR3 date to be updated to the date Renne approved the ADR - To this, please refer to the comment section of the same page. 
+
+
+2. User Management Page
+    Under RBAC, there were Admin, Editor & Viewer roles earlier
+    This needs to be changed to Editor only. 
