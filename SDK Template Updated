@@ -1,0 +1,404 @@
+# **1\. System Overview**
+
+## **1.1  Components**
+
+| Component | Technology | Port | Purpose |
+| :---- | :---- | :---- | :---- |
+| Django App | Python / Django / Gunicorn | 8000 | Web UI, database, API endpoints |
+| A2A Agent | Python / FastAPI / agentic-ai-sdk | 8001 | Phased AI orchestration, rule evaluation, report generation |
+| Azure OpenAI | gpt-4o via Azure APIM | 443 | LLM inference for both phases |
+| Cosmos DB | Azure NoSQL | 443 | Inter-phase result storage |
+| Azure Container Apps | Azure managed containers | — | Production runtime for App and Agent |
+| Grafana Cloud | Loki / Tempo / Prometheus | 443 | Logs, traces, and metrics via OTLP |
+
+## **1.2  Architecture**
+
+| Browser / API Client        |        v  Django App (port 8000\)  \--\>  ai\_report\_generator.py  \--\>  agent\_client.py                                                                   |                                                       JSON-RPC 2.0  HTTP POST                                                                   v                                               A2A Agent (port 8001\)  A2AFactory().create\_server()                                                                   |                                    \+--------------+--------------+                                    |                              |                           PHASE 1 (gpt-4o)              PHASE 2 (gpt-4o)                    evaluate\_optimization\_rules()    report\_generator()  export\_report()                    store\_phase\_result()  \--------\>  get\_phase\_result()                                    |                              |                               Cosmos DB  \<──────────────────\>  Cosmos DB                                                                   |                                               Final Markdown returned to Django |
+| :---- |
+
+# **2\. How the App Calls the Agent**
+
+## **2.1  Entry Point**
+
+File:   |  Function: 
+
+1. Parses optional JSON body for usecase\_id and notes.
+
+2. Loads VM/host records from the database as a DataFrame.
+
+3. Runs compute\_live\_db\_metrics() — live snapshot of PAYG candidates, retired devices, rightsizing.
+
+4. Packages pre-computed strategy data via build\_agent\_strategy\_results\_payload().
+
+5. Passes everything to generate\_and\_store\_agentic\_report().
+
+## **2.2  Service Layer**
+
+File:   |  Function: 
+
+6. Creates an AgentRun database record with status \= running.
+
+7. Calls call\_agent\_generate\_report() to obtain the report.
+
+8. Creates OptimizationCandidate rows from evaluation results.
+
+9. Updates AgentRun to status \= completed or failed, with duration, token usage, and cost.
+
+## **2.3  HTTP Transport**
+
+File:   |  Function: 
+
+* Sends a JSON-RPC 2.0 message/send POST to the agent (default port 8001).
+
+* Payload: usecase\_id, records (full VM list), strategy\_results, notes.
+
+* If AGENT\_A2A\_ENDPOINT is unset or points at localhost, call is skipped entirely.
+
+| Setting | Default | Description |
+| :---- | :---- | :---- |
+| AGENT\_A2A\_ENDPOINT | http://localhost:8001 | URL of the A2A agent server |
+| AGENT\_A2A\_TIMEOUT | 120 s | Per-call HTTP timeout |
+| AGENT\_A2A\_MAX\_RETRIES | 2 | Retry attempts before fallback |
+| AGENT\_A2A\_RETRY\_BACKOFF | 5 s | Wait between retries |
+
+# **3\. Complete Agent Flow — End to End**
+
+| Step | Action | Details |
+| :---- | :---- | :---- |
+| **1** | HTTP Trigger | POST /api/agent-runs/trigger/  →  api\_trigger\_agent\_run() Collects: records, usecase\_id, strategy\_results, notes Creates AgentRun DB record  (status \= running) |
+| **2** | Input Sanitisation | src/guardrails.py runs before any data reaches the agent Strips control characters, blocks prompt-injection patterns Caps: notes → 2000 chars, usecase\_id → 120 chars, records → max 2000 VMs |
+| **3** | JSON-RPC Payload Sent | agent\_client.py  →  call\_a2a\_task() Message \= JSON: {usecase\_id, records, strategy\_results, notes} Wrapped in JSON-RPC 2.0 envelope  |  HTTP POST to agent port 8001 |
+| **4** | Agent Server Receives | A2AFactory().create\_server() is already running (FastAPI, port 8001\) SDK phased orchestrator activates  |  executor type \= phased\_orchestration |
+| **5** | Phase 1 — LLM Call | System prompt \+ Phase 1 instructions \+ user JSON → gpt-4o LLM must output \[REASONING\]: … before every tool call |
+| **6** | Phase 1 — Tool Execution | LLM calls evaluate\_optimization\_rules(records\_json)   → rules\_loader loads configs/rules.base.yaml (6 rules)   → rules\_evaluator runs every record through every rule \+ 8 rightsizing engines   → assess\_data\_quality() checks completeness and accuracy LLM calls store\_phase\_result('analysis\_phase', evaluation)  → Cosmos DB LLM calls store\_phase\_result('input\_data', {usecase\_id, strategy\_results})  → Cosmos DB |
+| **7** | Phase 2 — LLM Call | System prompt \+ Phase 2 instructions → gpt-4o  (fresh LLM call, no user message) |
+| **8** | Phase 2 — Tool Execution | LLM calls get\_phase\_result('analysis\_phase')  ← Cosmos DB LLM calls get\_phase\_result('input\_data')       ← Cosmos DB LLM calls report\_generator → builds deterministic Markdown scaffold LLM polishes scaffold → writes final executive Markdown LLM calls export\_report(content, filename) → saves .md file |
+| **9** | Output & Persist | guardrails.filter\_llm\_output() — blocks credentials, caps to 40,000 chars Final Markdown returned to Django OptimizationCandidate rows created  |  AgentRun saved (status \= completed) |
+
+# **4\. Phased Orchestrator Template**
+
+The agentic-ai-sdk executor type phased\_orchestration (configs/config.yaml) runs numbered phases sequentially — each is a full LLM call with its own instructions.
+
+## **4.1  Agent Configuration**
+
+| Setting | Value |
+| :---- | :---- |
+| Model | gpt-4o  (via Azure APIM — AZURE\_OPENAI\_DEPLOYMENT\_NAME) |
+| Temperature | 0.0  (deterministic output) |
+| Max tokens | 50,000 |
+| Executor | phased\_orchestration |
+| Phases | 2  (Analysis → Report Generation) |
+
+## **4.2  Tools Available to the LLM**
+
+| Tool | Type | Phase |
+| :---- | :---- | :---- |
+| evaluate\_optimization\_rules | Custom | Phase 1 |
+| report\_generator | Custom | Phase 2 |
+| export\_report | Custom | Phase 2 |
+| store\_phase\_result | SDK built-in | Phase 1  (saves to Cosmos DB) |
+| get\_phase\_result | SDK built-in | Phase 2  (reads from Cosmos DB) |
+| list\_available\_files / calculator / execute\_sql\_query | SDK built-in | Either phase |
+
+## **4.3  Phase Instructions  (configs/config.yaml)**
+
+### **Phase 1 — Analysis**
+
+10. Parse usecase\_id, records, strategy\_results, notes from the user message.
+
+11. Call evaluate\_optimization\_rules with the records.
+
+12. Store evaluation results in Cosmos DB via store\_phase\_result('analysis\_phase').
+
+13. Store input metadata in Cosmos DB via store\_phase\_result('input\_data').
+
+### **Phase 2 — Report Generation**
+
+14. Retrieve Phase 1 results from Cosmos DB via get\_phase\_result.
+
+15. Call report\_generator to build a deterministic Markdown scaffold.
+
+16. Polish the scaffold into a final executive Markdown report — Markdown only, no JSON or tool names.
+
+17. Save the report to disk via export\_report.
+
+# **5\. Prompt Definition & Passing**
+
+## **5.1  Prompt Sources**
+
+| \# | File | Type | Used In |
+| :---- | :---- | :---- | :---- |
+| 1 | configs/config.yaml | System prompt | Every LLM call |
+| 2 | configs/config.yaml | Phase 1 instructions | Phase 1 only |
+| 3 | configs/config.yaml | Phase 2 instructions | Phase 2 only |
+| 4 | prompts/executive\_summary.base.md | Report template | Loaded by report\_generator, baked into scaffold |
+
+## **5.2  System Prompt**
+
+* Identity: IT license optimization agent for Bayer infrastructure.
+
+* Purpose: evaluate virtualization licensing rules against VM/host data, produce executive-facing optimization reports.
+
+* Hard constraints: complete all phases autonomously, use ONLY numbers from tool results — never invent counts or savings, do not expose tool names or SDK internals in output.
+
+* Required format: before calling any tool output \[REASONING\]: \<1-2 sentence explanation\>.
+
+## **5.3  User Message**
+
+Assembled by Django (agent\_client.py) and sent as the JSON-RPC text part:
+
+* usecase\_id — identifier for the optimization use case.
+
+* records — full VM inventory list.
+
+* strategy\_results — pre-computed PAYG, retired device, and rightsizing summaries.
+
+* notes — optional free-text annotation.
+
+## **5.4  Report Template  (prompts/executive\_summary.base.md)**
+
+Loaded by report\_generator. Defines output structure and style rules:
+
+* Sections: Executive Summary, Overview, Key Findings table, Use Case Results (per rule), Recommended Actions, Risks / Caveats.
+
+* Style: concise, executive-facing, actionable. Bullet points and short paragraphs. Use only provided data.
+
+# **6\. How the Agent Connects to the LLM**
+
+Each phase in the orchestrator triggers a full, independent LLM conversation. The SDK manages the entire client lifecycle — there are no direct Azure OpenAI calls in the application code.
+
+| Step | Action | Details |
+| :---- | :---- | :---- |
+| **1** | Phase Trigger | SDK phased orchestrator activates Phase 1 or Phase 2 as configured in configs/config.yaml. Each phase is a self-contained LLM conversation with its own instructions. |
+| **2** | LLM Config Read | SDK reads LLM gateway settings from configs/config.yaml at server startup. Provider: azure\_openai  |  All connection details (endpoint, deployment, API version, API key) are resolved from environment variables. No credentials are hardcoded anywhere in the application code. |
+| **3** | Azure OpenAI Client Init | SDK initialises an AzureOpenAI client internally using the openai package. All requests are routed through the Azure APIM gateway — not directly to Azure OpenAI. Client is created once at startup and reused across all phase calls. |
+| **4** | Prompt Assembly | System prompt (configs/config.yaml) sets agent identity, constraints, and output format rules. Phase-specific instructions (configs/config.yaml) tell the LLM exactly what to do in this phase. User message is the A2A payload: records, strategy\_results, usecase\_id, notes. |
+| **5** | HTTP Request to LLM | Chat completion POST sent to AZURE\_OPENAI\_ENDPOINT (Azure APIM). Model: AZURE\_OPENAI\_DEPLOYMENT\_NAME (gpt-4o)  |  Temperature: 0.0  |  Max tokens: 50,000. LLM is instructed to output \[REASONING\]: \<explanation\> before every tool call. |
+| **6** | Tool Call Handling | If the LLM response contains a tool call, the SDK routes it to the matching function in src/tools/. Tool result is returned to the LLM as the next message. Loop repeats until the LLM produces a final text response. |
+| **7** | Phase Output | Phase 1: LLM stores evaluation results in Cosmos DB via the SDK built-in store\_phase\_result(). Phase 2: Final Markdown report returned through the A2A response back to Django. |
+
+## **6.1  LLM Configuration Reference**
+
+| Setting | Value | Source |
+| :---- | :---- | :---- |
+| Provider | azure\_openai | configs/config.yaml |
+| Model | gpt-4o | AZURE\_OPENAI\_DEPLOYMENT\_NAME  (env) |
+| Endpoint | Azure APIM gateway URL | AZURE\_OPENAI\_ENDPOINT  (env) |
+| API Key | APIM subscription key | AZURE\_OPENAI\_API\_KEY  (env) |
+| API Version | 2024-12-01-preview | AZURE\_OPENAI\_API\_VERSION  (env) |
+| Temperature | 0.0  (fully deterministic) | configs/config.yaml |
+| Max Tokens | 50,000 | configs/config.yaml |
+
+# **7\. Tools**
+
+## **7.1  Tool Overview**
+
+| Tool | File | Phase | Uses LLM? |
+| :---- | :---- | :---- | :---- |
+| evaluate\_optimization\_rules | evaluate\_optimization\_rules.py | Phase 1 | No — pure Python |
+| report\_generator | report\_generator.py | Phase 2 | No — deterministic scaffold |
+| export\_report | export\_report\_tool.py | Phase 2 | No — file write |
+| read\_file\_content | read\_file\_tool.py | Utility | No — file read |
+
+## **7.2  evaluate\_optimization\_rules  (Phase 1\)**
+
+File: 
+
+18. Validates records\_json is a list.
+
+19. Calls assess\_data\_quality() — checks completeness, accuracy, consistency.
+
+20. Loads configs/rules.base.yaml via rules\_loader.
+
+21. Runs every record through all 6 rules via rules\_evaluator.
+
+22. 8 internal engines calculate exact CPU/RAM rightsizing.
+
+23. Compacts results to top 3 examples per rule.
+
+24. Returns JSON: {evaluation, summary, data\_quality}.
+
+## **7.3  report\_generator  (Phase 2\)**
+
+File: 
+
+Builds a deterministic Markdown scaffold with real numbers baked in. The LLM polishes language only — it cannot invent figures.
+
+| Section | Content Source |
+| :---- | :---- |
+| Executive Summary | Candidate counts \+ EUR savings from strategy\_results |
+| Data Quality | Completeness %, accuracy flags |
+| Portfolio Snapshot | Strategy KPIs table |
+| Rule Coverage Table | rule\_id | matched\_count |
+| Per-Rule Details | Top 3-5 example hostnames per rule |
+| Recommendations | Sorted by savings impact |
+| Evidence / Risks & Caveats | Strategy bullets \+ data quality warnings |
+
+## **7.4  export\_report  (Phase 2\)**
+
+File: 
+
+* Saves final Markdown to a .md file. Auto-generates timestamp filename if none provided.
+
+* Returns file path, size, and confirmation.
+
+## **7.5  Internal Modules  (not callable by the LLM)**
+
+| Module | File | Purpose |
+| :---- | :---- | :---- |
+| rules\_evaluator | src/tools/rules\_evaluator.py | Runs rules against records; 8 CPU/RAM rightsizing engines |
+| rules\_loader | src/tools/rules\_loader.py | Loads and merges YAML rules files |
+| guardrails | src/guardrails.py | Prompt injection protection, output filtering |
+
+# **8\. Deployment**
+
+## **8.1  Resource Layout  (Azure Container Apps)**
+
+| Azure Resource Group: rg-ac-license-agreement-171817-sandbox   \+-- Azure Container Registry     \<acr\>.azurecr.io/\<project\>/agent:latest   \+-- Container App Environment         \+-- Agent Container App    port 8001  (liscence-optimizer)         \+-- App Container App      port 8000  (Django)         \+-- UI Container App       port 3000   \+-- Cosmos DB                   agent memory / phase results   \+-- Azure APIM Gateway          proxies gpt-4o calls |
+| :---- |
+
+## **8.2  Environment Sizes**
+
+| Environment | Min Replicas | Max Replicas | CPU | Memory |
+| :---- | :---- | :---- | :---- | :---- |
+| sandbox / test | 1 | 2 | 0.5 vCPU | 1 Gi |
+| staging | 1 | 5 | 0.75 vCPU | 1.5 Gi |
+| prod | 2 | 10 | 1.0 vCPU | 2 Gi |
+
+## **8.3  Required Runtime Environment Variables**
+
+| Variable | Purpose |
+| :---- | :---- |
+| AZURE\_OPENAI\_ENDPOINT / API\_KEY / DEPLOYMENT\_NAME | Azure APIM gateway for LLM calls |
+| COSMOSDB\_ENDPOINT / COSMOSDB\_KEY | Cosmos DB for phase result storage |
+| RUNTIME\_OTLP\_ENDPOINT | Grafana Cloud OTLP gateway URL |
+| OTEL\_EXPORTER\_OTLP\_HEADERS | Base64-encoded Grafana auth header |
+| MANAGED\_IDENTITY\_CLIENT\_ID | Azure Managed Identity (passwordless auth) |
+| DEPLOYMENT\_ENVIRONMENT | sandbox / test / staging / prod |
+
+# **9\. App-Side Logging & Observability**
+
+The following modules were introduced or updated to provide structured logging, request correlation, PII protection, and OpenTelemetry export from the Django application.
+
+## **9.1  New Files**
+
+| File | Purpose |
+| :---- | :---- |
+| optimizer/logger.py | DailyLevelFileHandler: writes JSON logs to logs/YYYY-MM-DD/\<level\>.log with daily rotation (one file per level per day).JsonFormatter: one-line JSON per record including trace\_id and span\_id for Loki → Tempo correlation.RequestIdFilter: stamps request\_id on every log record.get\_request\_id() / set\_request\_id(): ContextVar helpers for cross-boundary correlation. |
+| sql\_license\_optimizer/observability.py | configure\_observability(): wires OTLP/HTTP export to Grafana Cloud for logs, traces, and metrics.Auto-instruments Django via DjangoInstrumentor (HTTP request/response spans added automatically).Truncates log messages at 200 KB (Grafana Loki limit). PII redaction filter applied to OTLP handler.Resource labels on every signal: service.name, cell\_identifier, beat\_id, app\_squad. |
+| optimizer/clients/base.py | BaseIntegrationClient: abstract base class for all external service clients.Built-in retry logic with linear backoff (MAX\_RETRIES \= 3).IntegrationError dataclass: service name, message, HTTP status code, retryable flag. |
+
+## **9.2  Updated Files**
+
+| File | What Changed |
+| :---- | :---- |
+| optimizer/middleware.py | RequestIdMiddleware: generates a UUID per request, attaches to X-Request-ID response header, stored in ContextVar for full-request scope.RequestIdFilter: attaches request\_id to all log records at root logger scope.PiiRedactingFilter: regex-redacts email addresses from log messages and structured fields — applied to console, files, and OTLP export. |
+| optimizer/clients/llm\_client.py | Consolidated Azure OpenAI client replacing scattered inline calls.LLMClientConfig dataclass centralises all Azure OpenAI settings.New methods: complete(), complete\_with\_usage(), calculate\_cost\_eur(), health\_check(). |
+| optimizer/services/analysis\_logs.py | New build\_analysis\_summary\_metrics(): compact metric snapshot for logging.New serialize\_analysis\_log(): structured JSON payload for audit trail output. |
+| sql\_license\_optimizer/settings.py | New LOGGING dict: JSON formatter, per-level file handlers (debug / info / warning / error), request\_id and PII filters wired globally.Per-subsystem debug dials: SQL\_DEBUG, LLM\_DEBUG, CLIENTS\_DEBUG.New Grafana / OTLP config block: RUNTIME\_OTLP\_ENDPOINT, OTEL\_EXPORTER\_OTLP\_HEADERS, cell/squad/beat resource labels. |
+
+## **9.3  Debug Environment Variables**
+
+| Variable | Effect | Default |
+| :---- | :---- | :---- |
+| LOG\_LEVEL | Global log level for all loggers | INFO |
+| LOG\_TO\_FILES | Enable daily file rotation to logs/YYYY-MM-DD/\<level\>.log | On when DEBUG=true, off in prod |
+| SQL\_DEBUG | Log every SQL query with execution timing | false |
+| LLM\_DEBUG | Trace all LLM and agent client calls | false |
+| CLIENTS\_DEBUG | Trace all external service client calls (Cosmos, Grafana, agent) | false |
+
+# **10\. Grafana Observability — UI Application**
+
+The Django application ships logs, traces, and metrics to Grafana Cloud over OTLP/HTTP. Observability is wired once in sql\_license\_optimizer/observability.py and activated at server startup — no manual instrumentation is required in individual views or services.
+
+## **10.1  Startup & Initialisation**
+
+| Step | What Happens | File |
+| :---- | :---- | :---- |
+| 1 | Django app fully loads (LOGGING dictConfig runs, all handlers registered) | wsgi.py / asgi.py |
+| 2 | configure\_observability() called immediately after — must be after step 1 or OTLP handler is overwritten by dictConfig | observability.py |
+| 3 | LoggerProvider, TracerProvider, and MeterProvider created with shared resource attributes and registered as global providers | observability.py |
+| 4 | \_TruncatingHandler attached to root, optimizer, django, and django.request loggers — all app log records now flow to Loki | observability.py |
+| 5 | DjangoInstrumentor().instrument() auto-instruments all Django HTTP request handling — traces and HTTP metrics created automatically | observability.py |
+
+## **10.2  Three Signal Pipelines**
+
+| Signal | Grafana Product | Export Endpoint | What Is Sent |
+| :---- | :---- | :---- | :---- |
+| Logs | Loki | /v1/logs | Every logger.\* call across the app — view calls, agent calls, errors, fallback triggers, request lifecycle |
+| Traces | Tempo | /v1/traces | One span per HTTP request. Nested child spans where DjangoInstrumentor can detect them. Linked by trace\_id to Loki entries. |
+| Metrics | Prometheus | /v1/metrics | Auto: HTTP request count, latency histogram, active requests (from DjangoInstrumentor). Custom: any instrument created via get\_meter(). |
+
+## **10.3  Key Components**
+
+| Component | File | Purpose |
+| :---- | :---- | :---- |
+| configure\_observability() | sql\_license\_optimizer/observability.py | Main wiring function. Creates all three providers, attaches OTLP exporters, runs DjangoInstrumentor. Called once per worker process. |
+| \_TruncatingHandler | sql\_license\_optimizer/observability.py | Custom LoggingHandler that truncates messages exceeding 200 KB before sending to Loki (Loki rejects entries \> 262 KB). Works on a copy — console and file handlers still receive the full message. |
+| get\_meter(name) | sql\_license\_optimizer/observability.py | Factory for OTEL Counters and Histograms. Safe to call before configure\_observability() — returns a no-op meter if OTLP is not configured. |
+| RequestIdMiddleware | optimizer/middleware.py | Generates a 12-character UUID for every incoming request. Stores it in a ContextVar and appends it to the X-Request-ID response header. |
+| RequestIdFilter | optimizer/middleware.py | Logging filter attached to the root logger. Stamps request\_id on every LogRecord so all log lines for a request share the same ID in Loki. |
+| PiiRedactingFilter | optimizer/middleware.py | Regex-redacts email addresses from log messages and structured extra fields. Attached separately to console, file handlers, and the OTLP handler to cover all three destinations. |
+| JsonFormatter | optimizer/logger.py | Formats each log record as a single JSON line. Includes trace\_id and span\_id when emitted inside an active OTEL span, enabling direct Loki → Tempo correlation. |
+| DailyLevelFileHandler | optimizer/logger.py | Writes logs to logs/YYYY-MM-DD/\<level\>.log with daily rotation. Used in development (LOG\_TO\_FILES=true). Not used in production — OTLP export handles prod log shipping. |
+
+## **10.4  Resource Labels on Every Signal**
+
+These attributes are stamped on every log entry, trace span, and metric point exported to Grafana, enabling unified filtering across all three products.
+
+| Attribute | Value | Set By |
+| :---- | :---- | :---- |
+| service.name | af-license-agreement-171817  (matches the agent) | OTEL\_SERVICE\_NAME env var |
+| service.version | 1.0.0 | OTEL\_SERVICE\_VERSION env var |
+| deployment.environment | sandbox / test / staging / prod | DEPLOYMENT\_ENVIRONMENT env var |
+| component | ui  (always hardcoded — distinguishes app from agent) | observability.py (hardcoded) |
+| cell\_identifier | 171817  (optional — omitted if env var not set) | OTEL\_CELL\_IDENTIFIER env var |
+| app\_squad | itf-af  (optional) | OTEL\_APP\_SQUAD env var |
+| beat\_id | BEAT04084134  (optional) | BEAT\_ID env var |
+
+## **10.5  Request ID Correlation Flow**
+
+| Step | Action | Details |
+| :---- | :---- | :---- |
+| **1** | Request Arrives | RequestIdMiddleware runs. Generates 12-char UUID: str(uuid.uuid4())\[:12\]. Stored in ContextVar — thread-safe and async-safe. |
+| **2** | Request ID Stamped | RequestIdFilter (attached to root logger) calls get\_request\_id() on every LogRecord. All log lines emitted during this request carry the same request\_id. |
+| **3** | Trace Context Added | JsonFormatter soft-imports OpenTelemetry and reads the active span. Adds trace\_id and span\_id to the JSON log record, linking it to the Tempo trace for this request. |
+| **4** | Exported to Loki | \_TruncatingHandler sends the log record to Loki with request\_id as a structured field. Search: {service\_name="af-license-agreement-171817", component="ui"} | json | request\_id="\<id\>" |
+| **5** | Response Header | RequestIdMiddleware appends X-Request-ID: \<id\> to the HTTP response. Client can correlate frontend errors to backend log lines using this header. |
+
+## **10.6  Grafana Environment Variables**
+
+### **OTLP Export (required in all non-local environments)**
+
+| Variable | Purpose | Example |
+| :---- | :---- | :---- |
+| RUNTIME\_OTLP\_ENDPOINT | OTLP gateway base URL | https://otlp-gateway-\<stack\>.grafana.net/otlp |
+| OTEL\_EXPORTER\_OTLP\_HEADERS | Authorization header — Basic base64(user:token) | Authorization=Basic%20\<base64\> |
+| OTEL\_SERVICE\_NAME | Service identity label on every signal | af-license-agreement-171817 |
+| DEPLOYMENT\_ENVIRONMENT | Environment label (sandbox/test/staging/prod) | sandbox |
+| OTEL\_CELL\_IDENTIFIER | Cell identifier for LBAC / dashboard filtering | 171817 |
+| OTEL\_APP\_SQUAD | Squad label for LBAC filtering | itf-af |
+| BEAT\_ID | Beat identifier for dashboard filtering | BEAT04084134 |
+| OTEL\_MAX\_LOG\_BYTES | Truncation limit before Loki export (bytes) | 200000 |
+
+### **Mimir / Grafana Query (required for metric snapshot features)**
+
+| Variable | Purpose | Default |
+| :---- | :---- | :---- |
+| GRAFANA\_BASE\_URL | Mimir cluster URL | https://prometheus-dedicated-64-prod-eu-west-5.grafana.net |
+| GRAFANA\_TENANT\_ID | Mimir X-Scope-OrgID header (parsed from OTLP headers if unset) | — |
+| GRAFANA\_USER / GRAFANA\_TOKEN | Basic Auth credentials for Mimir queries | Parsed from OTEL\_EXPORTER\_OTLP\_HEADERS if unset |
+| GRAFANA\_FETCH\_RANGE | How far back the hourly metric fetch looks | now-2h |
+| GRAFANA\_STEP | Prometheus query resolution step | 5m |
+| GRAFANA\_SNAPSHOT\_RETENTION\_DAYS | Days to keep raw metric snapshots | 90 |
+
+## **10.7  Useful Loki Query Patterns**
+
+| What to Find | Loki Query |
+| :---- | :---- |
+| All UI app logs | {service\_name="af-license-agreement-171817", component="ui"} | json |
+| Logs for a specific request | {service\_name="af-license-agreement-171817", component="ui"} | json | request\_id="\<12-char-id\>" |
+| Agent fallback warnings | {service\_name="af-license-agreement-171817", component="ui"} |= "AI agent NOT used" |
+| All errors across app and agent | {service\_name="af-license-agreement-171817"} | json | level="ERROR" |
+| Trace-linked logs (Loki → Tempo) | {service\_name="af-license-agreement-171817"} | json | trace\_id="\<32-char-id\>" |
+
