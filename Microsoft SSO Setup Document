@@ -1,0 +1,99 @@
+Microsoft SSO Setup — End-to-End Documentation
+
+Project: af-license-agreement-171817  |  Environment: Sandbox  |  Date: 04 June 2026
+
+# 1. Admin Requirements
+
+The following information and permissions were required from the Azure administrator before implementation could begin.
+
+| **#** | **Requirement** | **Details / Value** | **Where** | **Status** |
+| --- | --- | --- | --- | --- |
+| 1 | Azure Tenant ID | fcb2b37b-5da0-466b-9b83-0014b67a7c78 | Azure Entra ID Portal | Completed |
+| 2 | Azure Client ID (App Registration) | ce2282ef-070f-4eea-bc80-313b8ae5ab03 | Entra → App Registrations | Completed |
+| 3 | Azure Client Secret | Stored as GitHub secret: TF_VAR_SSO_CLIENT_SECRET | Entra → App Reg → Certificates & Secrets | Completed |
+| 4 | Redirect URI registered in Entra | https://ep-mvp6-9280-sandbox-c0cme0gpbudjcucd.a01.azurefd.net/auth/sso/callback/ | Entra → App Reg → Authentication | Completed |
+| 5 | Assignment Required = Yes in Entra | Only assigned users can sign in — access control in Entra, not in code | Entra → Enterprise Applications → Properties | Completed |
+| 6 | Front Door Public URL | https://ep-mvp6-9280-sandbox-c0cme0gpbudjcucd.a01.azurefd.net | Azure Portal → Front Door profile | Completed |
+| 7 | WAF Policy Access | Permission to modify wafmvp69280sandbox attached to Front Door | Azure Portal → WAF Policy | Completed |
+
+# 2. Code Implementation
+
+Changes made to the Django application to implement server-side OpenID Connect SSO using MSAL.
+
+| **#** | **Component** | **What Was Done** | **File** | **Status** |
+| --- | --- | --- | --- | --- |
+| 1 | sso.py module | Built MSAL confidential client with build_auth_flow() and redeem_code() functions | /app/optimizer/sso.py | Completed |
+| 2 | sso_login view | Initiates OAuth auth-code flow — stores MSAL flow in DB session and redirects to Microsoft login | /app/optimizer/views.py | Completed |
+| 3 | sso_callback view | Handles Entra redirect — validates state/PKCE/nonce, redeems code, provisions Editor user, signs in | /app/optimizer/views.py | Completed |
+| 4 | URL routes | Registered /auth/sso/login/ and /auth/sso/callback/ URL patterns | /app/optimizer/urls.py | Completed |
+| 5 | Django SSO settings | Added SSO_TENANT_ID, SSO_CLIENT_ID, SSO_CLIENT_SECRET, SSO_AUTHORITY, SSO_SCOPES, SSO_REDIRECT_URI, SSO_ENABLED | /app/sql_license_optimizer/settings.py | Completed |
+| 6 | Session in PostgreSQL | SESSION_ENGINE = db so auth flow state is shared across all container replicas | /app/sql_license_optimizer/settings.py | Completed |
+| 7 | SSO_REDIRECT_URI = Front Door URL | Explicit public callback URL used so Django builds the correct redirect URI behind Front Door | /app/sql_license_optimizer/settings.py | Completed |
+
+# 3. CI/CD Configuration (GitHub Actions)
+
+| **#** | **Action** | **Details** | **File** | **Status** |
+| --- | --- | --- | --- | --- |
+| 1 | Injected SSO env vars | Added AZURE_CLIENT_ID, AZURE_TENANT_ID, SSO_ENABLED, SSO_REDIRECT_URI to az containerapp update --set-env-vars | .github/workflows/build-and-deploy-app.yaml | Completed |
+| 2 | Injected AZURE_CLIENT_SECRET as container secret | Added azure-client-secret via az containerapp secret set — not stored as plain text env var | .github/workflows/build-and-deploy-app.yaml | Completed |
+
+# 4. Bug Fixes (Code)
+
+Issues discovered during testing and the code fixes applied.
+
+| **#** | **Issue** | **Root Cause** | **Fix Applied** | **Commit** | **Status** |
+| --- | --- | --- | --- | --- | --- |
+| 1 | State mismatch 500 error | WAF stripping state query param — MSAL raised unhandled ValueError | Wrapped redeem_code() in try/except ValueError; added graceful redirect | 248b46a | Completed |
+| 2 | Missing code/state params caused 500 | WAF blocking or stripping OAuth params before reaching Django | Added validation: check code and state present before calling MSAL | 248b46a | Completed |
+| 3 | No handling for Entra error response | If Entra returned error=access_denied, app crashed | Added check for error= param in GET response; returns friendly message | 248b46a | Completed |
+
+# 5. Azure Portal — WAF Configuration Steps
+
+Step-by-step actions taken in Azure Portal to resolve WAF blocking of the SSO callback.
+
+| **Step#** | **Action** | **Where in Portal** | **Outcome** | **Status** |
+| --- | --- | --- | --- | --- |
+| 1 | Located Front Door profile | Azure Portal → rg-ac-license-agreement-171817-sandbox → afd-mvp6-9280-sandbox | Confirmed Front Door profile name | Completed |
+| 2 | Checked Security policies | afd-mvp6-9280-sandbox → Security → Security policies | Found 1 policy: secpol-mvp6-9280-sandbox linked to WAF wafmvp69280sandbox | Completed |
+| 3 | Added custom Allow rule (AllowSSO) | wafmvp69280sandbox → Custom rules → + Add Priority: 1 │ Match variable: Request URI │ Operator: Begins with │ Value: /auth/sso/callback/ │ Action: Allow traffic | Rule created — but SSO still blocked (Bot Protection was the real cause) | Completed |
+| 4 | Switched WAF to Detection mode | wafmvp69280sandbox → Overview → Switch to detection mode | Confirmed SSO still blocked — root cause was NOT main WAF ruleset | Completed |
+| 5 | Checked Managed rules | wafmvp69280sandbox → Managed rules → Managed Rulesets | Found BotProtection_preview-0.1 → Bot00001 (Malicious Bots) still set to Block independently | Completed |
+| 6 | Changed Bot00001 action to Log | wafmvp69280sandbox → Managed rules → select Bot00001 → Change action → Log | Stops Bot Protection from blocking SSO callback | Completed |
+| 7 | Enabled WAF diagnostic logs | afd-mvp6-9280-sandbox → Diagnostic settings → + Add diagnostic setting Log: FrontDoorWebApplicationFirewallLog → log-mvp6-9280-sandbox workspace | WAF block logs now flow to Log Analytics for troubleshooting | Completed |
+
+# 6. Environment Variables Summary
+
+| **Variable** | **Value / Source** | **Required** | **Notes** |
+| --- | --- | --- | --- |
+| SSO_ENABLED | true | Yes | Must be true with all other SSO vars present |
+| AZURE_CLIENT_ID | ce2282ef-070f-4eea-bc80-313b8ae5ab03 | Yes | App Registration Client ID |
+| AZURE_TENANT_ID | fcb2b37b-5da0-466b-9b83-0014b67a7c78 | Yes | Azure AD Tenant ID |
+| AZURE_CLIENT_SECRET | secretref:azure-client-secret (container secret) | Yes | Sourced from GitHub secret TF_VAR_SSO_CLIENT_SECRET |
+| SSO_REDIRECT_URI | https://ep-mvp6-9280-sandbox-c0cme0gpbudjcucd.a01.azurefd.net/auth/sso/callback/ | Yes | Must match exactly what is registered in Entra |
+| AZURE_AUTHORITY | Auto-built from AZURE_TENANT_ID if not set | Optional | Default: https://login.microsoftonline.com/<tenant-id> |
+
+# 7. Troubleshooting — WAF Log Query
+
+To check which WAF rule is blocking the SSO callback, run the following KQL query in:
+
+Azure Portal → afd-mvp6-9280-sandbox → Monitoring → Logs → KQL mode
+
+AzureDiagnostics
+| where Category == "FrontdoorWebApplicationFirewallLog"
+| take 20
+
+# 8. Pending / Next Steps
+
+| **#** | **Action Required** | **Where** | **Priority** |
+| --- | --- | --- | --- |
+| 1 | Confirm SSO works end-to-end after Bot00001 → Log change | Browser → sandbox Front Door URL | High |
+| 2 | Add targeted Bot Protection exclusion for /auth/sso/callback/ so rest of app stays protected | wafmvp69280sandbox → Managed rules → Exclusions | High |
+| 3 | Switch WAF main policy back to Prevention mode | wafmvp69280sandbox → Overview → Switch to prevention mode | High |
+| 4 | Verify Editor role is provisioned for SSO user in database | Django Admin or DB check after first SSO login | Medium |
+| 5 | Deploy code fix (branch feat/sso-editor) to sandbox via CI/CD | GitHub Actions → build-and-deploy-app.yaml | High |
+
+RESTRICTED
+
+RESTRICTED
+
+RESTRICTED
